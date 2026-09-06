@@ -14,6 +14,8 @@
 //	GET    /api/transfers/{id}/entries    audit: double-entry rows
 //	POST   /api/transfers/{id}/reverse    reverse a SUCCESS transfer
 //	GET    /api/fx                        engine corridor FX rate
+//	GET    /api/escrows                   reconciled on-chain escrow read model
+//	GET    /api/reconciliation/status     reconciliation cursor and metrics
 //	GET    /healthz                       liveness probe
 //
 // Transfers require the Idempotency-Key header (UUIDv4). Replaying a key
@@ -26,17 +28,22 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"vuka/go-bridge-core/internal/ledger"
+	"vuka/go-bridge-core/internal/reconciliation"
 )
 
 // Server holds the HTTP handlers and their dependencies.
 type Server struct {
-	ledger *ledger.Service
-	log    *slog.Logger
-	mux    *http.ServeMux
-	hub    *Hub
+	ledger               *ledger.Service
+	log                  *slog.Logger
+	mux                  *http.ServeMux
+	hub                  *Hub
+	reconciliation       *reconciliation.Repository
+	reconciliationPoller *reconciliation.Poller
+	auth                 *AuthStore
 }
 
 // NewServer builds the HTTP handler with all routes wired.
@@ -44,7 +51,64 @@ type Server struct {
 // Empty disables origin checking (sets the header echo for any origin).
 func NewServer(ledgerSvc *ledger.Service, log *slog.Logger, corsOrigins []string) http.Handler {
 	s := &Server{ledger: ledgerSvc, log: log, mux: http.NewServeMux(), hub: NewHub()}
+	return s.handler(corsOrigins)
+}
 
+func NewServerWithAuth(ledgerSvc *ledger.Service, log *slog.Logger, corsOrigins []string, auth *AuthStore) http.Handler {
+	s := &Server{ledger: ledgerSvc, log: log, mux: http.NewServeMux(), hub: NewHub(), auth: auth}
+	return s.handler(corsOrigins)
+}
+
+func NewServerWithReconciliation(ledgerSvc *ledger.Service, log *slog.Logger, corsOrigins []string, repo *reconciliation.Repository, poller *reconciliation.Poller, auth *AuthStore) http.Handler {
+	s := &Server{ledger: ledgerSvc, log: log, mux: http.NewServeMux(), hub: NewHub(), reconciliation: repo, reconciliationPoller: poller, auth: auth}
+	return s.handler(corsOrigins)
+}
+
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if s.auth == nil {
+		writeError(w, http.StatusNotImplemented, "authentication_disabled", "operator authentication is not configured")
+		return
+	}
+	var req struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	token, err := s.auth.login(r.Context(), req.Email, req.Password)
+	if err != nil {
+		if errors.Is(err, errInvalidCredentials) {
+			writeError(w, http.StatusUnauthorized, "invalid_credentials", "invalid email or password")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "authentication_error", err.Error())
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name: sessionCookie, Value: token, Path: "/", HttpOnly: true,
+		SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil, MaxAge: 12 * 60 * 60,
+	})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "authenticated"})
+}
+
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if s.auth == nil {
+		writeError(w, http.StatusNotImplemented, "authentication_disabled", "operator authentication is not configured")
+		return
+	}
+	if cookie, err := r.Cookie(sessionCookie); err == nil {
+		if err := s.auth.revoke(r.Context(), cookie.Value); err != nil {
+			writeError(w, http.StatusInternalServerError, "authentication_error", "unable to end session")
+			return
+		}
+		http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "signed_out"})
+}
+
+func (s *Server) handler(corsOrigins []string) http.Handler {
 	s.mux.HandleFunc("POST /api/users", s.handleCreateUser)
 	s.mux.HandleFunc("GET /api/users/{id}", s.handleGetUser)
 	s.mux.HandleFunc("GET /api/lookup/user/{phone}", s.handleGetUserByPhone)
@@ -64,8 +128,24 @@ func NewServer(ledgerSvc *ledger.Service, log *slog.Logger, corsOrigins []string
 	s.mux.HandleFunc("GET /api/fx", s.handleGetFx)
 	s.mux.Handle("GET /api/events", s.hub)
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
+	s.mux.HandleFunc("POST /api/auth/login", s.handleLogin)
+	s.mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
+	s.mux.HandleFunc("GET /api/escrows", s.handleListEscrows)
+	s.mux.HandleFunc("GET /api/escrows/{id}/events", s.handleListEscrowEvents)
+	s.mux.HandleFunc("GET /api/reconciliation/status", s.handleReconciliationStatus)
 
-	return NewCORS(corsOrigins, s.withMiddleware(s.mux))
+	protected := s.mux
+	if s.auth != nil {
+		protected = http.NewServeMux()
+		protected.Handle("/", s.mux)
+		protected.HandleFunc("POST /api/auth/login", s.handleLogin)
+		protected.Handle("POST /api/auth/logout", s.auth.require(http.HandlerFunc(s.handleLogout)))
+		protected.HandleFunc("GET /healthz", s.handleHealthz)
+		protected.Handle("/api/escrows", s.auth.require(http.HandlerFunc(s.handleListEscrows)))
+		protected.Handle("/api/escrows/{id}/events", s.auth.require(http.HandlerFunc(s.handleListEscrowEvents)))
+		protected.Handle("/api/reconciliation/status", s.auth.require(http.HandlerFunc(s.handleReconciliationStatus)))
+	}
+	return NewCORS(corsOrigins, s.withMiddleware(protected))
 }
 
 // withMiddleware layers request logging, panic recovery, and JSON content
@@ -323,10 +403,10 @@ func (s *Server) handleGetFx(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"pair":     "RWF/KES",
-		"rate":     rate,
-		"updated":  time.Now().UTC().Format(time.RFC3339),
-		"source":   "engine",
+		"pair":    "RWF/KES",
+		"rate":    rate,
+		"updated": time.Now().UTC().Format(time.RFC3339),
+		"source":  "engine",
 	})
 }
 
@@ -384,7 +464,88 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "db_unreachable", err.Error())
 		return
 	}
+
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleListEscrows(w http.ResponseWriter, r *http.Request) {
+	if s.reconciliation == nil {
+		writeError(w, http.StatusNotImplemented, "reconciliation_disabled", "reconciliation is not configured")
+		return
+	}
+	chainID, err := parseInt64Query(r, "chain_id", 80002)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_chain_id", err.Error())
+		return
+	}
+	contract := r.URL.Query().Get("contract")
+	if contract == "" {
+		writeError(w, http.StatusBadRequest, "missing_contract", "contract is required")
+		return
+	}
+	items, err := s.reconciliation.ListEscrows(r.Context(), chainID, contract)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "reconciliation_error", err.Error())
+		return
+	}
+	if items == nil {
+		items = []reconciliation.Summary{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"escrows": items})
+}
+
+func (s *Server) handleReconciliationStatus(w http.ResponseWriter, r *http.Request) {
+	if s.reconciliation == nil || s.reconciliationPoller == nil {
+		writeError(w, http.StatusNotImplemented, "reconciliation_disabled", "reconciliation is not configured")
+		return
+	}
+	chainID, err := parseInt64Query(r, "chain_id", 80002)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_chain_id", err.Error())
+		return
+	}
+	contract := r.URL.Query().Get("contract")
+	if contract == "" {
+		writeError(w, http.StatusBadRequest, "missing_contract", "contract is required")
+		return
+	}
+	status, err := s.reconciliation.Status(r.Context(), chainID, contract, s.reconciliationPoller)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "reconciliation_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (s *Server) handleListEscrowEvents(w http.ResponseWriter, r *http.Request) {
+	if s.reconciliation == nil {
+		writeError(w, http.StatusNotImplemented, "reconciliation_disabled", "reconciliation is not configured")
+		return
+	}
+	chainID, err := parseInt64Query(r, "chain_id", 80002)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_chain_id", err.Error())
+		return
+	}
+	escrowID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || escrowID < 0 {
+		writeError(w, http.StatusBadRequest, "invalid_escrow_id", "escrow id must be a non-negative integer")
+		return
+	}
+	contract := r.URL.Query().Get("contract")
+	if contract == "" {
+		writeError(w, http.StatusBadRequest, "missing_contract", "contract is required")
+		return
+	}
+	events, err := s.reconciliation.ListEvents(r.Context(), chainID, contract, escrowID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "reconciliation_error", err.Error())
+		return
+	}
+	if events == nil {
+		events = []reconciliation.EventRecord{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"events": events})
 }
 
 // ---------------------------------------------------------------------------
@@ -445,4 +606,16 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 	body.Error.Code = code
 	body.Error.Message = message
 	writeJSON(w, status, body)
+}
+
+func parseInt64Query(r *http.Request, key string, fallback int64) (int64, error) {
+	raw := r.URL.Query().Get(key)
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || value <= 0 {
+		return 0, errors.New("query parameter must be a positive integer")
+	}
+	return value, nil
 }
