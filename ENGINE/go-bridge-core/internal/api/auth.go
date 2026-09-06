@@ -24,6 +24,11 @@ type AuthStore struct {
 	pool *pgxpool.Pool
 }
 
+type Operator struct {
+	Email string `json:"email"`
+	Role  string `json:"role"`
+}
+
 func NewAuthStore(pool *pgxpool.Pool) *AuthStore {
 	return &AuthStore{pool: pool}
 }
@@ -106,6 +111,24 @@ func (s *AuthStore) validSession(ctx context.Context, token string) bool {
 			WHERE token_hash = $1 AND expires_at > now()
 		)`, fmt.Sprintf("%x", hash)).Scan(&exists)
 	return err == nil && exists
+}
+
+func (s *AuthStore) operatorForSession(ctx context.Context, token string) (Operator, error) {
+	hash := sha256.Sum256([]byte(token))
+	var operator Operator
+	err := s.pool.QueryRow(ctx, `
+		SELECT o.email, o.role
+		FROM operators o
+		JOIN operator_sessions os ON os.operator_id = o.id
+		WHERE os.token_hash = $1 AND os.expires_at > now()`,
+		fmt.Sprintf("%x", hash)).Scan(&operator.Email, &operator.Role)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Operator{}, errInvalidCredentials
+	}
+	if err != nil {
+		return Operator{}, fmt.Errorf("auth: read operator session: %w", err)
+	}
+	return operator, nil
 }
 
 func (s *AuthStore) revoke(ctx context.Context, token string) error {
