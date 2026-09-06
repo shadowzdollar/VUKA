@@ -130,6 +130,7 @@ func (s *Server) handler(corsOrigins []string) http.Handler {
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
 	s.mux.HandleFunc("POST /api/auth/login", s.handleLogin)
 	s.mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
+	s.mux.HandleFunc("GET /api/auth/me", s.handleCurrentOperator)
 	s.mux.HandleFunc("GET /api/escrows", s.handleListEscrows)
 	s.mux.HandleFunc("GET /api/escrows/{id}/events", s.handleListEscrowEvents)
 	s.mux.HandleFunc("GET /api/reconciliation/status", s.handleReconciliationStatus)
@@ -140,12 +141,35 @@ func (s *Server) handler(corsOrigins []string) http.Handler {
 		protected.Handle("/", s.mux)
 		protected.HandleFunc("POST /api/auth/login", s.handleLogin)
 		protected.Handle("POST /api/auth/logout", s.auth.require(http.HandlerFunc(s.handleLogout)))
+		protected.Handle("GET /api/auth/me", s.auth.require(http.HandlerFunc(s.handleCurrentOperator)))
 		protected.HandleFunc("GET /healthz", s.handleHealthz)
 		protected.Handle("/api/escrows", s.auth.require(http.HandlerFunc(s.handleListEscrows)))
 		protected.Handle("/api/escrows/{id}/events", s.auth.require(http.HandlerFunc(s.handleListEscrowEvents)))
 		protected.Handle("/api/reconciliation/status", s.auth.require(http.HandlerFunc(s.handleReconciliationStatus)))
 	}
 	return NewCORS(corsOrigins, s.withMiddleware(protected))
+}
+
+func (s *Server) handleCurrentOperator(w http.ResponseWriter, r *http.Request) {
+	if s.auth == nil {
+		writeError(w, http.StatusNotImplemented, "authentication_disabled", "operator authentication is not configured")
+		return
+	}
+	cookie, err := r.Cookie(sessionCookie)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "authentication_required", "operator authentication is required")
+		return
+	}
+	operator, err := s.auth.operatorForSession(r.Context(), cookie.Value)
+	if errors.Is(err, errInvalidCredentials) {
+		writeError(w, http.StatusUnauthorized, "authentication_required", "operator authentication is required")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "authentication_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, operator)
 }
 
 // withMiddleware layers request logging, panic recovery, and JSON content
