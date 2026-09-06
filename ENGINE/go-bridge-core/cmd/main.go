@@ -28,6 +28,7 @@ import (
 	"vuka/go-bridge-core/internal/grpcpb"
 	"vuka/go-bridge-core/internal/idempotency"
 	"vuka/go-bridge-core/internal/ledger"
+	"vuka/go-bridge-core/internal/reconciliation"
 )
 
 func main() {
@@ -109,10 +110,76 @@ func run(log *slog.Logger) error {
 	}
 	log.Info("settlement accounts ready", "currencies", []string{"RWF", "KES"})
 
+	var reconciliationRepo *reconciliation.Repository
+	var reconciliationPoller *reconciliation.Poller
+	var authStore *api.AuthStore
+	if cfg.ReconciliationEnabled {
+		reconcileCtx, reconcileCancel := context.WithTimeout(ctx, 30*time.Second)
+		if err := reconciliation.EnsureSchema(reconcileCtx, pool); err != nil {
+			reconcileCancel()
+			return fmt.Errorf("ensure reconciliation schema: %w", err)
+		}
+
+		if cfg.OperatorEmail != "" {
+			authStore = api.NewAuthStore(pool)
+			authCtx, authCancel := context.WithTimeout(ctx, 10*time.Second)
+			if err := authStore.EnsureSchema(authCtx); err != nil {
+				authCancel()
+				return err
+			}
+			if err := authStore.EnsureOperator(authCtx, cfg.OperatorEmail, cfg.OperatorPassword); err != nil {
+				authCancel()
+				return err
+			}
+			authCancel()
+			log.Info("operator authentication enabled")
+		}
+		reconcileCancel()
+		reconciliationRepo = reconciliation.NewRepository(pool)
+		reconciliationPoller, err = reconciliation.NewPoller(
+			cfg.ReconciliationRPCURL,
+			reconciliationRepo,
+			cfg.ReconciliationChainID,
+			cfg.ReconciliationContract,
+			cfg.ReconciliationConfirmations,
+		)
+		if err != nil {
+			return err
+		}
+		if err := reconciliationPoller.SetMaxBlockRange(cfg.ReconciliationMaxRange); err != nil {
+			return err
+		}
+		go func() {
+			log.Info("reconciliation worker started",
+				"chain_id", cfg.ReconciliationChainID,
+				"contract", cfg.ReconciliationContract,
+				"confirmations", cfg.ReconciliationConfirmations,
+				"interval", cfg.ReconciliationInterval,
+			)
+			for {
+				if err := reconciliationPoller.Run(ctx, cfg.ReconciliationInterval); err != nil {
+					if errors.Is(err, context.Canceled) {
+						return
+					}
+					log.Error("reconciliation worker paused", "err", err, "retry_after", "5s")
+					retry := time.NewTimer(5 * time.Second)
+					select {
+					case <-ctx.Done():
+						retry.Stop()
+						return
+					case <-retry.C:
+					}
+					continue
+				}
+				return
+			}
+		}()
+	}
+
 	// Build the REST handler. When VUKA_WEB_DIR points at the built SPA,
 	// serve the dashboard and the API from the same port (single-origin
 	// production shape; tunnel-friendly).
-	handler := api.NewServer(ledgerSvc, log, cfg.CORSOrigins)
+	handler := api.NewServerWithReconciliation(ledgerSvc, log, cfg.CORSOrigins, reconciliationRepo, reconciliationPoller, authStore)
 	if cfg.WebDir != "" {
 		handler = api.WithWebDir(handler, cfg.WebDir)
 		log.Info("serving web dashboard", "dir", cfg.WebDir)
