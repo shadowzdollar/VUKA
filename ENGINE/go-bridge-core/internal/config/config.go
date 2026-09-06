@@ -38,6 +38,9 @@ type Config struct {
 	// port. Empty disables static serving (API-only mode).
 	WebDir string
 
+	OperatorEmail    string
+	OperatorPassword string
+
 	// Adapter settings ----------------------------------------------------
 	// AdapterName selects the telecom adapter from the registry, e.g. "mtn-rw".
 	AdapterName string
@@ -55,6 +58,16 @@ type Config struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	IdleTimeout  time.Duration
+
+	// Reconciliation is opt-in until the v2 chain service is operationally
+	// configured. All values are ignored when ReconciliationEnabled is false.
+	ReconciliationEnabled       bool
+	ReconciliationRPCURL        string
+	ReconciliationChainID       int64
+	ReconciliationContract      string
+	ReconciliationConfirmations int64
+	ReconciliationInterval      time.Duration
+	ReconciliationMaxRange      int64
 }
 
 // Load reads configuration from the environment. Missing optional values fall
@@ -62,35 +75,53 @@ type Config struct {
 // process fails fast instead of starting half-configured.
 func Load() (*Config, error) {
 	cfg := &Config{
-		HTTPAddr:      getEnv("VUKA_HTTP_ADDR", ":8080"),
-		GRPCAddr:      getEnv("VUKA_GRPC_ADDR", ":50051"),
-		DatabaseURL:   os.Getenv("VUKA_DATABASE_URL"),
-		FxRateRWFKES:  getFloat("VUKA_FX_RWF_KES", 0),
-		CORSOrigins:   splitList("VUKA_CORS_ORIGINS"),
-		WebDir:        getEnv("VUKA_WEB_DIR", ""),
-		AdapterName:   getEnv("VUKA_ADAPTER", "mtn-rw"),
-		MTNSimDelay:   getDuration("MTN_SIM_DELAY_MS", 150*time.Millisecond),
-		MTNSimFailRate: getFloat("MTN_SIM_FAIL_RATE", 0.0),
-		MTNSimMode:    getEnv("MTN_SIM_MODE", ""),
-		MTNSimTimeout: getDuration("MTN_SIM_TIMEOUT_MS", 5*time.Second),
-		ReadTimeout:   getDuration("VUKA_READ_TIMEOUT_S", 10*time.Second),
-		WriteTimeout:  getDuration("VUKA_WRITE_TIMEOUT_S", 30*time.Second),
-		IdleTimeout:   getDuration("VUKA_IDLE_TIMEOUT_S", 60*time.Second),
+		HTTPAddr:                    getEnv("VUKA_HTTP_ADDR", ":8080"),
+		GRPCAddr:                    getEnv("VUKA_GRPC_ADDR", ":50051"),
+		DatabaseURL:                 os.Getenv("VUKA_DATABASE_URL"),
+		FxRateRWFKES:                getFloat("VUKA_FX_RWF_KES", 0),
+		CORSOrigins:                 splitList("VUKA_CORS_ORIGINS"),
+		WebDir:                      getEnv("VUKA_WEB_DIR", ""),
+		OperatorEmail:               os.Getenv("VUKA_OPERATOR_EMAIL"),
+		OperatorPassword:            os.Getenv("VUKA_OPERATOR_PASSWORD"),
+		AdapterName:                 getEnv("VUKA_ADAPTER", "mtn-rw"),
+		MTNSimDelay:                 getDuration("MTN_SIM_DELAY_MS", 150*time.Millisecond),
+		MTNSimFailRate:              getFloat("MTN_SIM_FAIL_RATE", 0.0),
+		MTNSimMode:                  getEnv("MTN_SIM_MODE", ""),
+		MTNSimTimeout:               getDuration("MTN_SIM_TIMEOUT_MS", 5*time.Second),
+		ReadTimeout:                 getDuration("VUKA_READ_TIMEOUT_S", 10*time.Second),
+		WriteTimeout:                getDuration("VUKA_WRITE_TIMEOUT_S", 30*time.Second),
+		IdleTimeout:                 getDuration("VUKA_IDLE_TIMEOUT_S", 60*time.Second),
+		ReconciliationEnabled:       getBool("VUKA_RECONCILIATION_ENABLED", false),
+		ReconciliationRPCURL:        os.Getenv("VUKA_RECONCILIATION_RPC_URL"),
+		ReconciliationChainID:       getInt64("VUKA_RECONCILIATION_CHAIN_ID", 80002),
+		ReconciliationContract:      os.Getenv("VUKA_RECONCILIATION_CONTRACT"),
+		ReconciliationConfirmations: getInt64("VUKA_RECONCILIATION_CONFIRMATIONS", 128),
+		ReconciliationInterval:      getDuration("VUKA_RECONCILIATION_INTERVAL_MS", 15000*time.Millisecond),
+		ReconciliationMaxRange:      getInt64("VUKA_RECONCILIATION_MAX_RANGE", 9),
 	}
 
 	if cfg.DatabaseURL == "" {
-			// Dev default matching deploy/docker-compose.yml (host port 5432).
-			// Placeholder password only — real dev credentials come from the
-			// environment (VUKA_DATABASE_URL) or ~/.pgpass; never commit a
-			// working credential to the repository.
-			cfg.DatabaseURL = "postgres://vuka:changeme@localhost:5432/vuka?sslmode=disable"
-		}
+		// Dev default matching deploy/docker-compose.yml (host port 5432).
+		// Placeholder password only — real dev credentials come from the
+		// environment (VUKA_DATABASE_URL) or ~/.pgpass; never commit a
+		// working credential to the repository.
+		cfg.DatabaseURL = "postgres://vuka:changeme@localhost:5432/vuka?sslmode=disable"
+	}
 
 	if cfg.MTNSimFailRate < 0 || cfg.MTNSimFailRate > 1 {
 		return nil, fmt.Errorf("config: MTN_SIM_FAIL_RATE must be within [0, 1], got %v", cfg.MTNSimFailRate)
 	}
 	if cfg.MTNSimMode != "" && cfg.MTNSimMode != "success" && cfg.MTNSimMode != "fail" && cfg.MTNSimMode != "timeout" {
 		return nil, fmt.Errorf("config: MTN_SIM_MODE must be one of success|fail|timeout|empty, got %q", cfg.MTNSimMode)
+	}
+	if cfg.ReconciliationEnabled {
+		if cfg.ReconciliationRPCURL == "" || cfg.ReconciliationContract == "" {
+			return nil, fmt.Errorf("config: reconciliation RPC URL and contract are required when enabled")
+		}
+		if cfg.ReconciliationChainID <= 0 || cfg.ReconciliationConfirmations < 0 ||
+			cfg.ReconciliationInterval <= 0 || cfg.ReconciliationMaxRange <= 0 {
+			return nil, fmt.Errorf("config: invalid reconciliation settings")
+		}
 	}
 
 	return cfg, nil
@@ -107,6 +138,9 @@ func (c *Config) Validate() error {
 	}
 	if c.GRPCAddr == "" {
 		return fmt.Errorf("config: VUKA_GRPC_ADDR is required")
+	}
+	if (c.OperatorEmail == "") != (c.OperatorPassword == "") {
+		return fmt.Errorf("config: VUKA_OPERATOR_EMAIL and VUKA_OPERATOR_PASSWORD must be provided together")
 	}
 	if c.FxRateRWFKES < 0 {
 		return fmt.Errorf("config: VUKA_FX_RWF_KES must be >= 0, got %v", c.FxRateRWFKES)
@@ -171,6 +205,24 @@ func getFloat(key string, fallback float64) float64 {
 	if raw, ok := os.LookupEnv(key); ok && raw != "" {
 		if f, err := strconv.ParseFloat(raw, 64); err == nil {
 			return f
+		}
+	}
+	return fallback
+}
+
+func getInt64(key string, fallback int64) int64 {
+	if raw, ok := os.LookupEnv(key); ok && raw != "" {
+		if value, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			return value
+		}
+	}
+	return fallback
+}
+
+func getBool(key string, fallback bool) bool {
+	if raw, ok := os.LookupEnv(key); ok && raw != "" {
+		if value, err := strconv.ParseBool(raw); err == nil {
+			return value
 		}
 	}
 	return fallback
