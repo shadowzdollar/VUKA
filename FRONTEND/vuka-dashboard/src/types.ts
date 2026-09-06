@@ -37,3 +37,8 @@ export type EscrowEvent = {
   payload: Record<string, unknown>;
   observed_at: string;
 };
+
+export type Operator = {
+  email: string;
+  role: string;
+};
