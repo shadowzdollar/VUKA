@@ -48,3 +48,4 @@ ENGINE/VUKA_Backend_System_Architecture.docx
 CONTRACTS/**/cache/
 CONTRACTS/**/out/
 CONTRACTS/**/broadcast/
+CONTRACTS/escrow/lib/forge-std/
