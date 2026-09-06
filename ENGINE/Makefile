@@ -14,6 +14,7 @@
 #   make gateway-test       run pytest against a LIVE Go engine (assumes the
 #                           engine is running with gRPC on VUKA_ENGINE_GRPC_ADDR)
 #   make up / make down     start / stop dockerized PostgreSQL + Adminer
+#   make reconcile-run      start PostgreSQL and the read-only Amoy reconciler
 #   make clean              drop the vuka_test database
 # ============================================================================
 
@@ -35,7 +36,7 @@ TEST_DATABASE_URL ?= postgres://$(PG_USER):$(PG_PASSWORD)@localhost:$(PG_HOST_PO
 
 MKFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
-.PHONY: build vet test test-integration up down clean psql provision
+.PHONY: build vet test test-integration up down clean psql provision reconcile-run
 
 build:
 	cd $(MKFILE_DIR)go-bridge-core && go build ./...
@@ -87,6 +88,27 @@ psql:
 	@test -n "$(PG_CONTAINER)" || { echo "ERROR: postgres container is not running; run 'make up' first."; exit 1; }
 	docker exec -it "$(PG_CONTAINER)" psql -U $(PG_USER) -d $(PG_TEST_DB)
 
+# Start PostgreSQL and run the read-only Polygon escrow reconciler. The RPC
+# endpoint and database DSN must be supplied by the caller; no private key is
+# accepted or needed.
+reconcile-run: up
+	@set -a; [ ! -f "$(MKFILE_DIR)deploy/.env" ] || . "$(MKFILE_DIR)deploy/.env"; set +a; \
+	test -n "$$VUKA_DATABASE_URL" || { echo "ERROR: set VUKA_DATABASE_URL."; exit 1; }; \
+	test -n "$$VUKA_RECONCILIATION_RPC_URL" || { echo "ERROR: set VUKA_RECONCILIATION_RPC_URL."; exit 1; }; \
+	test -n "$$VUKA_RECONCILIATION_CONTRACT" || { echo "ERROR: set VUKA_RECONCILIATION_CONTRACT."; exit 1; }; \
+	cd $(MKFILE_DIR)go-bridge-core && \
+		VUKA_DATABASE_URL="$$VUKA_DATABASE_URL" \
+		VUKA_RECONCILIATION_ENABLED=true \
+		VUKA_RECONCILIATION_RPC_URL="$$VUKA_RECONCILIATION_RPC_URL" \
+		VUKA_RECONCILIATION_CHAIN_ID="$${VUKA_RECONCILIATION_CHAIN_ID:-80002}" \
+		VUKA_RECONCILIATION_CONTRACT="$$VUKA_RECONCILIATION_CONTRACT" \
+		VUKA_RECONCILIATION_CONFIRMATIONS="$${VUKA_RECONCILIATION_CONFIRMATIONS:-128}" \
+		VUKA_RECONCILIATION_INTERVAL_MS="$${VUKA_RECONCILIATION_INTERVAL_MS:-15000}" \
+		VUKA_RECONCILIATION_MAX_RANGE="$${VUKA_RECONCILIATION_MAX_RANGE:-9}" \
+		VUKA_OPERATOR_EMAIL="$$VUKA_OPERATOR_EMAIL" \
+		VUKA_OPERATOR_PASSWORD="$$VUKA_OPERATOR_PASSWORD" \
+		go run ./cmd
+
 # ---------------------------------------------------------------------------
 # Phase 2 — Python ISO 20022 gateway
 # ---------------------------------------------------------------------------
@@ -120,10 +142,10 @@ gateway-run: gateway
 .PHONY: proto-python gateway gateway-test gateway-run
 
 # ---------------------------------------------------------------------------
-# Phase 3 — React/TS trader dashboard (FRONTEND/web-dashboard)
+# Phase 3 — React/TS v2 operations dashboard
 # ---------------------------------------------------------------------------
 
-DASHBOARD_DIR := $(MKFILE_DIR)../FRONTEND/web-dashboard
+DASHBOARD_DIR := $(MKFILE_DIR)../FRONTEND/vuka-dashboard
 
 # Install dashboard dependencies (npm). Run once after cloning.
 dashboard-install:
@@ -132,10 +154,6 @@ dashboard-install:
 # Typecheck + build the dashboard for production (deps must be installed).
 dashboard-build:
 	cd $(DASHBOARD_DIR) && npm run build
-
-# Run the dashboard test suite (deps must be installed).
-dashboard-test:
-	cd $(DASHBOARD_DIR) && NODE_ENV=test npm test -- --reporter dot
 
 # Start the dashboard dev server (proxies /api to the Go engine on :8080).
 # Deps must be installed first; requires the Go engine running.
@@ -172,4 +190,4 @@ demo: up
 	@echo "Engine log: /tmp/vuka-engine.log | Dashboard log: /tmp/vuka-dashboard.log"
 	@sleep 2 && curl -s http://localhost:8080/healthz && echo " (engine healthy)"
 
-.PHONY: dashboard-install dashboard-build dashboard-test dashboard-run demo demo-seed
+.PHONY: dashboard-install dashboard-build dashboard-run demo demo-seed
