@@ -1,4 +1,4 @@
-import type { Escrow, EscrowEvent, ReconciliationStatus } from "./types";
+import type { Escrow, EscrowEvent, Operator, ReconciliationStatus } from "./types";
 
 const contract = import.meta.env.VITE_ESCROW_CONTRACT ??
   "0x491a0E68B440621435B606D17FDa50f7999DE4ef";
@@ -27,6 +27,10 @@ export async function login(email: string, password: string): Promise<void> {
 
 export async function logout(): Promise<void> {
   await request<void>("/api/auth/logout", { method: "POST" });
+}
+
+export function getCurrentOperator(): Promise<Operator> {
+  return request("/api/auth/me");
 }
 
 export function getEscrows(): Promise<{ escrows: Escrow[] }> {
