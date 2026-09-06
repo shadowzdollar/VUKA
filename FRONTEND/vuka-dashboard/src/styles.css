@@ -27,6 +27,7 @@ button { cursor: pointer; }
 .nav-item { display: block; padding: 12px; color: #4A4A4A; text-decoration: none; font-size: 13px; }
 .nav-item:hover, .nav-item.active { background: #FFFFFF; color: #0A0A0A; font-weight: 700; }
 .sidebar-footer { display: flex; gap: 8px; align-items: center; margin-top: auto; padding: 12px; border-top: 1px solid #D6D6D6; color: #4A4A4A; font-size: 11px; }
+.sidebar-footer span:last-child { overflow-wrap: anywhere; }
 .health-dot { width: 7px; height: 7px; border: 1px solid #0A0A0A; border-radius: 50%; }
 .health-dot.online { background: #0A0A0A; }
 .main-content { width: min(1440px, 100%); margin: 0 auto; padding: 42px 52px 64px; }
