@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { getEscrowEvents, getEscrows, getHealth, getReconciliationStatus, login, logout, contract } from "./api";
-import type { Escrow, EscrowEvent, EscrowState, ReconciliationStatus } from "./types";
+import { getCurrentOperator, getEscrowEvents, getEscrows, getHealth, getReconciliationStatus, login, logout, contract } from "./api";
+import type { Escrow, EscrowEvent, EscrowState, Operator, ReconciliationStatus } from "./types";
 
 const refreshInterval = 15000;
 
@@ -36,19 +36,22 @@ export function App() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loggingIn, setLoggingIn] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [operator, setOperator] = useState<Operator | null>(null);
 
   const pageSize = 10;
 
   const load = useCallback(async () => {
     try {
-      const [escrowResponse, reconciliationStatus, health] = await Promise.all([
+      const [escrowResponse, reconciliationStatus, health, currentOperator] = await Promise.all([
         getEscrows(),
         getReconciliationStatus(),
-        getHealth()
+        getHealth(),
+        getCurrentOperator()
       ]);
       setEscrows(escrowResponse.escrows);
       setStatus(reconciliationStatus);
       setHealthy(health);
+      setOperator(currentOperator);
       setError(null);
       setAuthRequired(false);
       setLastUpdated(new Date());
@@ -59,6 +62,7 @@ export function App() {
         setStatus(null);
         setSelectedId(null);
         setSelectedEvents([]);
+        setOperator(null);
         setError(null);
         return;
       }
@@ -93,6 +97,7 @@ export function App() {
       setStatus(null);
       setSelectedId(null);
       setSelectedEvents([]);
+      setOperator(null);
     }
   }
 
@@ -175,7 +180,7 @@ export function App() {
         </nav>
         <div className="sidebar-footer">
           <span className={`health-dot ${healthy ? "online" : ""}`} />
-          <span>{healthy ? "Engine operational" : "Engine unavailable"}</span>
+          <span>{operator ? `${operator.role} · ${operator.email}` : healthy ? "Engine operational" : "Engine unavailable"}</span>
         </div>
       </aside>
 
