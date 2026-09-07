@@ -29,6 +29,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"vuka/go-bridge-core/internal/ledger"
@@ -134,18 +135,30 @@ func (s *Server) handler(corsOrigins []string) http.Handler {
 	s.mux.HandleFunc("GET /api/escrows", s.handleListEscrows)
 	s.mux.HandleFunc("GET /api/escrows/{id}/events", s.handleListEscrowEvents)
 	s.mux.HandleFunc("GET /api/reconciliation/status", s.handleReconciliationStatus)
+	s.mux.HandleFunc("GET /api/disputes", s.handleListDisputes)
+	s.mux.HandleFunc("/api/disputes/{id}/reviews", s.handleDisputeReviews)
+	s.mux.HandleFunc("GET /api/disputes/{id}/timeline", s.handleListDisputeTimeline)
+	s.mux.HandleFunc("POST /api/disputes/{id}/decision", s.handleAddDisputeDecision)
+	s.mux.HandleFunc("GET /api/disputes/{id}/decisions", s.handleListDisputeDecisions)
+	s.mux.HandleFunc("POST /api/dispute-decisions/{id}/approve", s.handleApproveDisputeDecision)
 
 	protected := s.mux
 	if s.auth != nil {
 		protected = http.NewServeMux()
 		protected.Handle("/", s.mux)
 		protected.HandleFunc("POST /api/auth/login", s.handleLogin)
-		protected.Handle("POST /api/auth/logout", s.auth.require(http.HandlerFunc(s.handleLogout)))
-		protected.Handle("GET /api/auth/me", s.auth.require(http.HandlerFunc(s.handleCurrentOperator)))
+		protected.Handle("POST /api/auth/logout", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleLogout)))
+		protected.Handle("GET /api/auth/me", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleCurrentOperator)))
 		protected.HandleFunc("GET /healthz", s.handleHealthz)
-		protected.Handle("/api/escrows", s.auth.require(http.HandlerFunc(s.handleListEscrows)))
-		protected.Handle("/api/escrows/{id}/events", s.auth.require(http.HandlerFunc(s.handleListEscrowEvents)))
-		protected.Handle("/api/reconciliation/status", s.auth.require(http.HandlerFunc(s.handleReconciliationStatus)))
+		protected.Handle("/api/escrows", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleListEscrows)))
+		protected.Handle("/api/escrows/{id}/events", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleListEscrowEvents)))
+		protected.Handle("/api/reconciliation/status", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleReconciliationStatus)))
+		protected.Handle("/api/disputes", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleListDisputes)))
+		protected.Handle("/api/disputes/{id}/reviews", s.auth.requireRole("arbiter")(http.HandlerFunc(s.handleDisputeReviews)))
+		protected.Handle("GET /api/disputes/{id}/timeline", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleListDisputeTimeline)))
+		protected.Handle("POST /api/disputes/{id}/decision", s.auth.requireRole("arbiter")(http.HandlerFunc(s.handleAddDisputeDecision)))
+		protected.Handle("GET /api/disputes/{id}/decisions", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleListDisputeDecisions)))
+		protected.Handle("POST /api/dispute-decisions/{id}/approve", s.auth.requireRole("operator")(http.HandlerFunc(s.handleApproveDisputeDecision)))
 	}
 	return NewCORS(corsOrigins, s.withMiddleware(protected))
 }
@@ -570,6 +583,159 @@ func (s *Server) handleListEscrowEvents(w http.ResponseWriter, r *http.Request) 
 		events = []reconciliation.EventRecord{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"events": events})
+}
+
+func (s *Server) handleListDisputes(w http.ResponseWriter, r *http.Request) {
+	if s.reconciliation == nil {
+		writeError(w, http.StatusNotImplemented, "reconciliation_disabled", "reconciliation is not configured")
+		return
+	}
+	chainID, err := parseInt64Query(r, "chain_id", 80002)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_chain_id", err.Error())
+		return
+	}
+	contract := r.URL.Query().Get("contract")
+	if contract == "" {
+		writeError(w, http.StatusBadRequest, "missing_contract", "contract is required")
+		return
+	}
+	disputes, err := s.reconciliation.ListDisputes(r.Context(), chainID, contract, r.URL.Query().Get("status"))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "reconciliation_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"disputes": disputes})
+}
+
+func (s *Server) handleAddDisputeReview(w http.ResponseWriter, r *http.Request) {
+	if s.reconciliation == nil {
+		writeError(w, http.StatusNotImplemented, "reconciliation_disabled", "reconciliation is not configured")
+		return
+	}
+	operator, ok := operatorFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication_required", "operator authentication is required")
+		return
+	}
+	var req struct {
+		Note string `json:"note"`
+	}
+	if err := decodeJSON(r, &req); err != nil || strings.TrimSpace(req.Note) == "" {
+		writeError(w, http.StatusBadRequest, "invalid_review", "review note is required")
+		return
+	}
+	review, err := s.reconciliation.AddDisputeReview(r.Context(), r.PathValue("id"), operator.Email, strings.TrimSpace(req.Note))
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "invalid_dispute", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, review)
+}
+
+func (s *Server) handleDisputeReviews(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.handleListDisputeReviews(w, r)
+	case http.MethodPost:
+		s.handleAddDisputeReview(w, r)
+	default:
+		w.Header().Set("Allow", "GET, POST")
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method must be GET or POST")
+	}
+}
+
+func (s *Server) handleAddDisputeDecision(w http.ResponseWriter, r *http.Request) {
+	if s.reconciliation == nil {
+		writeError(w, http.StatusNotImplemented, "reconciliation_disabled", "reconciliation is not configured")
+		return
+	}
+	operator, ok := operatorFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication_required", "operator authentication is required")
+		return
+	}
+	var req struct {
+		Decision  string `json:"decision"`
+		Rationale string `json:"rationale"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	req.Decision = strings.ToUpper(strings.TrimSpace(req.Decision))
+	req.Rationale = strings.TrimSpace(req.Rationale)
+	if (req.Decision != "RELEASE" && req.Decision != "REFUND") || req.Rationale == "" {
+		writeError(w, http.StatusBadRequest, "invalid_decision", "decision must be RELEASE or REFUND and rationale is required")
+		return
+	}
+	decision, err := s.reconciliation.AddDisputeDecision(r.Context(), r.PathValue("id"), req.Decision, req.Rationale, operator.Email)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "invalid_dispute", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, decision)
+}
+
+func (s *Server) handleListDisputeReviews(w http.ResponseWriter, r *http.Request) {
+	if s.reconciliation == nil {
+		writeError(w, http.StatusNotImplemented, "reconciliation_disabled", "reconciliation is not configured")
+		return
+	}
+	reviews, err := s.reconciliation.ListDisputeReviews(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "reconciliation_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"reviews": reviews})
+}
+
+func (s *Server) handleListDisputeTimeline(w http.ResponseWriter, r *http.Request) {
+	if s.reconciliation == nil {
+		writeError(w, http.StatusNotImplemented, "reconciliation_disabled", "reconciliation is not configured")
+		return
+	}
+	timeline, err := s.reconciliation.ListDisputeTimeline(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "reconciliation_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"timeline": timeline})
+}
+
+func (s *Server) handleListDisputeDecisions(w http.ResponseWriter, r *http.Request) {
+	if s.reconciliation == nil {
+		writeError(w, http.StatusNotImplemented, "reconciliation_disabled", "reconciliation is not configured")
+		return
+	}
+	decisions, err := s.reconciliation.ListDisputeDecisions(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "reconciliation_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"decisions": decisions})
+}
+
+func (s *Server) handleApproveDisputeDecision(w http.ResponseWriter, r *http.Request) {
+	if s.reconciliation == nil {
+		writeError(w, http.StatusNotImplemented, "reconciliation_disabled", "reconciliation is not configured")
+		return
+	}
+	operator, ok := operatorFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication_required", "operator authentication is required")
+		return
+	}
+	approval, err := s.reconciliation.ApproveDisputeDecision(r.Context(), r.PathValue("id"), operator.Email)
+	if err != nil {
+		if strings.Contains(err.Error(), "already approved") {
+			writeError(w, http.StatusConflict, "approval_exists", err.Error())
+			return
+		}
+		writeError(w, http.StatusUnprocessableEntity, "invalid_approval", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, approval)
 }
 
 // ---------------------------------------------------------------------------
