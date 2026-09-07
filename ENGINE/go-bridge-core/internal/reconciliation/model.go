@@ -100,6 +100,53 @@ type EventRecord struct {
 	ObservedAt      string          `json:"observed_at"`
 }
 
+type Dispute struct {
+	ID                    string `json:"id"`
+	ChainID               int64  `json:"chain_id"`
+	ContractAddress       string `json:"contract_address"`
+	EscrowID              int64  `json:"escrow_id"`
+	RaisedTransactionHash string `json:"raised_transaction_hash"`
+	RaisedLogIndex        int32  `json:"raised_log_index"`
+	Reason                string `json:"reason"`
+	Status                string `json:"status"`
+	CreatedAt             string `json:"created_at"`
+	ResolvedAt            string `json:"resolved_at,omitempty"`
+}
+
+type DisputeReview struct {
+	ID        string `json:"id"`
+	DisputeID string `json:"dispute_id"`
+	Reviewer  string `json:"reviewer_email"`
+	Note      string `json:"note"`
+	CreatedAt string `json:"created_at"`
+}
+
+type DisputeDecision struct {
+	ID        string                    `json:"id"`
+	DisputeID string                    `json:"dispute_id"`
+	Decision  string                    `json:"decision"`
+	Rationale string                    `json:"rationale"`
+	DecidedBy string                    `json:"decided_by"`
+	CreatedAt string                    `json:"created_at"`
+	Approvals []DisputeDecisionApproval `json:"approvals"`
+}
+
+type DisputeDecisionApproval struct {
+	ID            string `json:"id"`
+	DecisionID    string `json:"decision_id"`
+	ApproverEmail string `json:"approver_email"`
+	CreatedAt     string `json:"created_at"`
+}
+
+type DisputeTimelineEntry struct {
+	ID        string `json:"id"`
+	Kind      string `json:"kind"`
+	Actor     string `json:"actor,omitempty"`
+	Summary   string `json:"summary"`
+	Details   string `json:"details,omitempty"`
+	CreatedAt string `json:"created_at"`
+}
+
 // Apply validates and applies one event to an escrow. The caller must persist
 // the event and updated escrow atomically.
 func Apply(current *Escrow, event ChainEvent) error {
