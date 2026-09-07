@@ -1,17 +1,27 @@
-import type { Escrow, EscrowEvent, Operator, ReconciliationStatus } from "./types";
+import type { Dispute, DisputeDecision, DisputeReview, DisputeTimelineEntry, Escrow, EscrowEvent, Operator, ReconciliationStatus } from "./types";
 
 const contract = import.meta.env.VITE_ESCROW_CONTRACT ??
   "0x491a0E68B440621435B606D17FDa50f7999DE4ef";
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 10000);
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
+    signal: controller.signal,
     credentials: "include",
     headers: { "Content-Type": "application/json", ...init?.headers }
-  });
+  }).finally(() => window.clearTimeout(timeout));
   if (!response.ok) {
-    const error = new Error(`Request failed with status ${response.status}`);
+    let message = `Request failed with status ${response.status}`;
+    try {
+      const body = await response.json() as { message?: string };
+      if (body.message) message = body.message;
+    } catch {
+      // Keep the HTTP status when the server does not return JSON.
+    }
+    const error = new Error(message);
     if (response.status === 401) error.name = "AuthenticationRequired";
     throw error;
   }
@@ -43,6 +53,40 @@ export function getReconciliationStatus(): Promise<ReconciliationStatus> {
 
 export function getEscrowEvents(escrowId: number): Promise<{ events: EscrowEvent[] }> {
   return request(`/api/escrows/${escrowId}/events?chain_id=80002&contract=${contract}`);
+}
+
+export function getDisputes(): Promise<{ disputes: Dispute[] }> {
+  return request(`/api/disputes?chain_id=80002&contract=${contract}&status=OPEN`);
+}
+
+export function addDisputeReview(disputeId: string, note: string): Promise<DisputeReview> {
+  return request(`/api/disputes/${disputeId}/reviews`, {
+    method: "POST",
+    body: JSON.stringify({ note })
+  });
+}
+
+export function getDisputeReviews(disputeId: string): Promise<{ reviews: DisputeReview[] }> {
+  return request(`/api/disputes/${disputeId}/reviews`);
+}
+
+export function getDisputeTimeline(disputeId: string): Promise<{ timeline: DisputeTimelineEntry[] }> {
+  return request(`/api/disputes/${disputeId}/timeline`);
+}
+
+export function addDisputeDecision(disputeId: string, decision: DisputeDecision["decision"], rationale: string): Promise<DisputeDecision> {
+  return request(`/api/disputes/${disputeId}/decision`, {
+    method: "POST",
+    body: JSON.stringify({ decision, rationale })
+  });
+}
+
+export function getDisputeDecisions(disputeId: string): Promise<{ decisions: DisputeDecision[] }> {
+  return request(`/api/disputes/${disputeId}/decisions`);
+}
+
+export function approveDisputeDecision(decisionId: string): Promise<DisputeDecision["approvals"][number]> {
+  return request(`/api/dispute-decisions/${decisionId}/approve`, { method: "POST" });
 }
 
 export async function getHealth(): Promise<boolean> {
