@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -126,6 +127,7 @@ func (r *Repository) ListEvents(ctx context.Context, chainID int64, contractAddr
 	if r == nil || r.pool == nil {
 		return nil, errors.New("reconciliation: repository has nil pool")
 	}
+
 	rows, err := r.pool.Query(ctx, `
 		SELECT chain_id, contract_address, transaction_hash, log_index,
 		       block_number, block_hash, escrow_id, event_type, payload,
@@ -151,6 +153,233 @@ func (r *Repository) ListEvents(ctx context.Context, chainID int64, contractAddr
 		result = append(result, item)
 	}
 	return result, rows.Err()
+}
+
+func (r *Repository) ListDisputes(ctx context.Context, chainID int64, contractAddress, status string) ([]Dispute, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, chain_id, contract_address, escrow_id, raised_transaction_hash,
+		       raised_log_index, reason, status, created_at, resolved_at
+		FROM escrow_disputes
+		WHERE chain_id = $1 AND contract_address = $2
+		  AND ($3 = '' OR status = $3)
+		ORDER BY created_at DESC`, chainID, contractAddress, status)
+	if err != nil {
+		return nil, fmt.Errorf("reconciliation: list disputes: %w", err)
+	}
+	defer rows.Close()
+	result := make([]Dispute, 0)
+	for rows.Next() {
+		var item Dispute
+		var createdAt time.Time
+		var resolvedAt *time.Time
+		if err := rows.Scan(&item.ID, &item.ChainID, &item.ContractAddress, &item.EscrowID,
+			&item.RaisedTransactionHash, &item.RaisedLogIndex, &item.Reason, &item.Status,
+			&createdAt, &resolvedAt); err != nil {
+			return nil, fmt.Errorf("reconciliation: scan dispute: %w", err)
+		}
+		item.CreatedAt = createdAt.UTC().Format(time.RFC3339)
+		if resolvedAt != nil {
+			item.ResolvedAt = resolvedAt.UTC().Format(time.RFC3339)
+		}
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}
+
+func (r *Repository) AddDisputeReview(ctx context.Context, disputeID, reviewer, note string) (DisputeReview, error) {
+	if r == nil || r.pool == nil {
+		return DisputeReview{}, errors.New("reconciliation: repository has nil pool")
+	}
+	var review DisputeReview
+	var createdAt time.Time
+	err := r.pool.QueryRow(ctx, `
+		INSERT INTO dispute_reviews (dispute_id, reviewer_email, note)
+		SELECT id, $2, $3 FROM escrow_disputes WHERE id = $1 AND status = 'OPEN'
+		RETURNING id, dispute_id, reviewer_email, note, created_at`,
+		disputeID, reviewer, note).Scan(&review.ID, &review.DisputeID, &review.Reviewer, &review.Note, &createdAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return DisputeReview{}, fmt.Errorf("reconciliation: dispute not found or already resolved")
+	}
+	if err != nil {
+		return DisputeReview{}, fmt.Errorf("reconciliation: add dispute review: %w", err)
+	}
+	review.CreatedAt = createdAt.UTC().Format(time.RFC3339)
+	return review, nil
+}
+
+func (r *Repository) ListDisputeReviews(ctx context.Context, disputeID string) ([]DisputeReview, error) {
+	if r == nil || r.pool == nil {
+		return nil, errors.New("reconciliation: repository has nil pool")
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, dispute_id, reviewer_email, note, created_at
+		FROM dispute_reviews
+		WHERE dispute_id = $1
+		ORDER BY created_at DESC`, disputeID)
+	if err != nil {
+		return nil, fmt.Errorf("reconciliation: list dispute reviews: %w", err)
+	}
+	defer rows.Close()
+	reviews := make([]DisputeReview, 0)
+	for rows.Next() {
+		var review DisputeReview
+		var createdAt time.Time
+		if err := rows.Scan(&review.ID, &review.DisputeID, &review.Reviewer, &review.Note, &createdAt); err != nil {
+			return nil, fmt.Errorf("reconciliation: scan dispute review: %w", err)
+		}
+		review.CreatedAt = createdAt.UTC().Format(time.RFC3339)
+		reviews = append(reviews, review)
+	}
+	return reviews, rows.Err()
+}
+
+func (r *Repository) AddDisputeDecision(ctx context.Context, disputeID, decision, rationale, decidedBy string) (DisputeDecision, error) {
+	if r == nil || r.pool == nil {
+		return DisputeDecision{}, errors.New("reconciliation: repository has nil pool")
+	}
+	var result DisputeDecision
+	var createdAt time.Time
+	err := r.pool.QueryRow(ctx, `
+		INSERT INTO dispute_decisions (dispute_id, decision, rationale, decided_by)
+		SELECT id, $2, $3, $4 FROM escrow_disputes WHERE id = $1 AND status = 'OPEN'
+		RETURNING id, dispute_id, decision, rationale, decided_by, created_at`,
+		disputeID, decision, rationale, decidedBy).Scan(
+		&result.ID, &result.DisputeID, &result.Decision, &result.Rationale, &result.DecidedBy, &createdAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return DisputeDecision{}, fmt.Errorf("reconciliation: dispute not found or already resolved")
+	}
+	if err != nil && strings.Contains(err.Error(), "dispute_decisions_dispute_id_key") {
+		return DisputeDecision{}, fmt.Errorf("reconciliation: dispute already has an active recommendation")
+	}
+	if err != nil {
+		return DisputeDecision{}, fmt.Errorf("reconciliation: add dispute decision: %w", err)
+	}
+	result.CreatedAt = createdAt.UTC().Format(time.RFC3339)
+	result.Approvals = []DisputeDecisionApproval{}
+	return result, nil
+}
+
+func (r *Repository) ListDisputeTimeline(ctx context.Context, disputeID string) ([]DisputeTimelineEntry, error) {
+	if r == nil || r.pool == nil {
+		return nil, errors.New("reconciliation: repository has nil pool")
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT id::text, kind, actor, summary, details, created_at
+		FROM (
+			SELECT
+				ed.id::text || ':event:' || ce.transaction_hash || ':' || ce.log_index AS id,
+				'CHAIN_EVENT' AS kind, '' AS actor, ce.event_type AS summary,
+				ce.transaction_hash AS details, ce.observed_at AS created_at
+			FROM escrow_disputes ed
+			JOIN chain_events ce
+			  ON ce.chain_id = ed.chain_id
+			 AND ce.contract_address = ed.contract_address
+			 AND ce.escrow_id = ed.escrow_id
+			WHERE ed.id = $1
+			UNION ALL
+			SELECT id::text, 'REVIEW', reviewer_email, 'Review note', note, created_at
+			FROM dispute_reviews WHERE dispute_id = $1
+			UNION ALL
+			SELECT id::text, 'RECOMMENDATION', decided_by,
+			       decision || ' recommendation', rationale, created_at
+			FROM dispute_decisions WHERE dispute_id = $1
+			UNION ALL
+			SELECT a.id::text, 'APPROVAL', a.approver_email,
+			       'Recommendation approved', d.decision || ' recommendation', a.created_at
+			FROM dispute_decision_approvals a
+			JOIN dispute_decisions d ON d.id = a.decision_id
+			WHERE d.dispute_id = $1
+		) timeline
+		ORDER BY created_at, id`, disputeID)
+	if err != nil {
+		return nil, fmt.Errorf("reconciliation: list dispute timeline: %w", err)
+	}
+	defer rows.Close()
+	entries := make([]DisputeTimelineEntry, 0)
+	for rows.Next() {
+		var entry DisputeTimelineEntry
+		var createdAt time.Time
+		if err := rows.Scan(&entry.ID, &entry.Kind, &entry.Actor, &entry.Summary, &entry.Details, &createdAt); err != nil {
+			return nil, fmt.Errorf("reconciliation: scan dispute timeline: %w", err)
+		}
+		entry.CreatedAt = createdAt.UTC().Format(time.RFC3339)
+		entries = append(entries, entry)
+	}
+	return entries, rows.Err()
+}
+
+func (r *Repository) ListDisputeDecisions(ctx context.Context, disputeID string) ([]DisputeDecision, error) {
+	if r == nil || r.pool == nil {
+		return nil, errors.New("reconciliation: repository has nil pool")
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, dispute_id, decision, rationale, decided_by, created_at
+		FROM dispute_decisions WHERE dispute_id = $1 ORDER BY created_at DESC`, disputeID)
+	if err != nil {
+		return nil, fmt.Errorf("reconciliation: list dispute decisions: %w", err)
+	}
+	defer rows.Close()
+	decisions := make([]DisputeDecision, 0)
+	for rows.Next() {
+		var item DisputeDecision
+		var createdAt time.Time
+		if err := rows.Scan(&item.ID, &item.DisputeID, &item.Decision, &item.Rationale, &item.DecidedBy, &createdAt); err != nil {
+			return nil, fmt.Errorf("reconciliation: scan dispute decision: %w", err)
+		}
+		item.CreatedAt = createdAt.UTC().Format(time.RFC3339)
+		item.Approvals, err = r.listDecisionApprovals(ctx, item.ID)
+		if err != nil {
+			return nil, err
+		}
+		decisions = append(decisions, item)
+	}
+	return decisions, rows.Err()
+}
+
+func (r *Repository) listDecisionApprovals(ctx context.Context, decisionID string) ([]DisputeDecisionApproval, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, decision_id, approver_email, created_at
+		FROM dispute_decision_approvals WHERE decision_id = $1 ORDER BY created_at`, decisionID)
+	if err != nil {
+		return nil, fmt.Errorf("reconciliation: list decision approvals: %w", err)
+	}
+	defer rows.Close()
+	approvals := make([]DisputeDecisionApproval, 0)
+	for rows.Next() {
+		var item DisputeDecisionApproval
+		var createdAt time.Time
+		if err := rows.Scan(&item.ID, &item.DecisionID, &item.ApproverEmail, &createdAt); err != nil {
+			return nil, fmt.Errorf("reconciliation: scan decision approval: %w", err)
+		}
+		item.CreatedAt = createdAt.UTC().Format(time.RFC3339)
+		approvals = append(approvals, item)
+	}
+	return approvals, rows.Err()
+}
+
+func (r *Repository) ApproveDisputeDecision(ctx context.Context, decisionID, approver string) (DisputeDecisionApproval, error) {
+	if r == nil || r.pool == nil {
+		return DisputeDecisionApproval{}, errors.New("reconciliation: repository has nil pool")
+	}
+	var approval DisputeDecisionApproval
+	var createdAt time.Time
+	err := r.pool.QueryRow(ctx, `
+		INSERT INTO dispute_decision_approvals (decision_id, approver_email)
+		SELECT id, $2 FROM dispute_decisions
+		WHERE id = $1 AND decided_by <> $2
+		RETURNING id, decision_id, approver_email, created_at`,
+		decisionID, approver).Scan(&approval.ID, &approval.DecisionID, &approval.ApproverEmail, &createdAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return DisputeDecisionApproval{}, fmt.Errorf("reconciliation: decision missing or approver must differ from arbiter")
+	}
+	if err != nil && strings.Contains(err.Error(), "dispute_decision_approvals_decision_id_approver_email_key") {
+		return DisputeDecisionApproval{}, fmt.Errorf("reconciliation: decision already approved by this operator")
+	}
+	if err != nil {
+		return DisputeDecisionApproval{}, fmt.Errorf("reconciliation: approve dispute decision: %w", err)
+	}
+	approval.CreatedAt = createdAt.UTC().Format(time.RFC3339)
+	return approval, nil
 }
 
 func (r *Repository) AdvanceCursor(ctx context.Context, chainID int64, contractAddress string, nextBlock int64) error {
@@ -197,6 +426,17 @@ func applyEventTx(ctx context.Context, tx pgx.Tx, event ChainEvent) (bool, error
 		VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
 		event.ChainID, event.ContractAddress, event.BlockNumber, event.BlockHash); err != nil {
 		return false, fmt.Errorf("reconciliation: store canonical block: %w", err)
+	}
+	if event.Type == EventDisputeRaised {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO escrow_disputes
+				(chain_id, contract_address, escrow_id, raised_transaction_hash,
+				 raised_log_index, reason)
+			VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
+			event.ChainID, event.ContractAddress, event.EscrowID,
+			event.TransactionHash, event.LogIndex, event.Reason); err != nil {
+			return false, fmt.Errorf("reconciliation: store dispute: %w", err)
+		}
 	}
 	err = tx.QueryRow(ctx, `
 		INSERT INTO chain_events
