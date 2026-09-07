@@ -40,6 +40,7 @@ type Config struct {
 
 	OperatorEmail    string
 	OperatorPassword string
+	OperatorRole     string
 
 	// Adapter settings ----------------------------------------------------
 	// AdapterName selects the telecom adapter from the registry, e.g. "mtn-rw".
@@ -83,6 +84,7 @@ func Load() (*Config, error) {
 		WebDir:                      getEnv("VUKA_WEB_DIR", ""),
 		OperatorEmail:               os.Getenv("VUKA_OPERATOR_EMAIL"),
 		OperatorPassword:            os.Getenv("VUKA_OPERATOR_PASSWORD"),
+		OperatorRole:                getEnv("VUKA_OPERATOR_ROLE", "operator"),
 		AdapterName:                 getEnv("VUKA_ADAPTER", "mtn-rw"),
 		MTNSimDelay:                 getDuration("MTN_SIM_DELAY_MS", 150*time.Millisecond),
 		MTNSimFailRate:              getFloat("MTN_SIM_FAIL_RATE", 0.0),
@@ -141,6 +143,9 @@ func (c *Config) Validate() error {
 	}
 	if (c.OperatorEmail == "") != (c.OperatorPassword == "") {
 		return fmt.Errorf("config: VUKA_OPERATOR_EMAIL and VUKA_OPERATOR_PASSWORD must be provided together")
+	}
+	if c.OperatorRole != "operator" && c.OperatorRole != "arbiter" {
+		return fmt.Errorf("config: VUKA_OPERATOR_ROLE must be operator or arbiter")
 	}
 	if c.FxRateRWFKES < 0 {
 		return fmt.Errorf("config: VUKA_FX_RWF_KES must be >= 0, got %v", c.FxRateRWFKES)
