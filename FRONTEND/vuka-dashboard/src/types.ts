@@ -42,3 +42,50 @@ export type Operator = {
   email: string;
   role: string;
 };
+
+export type Dispute = {
+  id: string;
+  chain_id: number;
+  contract_address: string;
+  escrow_id: number;
+  raised_transaction_hash: string;
+  raised_log_index: number;
+  reason: string;
+  status: "OPEN" | "RESOLVED";
+  created_at: string;
+  resolved_at?: string;
+};
+
+export type DisputeReview = {
+  id: string;
+  dispute_id: string;
+  reviewer_email: string;
+  note: string;
+  created_at: string;
+};
+
+export type DisputeDecision = {
+  id: string;
+  dispute_id: string;
+  decision: "RELEASE" | "REFUND";
+  rationale: string;
+  decided_by: string;
+  created_at: string;
+  approvals: DisputeDecisionApproval[];
+};
+
+export type DisputeDecisionApproval = {
+  id: string;
+  decision_id: string;
+  approver_email: string;
+  created_at: string;
+};
+
+export type DisputeTimelineEntry = {
+  id: string;
+  kind: "CHAIN_EVENT" | "REVIEW" | "RECOMMENDATION" | "APPROVAL";
+  actor?: string;
+  summary: string;
+  details?: string;
+  created_at: string;
+};
