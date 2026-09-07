@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { getCurrentOperator, getEscrowEvents, getEscrows, getHealth, getReconciliationStatus, login, logout, contract } from "./api";
-import type { Escrow, EscrowEvent, EscrowState, Operator, ReconciliationStatus } from "./types";
+import { addDisputeDecision, addDisputeReview, approveDisputeDecision, getCurrentOperator, getDisputeDecisions, getDisputeReviews, getDisputeTimeline, getDisputes, getEscrowEvents, getEscrows, getHealth, getReconciliationStatus, login, logout, contract } from "./api";
+import type { Dispute, DisputeDecision, DisputeReview, DisputeTimelineEntry, Escrow, EscrowEvent, EscrowState, Operator, ReconciliationStatus } from "./types";
 
 const refreshInterval = 15000;
 
@@ -37,21 +37,56 @@ export function App() {
   const [loggingIn, setLoggingIn] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [operator, setOperator] = useState<Operator | null>(null);
+  const [disputes, setDisputes] = useState<Dispute[]>([]);
+  const [disputesLoading, setDisputesLoading] = useState(false);
+  const [disputesError, setDisputesError] = useState<string | null>(null);
+  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+  const [reviewingDispute, setReviewingDispute] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [decisionChoice, setDecisionChoice] = useState<Record<string, DisputeDecision["decision"]>>({});
+  const [decisionRationales, setDecisionRationales] = useState<Record<string, string>>({});
+  const [decidingDispute, setDecidingDispute] = useState<string | null>(null);
+  const [disputeReviews, setDisputeReviews] = useState<Record<string, DisputeReview[]>>({});
+  const [disputeDecisions, setDisputeDecisions] = useState<Record<string, DisputeDecision[]>>({});
+  const [disputeTimelines, setDisputeTimelines] = useState<Record<string, DisputeTimelineEntry[]>>({});
+  const [approvingDecision, setApprovingDecision] = useState<string | null>(null);
 
   const pageSize = 10;
 
   const load = useCallback(async () => {
     try {
-      const [escrowResponse, reconciliationStatus, health, currentOperator] = await Promise.all([
+      const currentOperator = await getCurrentOperator();
+      setDisputesLoading(currentOperator.role === "arbiter" || currentOperator.role === "operator");
+      const [escrowResponse, reconciliationStatus, health, disputeResponse] = await Promise.all([
         getEscrows(),
         getReconciliationStatus(),
         getHealth(),
-        getCurrentOperator()
+        currentOperator.role === "operator" || currentOperator.role === "arbiter" ? getDisputes() : Promise.resolve({ disputes: [] })
       ]);
       setEscrows(escrowResponse.escrows);
       setStatus(reconciliationStatus);
       setHealthy(health);
       setOperator(currentOperator);
+      setDisputes(disputeResponse.disputes);
+      if (currentOperator.role === "arbiter" || currentOperator.role === "operator") {
+        const reviewResponses = await Promise.all(
+          disputeResponse.disputes.map(async (dispute) => [dispute.id, (await getDisputeReviews(dispute.id)).reviews] as const)
+        );
+        setDisputeReviews(Object.fromEntries(reviewResponses));
+        const decisionResponses = await Promise.all(
+          disputeResponse.disputes.map(async (dispute) => [dispute.id, (await getDisputeDecisions(dispute.id)).decisions] as const)
+        );
+        setDisputeDecisions(Object.fromEntries(decisionResponses));
+        const timelineResponses = await Promise.all(
+          disputeResponse.disputes.map(async (dispute) => [dispute.id, (await getDisputeTimeline(dispute.id)).timeline] as const)
+        );
+        setDisputeTimelines(Object.fromEntries(timelineResponses));
+      } else {
+        setDisputeReviews({});
+        setDisputeDecisions({});
+        setDisputeTimelines({});
+      }
+      setDisputesError(null);
       setError(null);
       setAuthRequired(false);
       setLastUpdated(new Date());
@@ -63,13 +98,87 @@ export function App() {
         setSelectedId(null);
         setSelectedEvents([]);
         setOperator(null);
+        setDisputes([]);
+        setDisputeReviews({});
+        setDisputeDecisions({});
+        setDisputeTimelines({});
         setError(null);
         return;
       }
       setError(loadError instanceof Error ? loadError.message : "Unable to load operations data");
       setHealthy(false);
+      if (operator?.role === "arbiter") {
+        setDisputesError(loadError instanceof Error ? loadError.message : "Unable to load disputes");
+      }
+    } finally {
+      setDisputesLoading(false);
     }
-  }, []);
+  }, [operator?.role]);
+
+  async function handleReview(dispute: Dispute) {
+    const note = (reviewNotes[dispute.id] ?? "").trim();
+    if (!note) {
+      setReviewError("Enter a review note before submitting.");
+      return;
+    }
+
+    setReviewingDispute(dispute.id);
+    setReviewError(null);
+    try {
+      await addDisputeReview(dispute.id, note);
+      setReviewNotes((current) => ({ ...current, [dispute.id]: "" }));
+      const response = await getDisputeReviews(dispute.id);
+      setDisputeReviews((current) => ({ ...current, [dispute.id]: response.reviews }));
+      const timeline = await getDisputeTimeline(dispute.id);
+      setDisputeTimelines((current) => ({ ...current, [dispute.id]: timeline.timeline }));
+    } catch (reviewLoadError) {
+      setReviewError(reviewLoadError instanceof Error ? reviewLoadError.message : "Unable to save review.");
+    } finally {
+      setReviewingDispute(null);
+    }
+
+  }
+
+  async function handleDecision(dispute: Dispute) {
+    const decision = decisionChoice[dispute.id] ?? "RELEASE";
+    const rationale = (decisionRationales[dispute.id] ?? "").trim();
+    if (!rationale) {
+      setReviewError("Enter a rationale before recording a decision.");
+      return;
+    }
+    setDecidingDispute(dispute.id);
+    setReviewError(null);
+    try {
+      await addDisputeDecision(dispute.id, decision, rationale);
+      setDecisionRationales((current) => ({ ...current, [dispute.id]: "" }));
+      const timeline = await getDisputeTimeline(dispute.id);
+      setDisputeTimelines((current) => ({ ...current, [dispute.id]: timeline.timeline }));
+    } catch (decisionError) {
+      setReviewError(decisionError instanceof Error ? decisionError.message : "Unable to record decision.");
+    } finally {
+      setDecidingDispute(null);
+    }
+  }
+
+  async function handleApprove(decision: DisputeDecision) {
+    setApprovingDecision(decision.id);
+    setReviewError(null);
+    try {
+      const approval = await approveDisputeDecision(decision.id);
+      setDisputeDecisions((current) => ({
+        ...current,
+        [decision.dispute_id]: current[decision.dispute_id].map((item) =>
+          item.id === decision.id ? { ...item, approvals: [...item.approvals, approval] } : item
+        )
+      }));
+      const timeline = await getDisputeTimeline(decision.dispute_id);
+      setDisputeTimelines((current) => ({ ...current, [decision.dispute_id]: timeline.timeline }));
+    } catch (approvalError) {
+      setReviewError(approvalError instanceof Error ? approvalError.message : "Unable to approve recommendation.");
+    } finally {
+      setApprovingDecision(null);
+    }
+  }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -80,7 +189,7 @@ export function App() {
       setPassword("");
       await load();
     } catch (loginLoadError) {
-      setLoginError(loginLoadError instanceof Error ? "Invalid operator credentials." : "Unable to sign in.");
+      setLoginError(loginLoadError instanceof Error ? loginLoadError.message : "Unable to sign in.");
     } finally {
       setLoggingIn(false);
     }
@@ -98,6 +207,10 @@ export function App() {
       setSelectedId(null);
       setSelectedEvents([]);
       setOperator(null);
+      setDisputes([]);
+      setDisputeReviews({});
+      setDisputeDecisions({});
+      setDisputeTimelines({});
     }
   }
 
@@ -155,13 +268,27 @@ export function App() {
   return (
     authRequired ? <main className="login-shell">
       <form className="login-card" onSubmit={handleLogin}>
-        <p className="eyebrow">VUKA / OPERATIONS</p>
-        <h1>Operator sign in</h1>
-        <p className="login-note">Authenticate to access reconciled escrow operations.</p>
-        <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="username" /></label>
-        <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" /></label>
+        <div className="login-brand">
+          <span className="login-brand-mark">V</span>
+          <div>
+            <strong>VUKA</strong>
+            <span>TRADE TRUST</span>
+          </div>
+        </div>
+        <div className="login-heading">
+          <p className="eyebrow">OPERATIONS CONSOLE</p>
+          <h1>Welcome back.</h1>
+          <p className="login-note">Sign in to securely monitor reconciled escrow activity and trade operations.</p>
+        </div>
+        <div className="login-security">
+          <span className="security-indicator" aria-hidden="true" />
+          <span>Protected operator access</span>
+        </div>
+        <label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="username" placeholder="you@company.com" /></label>
+        <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" placeholder="Enter your password" /></label>
         {loginError && <p className="login-error" role="alert">{loginError}</p>}
-        <button className="outline-button" disabled={loggingIn}>{loggingIn ? "Signing in…" : "Sign in"}</button>
+        <button className="login-submit" disabled={loggingIn}>{loggingIn ? "Authenticating…" : "Continue to console"}<span aria-hidden="true">→</span></button>
+        <p className="login-footer">Authorized personnel only · Sessions are encrypted and expire automatically.</p>
       </form>
     </main> :
     <div className="app-shell">
@@ -177,6 +304,7 @@ export function App() {
           <a className="nav-item active" href="#overview">Overview</a>
           <a className="nav-item" href="#escrows">Escrows</a>
           <a className="nav-item" href="#reconciliation">Reconciliation</a>
+          {operator?.role === "arbiter" && <a className="nav-item" href="#disputes">Dispute review</a>}
         </nav>
         <div className="sidebar-footer">
           <span className={`health-dot ${healthy ? "online" : ""}`} />
@@ -308,6 +436,114 @@ export function App() {
             <div className="network-meta"><span>Mode</span><strong>Read-only</strong></div>
           </article>
         </section>
+
+        {(operator?.role === "arbiter" || operator?.role === "operator") && <section id="disputes" className="content-section">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">{operator.role === "arbiter" ? "ARBITER WORKSPACE" : "OPERATOR APPROVAL QUEUE"}</p>
+              <h2>{operator.role === "arbiter" ? "Open disputes" : "Pending recommendations"}</h2>
+            </div>
+            <span className="refresh-note">{disputes.length} awaiting review</span>
+          </div>
+          {reviewError && <div className="alert" role="alert">{reviewError}</div>}
+          {disputesError && <div className="alert" role="alert">{disputesError}</div>}
+          {disputesLoading && <p className="drawer-note">Loading disputes…</p>}
+          {!disputesLoading && disputes.length === 0 && <div className="empty-state panel">No open disputes are awaiting review.</div>}
+          {!disputesLoading && disputes.length > 0 && <div className="dispute-list">
+            {disputes.map((dispute) => (
+              <article className="panel dispute-card" key={dispute.id}>
+                <div className="section-heading compact">
+                  <div>
+                    <p className="eyebrow">ESCROW #{dispute.escrow_id}</p>
+                    <h2>{dispute.reason || "Dispute raised on-chain"}</h2>
+                  </div>
+                  <span className="status status-disputed">{dispute.status}</span>
+                </div>
+                <div className="dispute-meta">
+                  <span>Raised {new Date(dispute.created_at).toLocaleString()}</span>
+                  <span className="mono">{shorten(dispute.raised_transaction_hash)}</span>
+                </div>
+                {(disputeTimelines[dispute.id] ?? []).length > 0 && <div className="dispute-timeline">
+                  <p className="eyebrow">AUDIT TIMELINE</p>
+                  <ol>
+                    {(disputeTimelines[dispute.id] ?? []).map((entry) => (
+                      <li key={entry.id}>
+                        <span className="timeline-marker" aria-hidden="true" />
+                        <div>
+                          <strong>{entry.summary}</strong>
+                          {entry.actor && <span className="cell-sub">{entry.actor}</span>}
+                          {entry.details && <span className="cell-sub">{entry.kind === "CHAIN_EVENT" ? shorten(entry.details) : entry.details}</span>}
+                          <small>{new Date(entry.created_at).toLocaleString()}</small>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </div>}
+                <label className="review-field">
+                  <span className="eyebrow">REVIEW NOTE</span>
+                  <textarea
+                    value={reviewNotes[dispute.id] ?? ""}
+                    onChange={(event) => setReviewNotes((current) => ({ ...current, [dispute.id]: event.target.value }))}
+                    placeholder="Record evidence reviewed or follow-up required"
+                    rows={3}
+                  />
+                </label>
+                <button className="outline-button" onClick={() => void handleReview(dispute)} disabled={reviewingDispute === dispute.id}>
+                  {reviewingDispute === dispute.id ? "Saving review…" : "Save review note"}
+                </button>
+                {(disputeReviews[dispute.id] ?? []).length > 0 && <div className="review-history">
+                  <p className="eyebrow">REVIEW HISTORY</p>
+                  {(disputeReviews[dispute.id] ?? []).map((review) => (
+                    <div className="review-entry" key={review.id}>
+                      <strong>{review.reviewer_email}</strong>
+                      <span>{review.note}</span>
+                      <small>{new Date(review.created_at).toLocaleString()}</small>
+                    </div>
+                  ))}
+                </div>}
+                <p className="drawer-note">Review notes are recorded for audit. Escrow release and refund actions remain disabled.</p>
+                {(disputeDecisions[dispute.id] ?? []).map((decision) => (
+                  <div className="decision-history" key={decision.id}>
+                    <div>
+                      <strong>{decision.decision} recommendation</strong>
+                      <span className="cell-sub">{decision.rationale}</span>
+                      <span className="cell-sub">Arbiter: {decision.decided_by}</span>
+                    </div>
+                    {decision.approvals.length === 0 && operator.role === "operator" ? (
+                      <button className="row-button" onClick={() => void handleApprove(decision)} disabled={approvingDecision === decision.id}>
+                        {approvingDecision === decision.id ? "Approving…" : "Approve"}
+                      </button>
+                    ) : (
+                      <span className="refresh-note">{decision.approvals.length > 0 ? "Operator approved" : "Awaiting operator approval"}</span>
+                    )}
+                  </div>
+                ))}
+                {operator.role === "arbiter" && <div className="decision-box">
+                  <p className="eyebrow">NON-MONETARY RECOMMENDATION</p>
+                  <div className="decision-controls">
+                    <select
+                      value={decisionChoice[dispute.id] ?? "RELEASE"}
+                      onChange={(event) => setDecisionChoice((current) => ({ ...current, [dispute.id]: event.target.value as DisputeDecision["decision"] }))}
+                    >
+                      <option value="RELEASE">Recommend release</option>
+                      <option value="REFUND">Recommend refund</option>
+                    </select>
+                    <button className="outline-button" onClick={() => void handleDecision(dispute)} disabled={decidingDispute === dispute.id}>
+                      {decidingDispute === dispute.id ? "Recording…" : "Record recommendation"}
+                    </button>
+                  </div>
+                  <textarea
+                    value={decisionRationales[dispute.id] ?? ""}
+                    onChange={(event) => setDecisionRationales((current) => ({ ...current, [dispute.id]: event.target.value }))}
+                    placeholder="Explain the evidence supporting this recommendation"
+                    rows={3}
+                  />
+                  <p className="drawer-note">This records an audit recommendation only. It does not release, refund, or change escrow state.</p>
+                </div>}
+              </article>
+            ))}
+          </div>}
+        </section>}
       </main>
 
       {selected && <div className="drawer-backdrop" onClick={() => setSelectedId(null)}>
