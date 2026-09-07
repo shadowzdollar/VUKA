@@ -93,7 +93,11 @@ psql:
 # accepted or needed.
 reconcile-run: up
 	@set -a; [ ! -f "$(MKFILE_DIR)deploy/.env" ] || . "$(MKFILE_DIR)deploy/.env"; set +a; \
-	test -n "$$VUKA_DATABASE_URL" || { echo "ERROR: set VUKA_DATABASE_URL."; exit 1; }; \
+	if [ -z "$$VUKA_DATABASE_URL" ]; then \
+		test -n "$$POSTGRES_PASSWORD" || { echo "ERROR: set VUKA_DATABASE_URL or POSTGRES_PASSWORD."; exit 1; }; \
+		VUKA_DATABASE_URL="postgres://vuka:$$POSTGRES_PASSWORD@localhost:5433/vuka?sslmode=disable"; \
+	fi; \
+	export VUKA_DATABASE_URL; \
 	test -n "$$VUKA_RECONCILIATION_RPC_URL" || { echo "ERROR: set VUKA_RECONCILIATION_RPC_URL."; exit 1; }; \
 	test -n "$$VUKA_RECONCILIATION_CONTRACT" || { echo "ERROR: set VUKA_RECONCILIATION_CONTRACT."; exit 1; }; \
 	cd $(MKFILE_DIR)go-bridge-core && \
@@ -107,6 +111,7 @@ reconcile-run: up
 		VUKA_RECONCILIATION_MAX_RANGE="$${VUKA_RECONCILIATION_MAX_RANGE:-9}" \
 		VUKA_OPERATOR_EMAIL="$$VUKA_OPERATOR_EMAIL" \
 		VUKA_OPERATOR_PASSWORD="$$VUKA_OPERATOR_PASSWORD" \
+		VUKA_OPERATOR_ROLE="$${VUKA_OPERATOR_ROLE:-operator}" \
 		go run ./cmd
 
 # ---------------------------------------------------------------------------
@@ -172,6 +177,27 @@ demo-seed:
 	cd $(MKFILE_DIR)go-bridge-core && VUKA_DATABASE_URL='$(DEMO_SEED_URL)' \
 		go run ./cmd/seed
 
+# Seed a synthetic dispute and separate arbiter/operator accounts for local
+# workflow testing. All four credential variables are required and local-only.
+seed-dispute:
+	@set -a; [ ! -f "$(MKFILE_DIR)deploy/.env" ] || . "$(MKFILE_DIR)deploy/.env"; set +a; \
+	if [ -z "$$VUKA_DATABASE_URL" ]; then \
+		test -n "$$POSTGRES_PASSWORD" || { echo "ERROR: set VUKA_DATABASE_URL or POSTGRES_PASSWORD."; exit 1; }; \
+		VUKA_DATABASE_URL="postgres://vuka:$$POSTGRES_PASSWORD@localhost:5433/vuka?sslmode=disable"; \
+	fi; \
+	export VUKA_DATABASE_URL; \
+	test -n "$$VUKA_SEED_ARBITER_EMAIL" || { echo "ERROR: set VUKA_SEED_ARBITER_EMAIL."; exit 1; }; \
+	test -n "$$VUKA_SEED_ARBITER_PASSWORD" || { echo "ERROR: set VUKA_SEED_ARBITER_PASSWORD."; exit 1; }; \
+	test -n "$$VUKA_SEED_OPERATOR_EMAIL" || { echo "ERROR: set VUKA_SEED_OPERATOR_EMAIL."; exit 1; }; \
+	test -n "$$VUKA_SEED_OPERATOR_PASSWORD" || { echo "ERROR: set VUKA_SEED_OPERATOR_PASSWORD."; exit 1; }; \
+	cd $(MKFILE_DIR)go-bridge-core && \
+		VUKA_DATABASE_URL="$$VUKA_DATABASE_URL" \
+		VUKA_SEED_ARBITER_EMAIL="$$VUKA_SEED_ARBITER_EMAIL" \
+		VUKA_SEED_ARBITER_PASSWORD="$$VUKA_SEED_ARBITER_PASSWORD" \
+		VUKA_SEED_OPERATOR_EMAIL="$$VUKA_SEED_OPERATOR_EMAIL" \
+		VUKA_SEED_OPERATOR_PASSWORD="$$VUKA_SEED_OPERATOR_PASSWORD" \
+		go run ./cmd/seed-dispute
+
 # One-command live demo: engine (background) + dashboard (background).
 # Prereqs: dockerized PG up (make up), deps installed (make dashboard-install).
 demo: up
@@ -190,4 +216,4 @@ demo: up
 	@echo "Engine log: /tmp/vuka-engine.log | Dashboard log: /tmp/vuka-dashboard.log"
 	@sleep 2 && curl -s http://localhost:8080/healthz && echo " (engine healthy)"
 
-.PHONY: dashboard-install dashboard-build dashboard-run demo demo-seed
+.PHONY: dashboard-install dashboard-build dashboard-run demo demo-seed seed-dispute
