@@ -30,14 +30,10 @@ func TestRepositoryAppliesEventsIdempotently(t *testing.T) {
 	}
 
 	contract := "0xintegration"
-	_, err = pool.Exec(ctx, `
-		DELETE FROM chain_events WHERE chain_id = 80002 AND contract_address = $1;
-		DELETE FROM canonical_blocks WHERE chain_id = 80002 AND contract_address = $1;
-		DELETE FROM escrows WHERE chain_id = 80002 AND contract_address = $1;
-		DELETE FROM reconciliation_cursors WHERE chain_id = 80002 AND contract_address = $1`,
-		contract)
-	if err != nil {
-		t.Fatal(err)
+	for _, table := range []string{"chain_events", "canonical_blocks", "escrows", "reconciliation_cursors"} {
+		if _, err = pool.Exec(ctx, "DELETE FROM "+table+" WHERE chain_id = 80002 AND contract_address = $1", contract); err != nil {
+			t.Fatal(err)
+		}
 	}
 	repo := NewRepository(pool)
 	created := ChainEvent{
