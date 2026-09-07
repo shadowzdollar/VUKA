@@ -127,7 +127,7 @@ func run(log *slog.Logger) error {
 				authCancel()
 				return err
 			}
-			if err := authStore.EnsureOperator(authCtx, cfg.OperatorEmail, cfg.OperatorPassword); err != nil {
+			if err := authStore.EnsureOperator(authCtx, cfg.OperatorEmail, cfg.OperatorPassword, cfg.OperatorRole); err != nil {
 				authCancel()
 				return err
 			}
