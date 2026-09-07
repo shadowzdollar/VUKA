@@ -29,6 +29,13 @@ type Operator struct {
 	Role  string `json:"role"`
 }
 
+type operatorContextKey struct{}
+
+func operatorFromContext(ctx context.Context) (Operator, bool) {
+	operator, ok := ctx.Value(operatorContextKey{}).(Operator)
+	return operator, ok
+}
+
 func NewAuthStore(pool *pgxpool.Pool) *AuthStore {
 	return &AuthStore{pool: pool}
 }
@@ -57,19 +64,50 @@ func (s *AuthStore) EnsureSchema(ctx context.Context) error {
 	return nil
 }
 
-func (s *AuthStore) EnsureOperator(ctx context.Context, email, password string) error {
+func (s *AuthStore) EnsureOperator(ctx context.Context, email, password, role string) error {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("auth: hash operator password: %w", err)
 	}
 	_, err = s.pool.Exec(ctx, `
-		INSERT INTO operators (email, password_hash)
-		VALUES ($1, $2)
-		ON CONFLICT (email) DO NOTHING`, strings.ToLower(strings.TrimSpace(email)), string(hash))
+		INSERT INTO operators (email, password_hash, role)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (email) DO UPDATE SET role = $3`,
+		strings.ToLower(strings.TrimSpace(email)), string(hash), role)
 	if err != nil {
 		return fmt.Errorf("auth: create operator: %w", err)
 	}
 	return nil
+}
+
+func (s *AuthStore) requireRole(roles ...string) func(http.Handler) http.Handler {
+	allowed := make(map[string]struct{}, len(roles))
+	for _, role := range roles {
+		allowed[role] = struct{}{}
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			cookie, err := r.Cookie(sessionCookie)
+			if err != nil {
+				writeError(w, http.StatusUnauthorized, "authentication_required", "operator authentication is required")
+				return
+			}
+			operator, err := s.operatorForSession(r.Context(), cookie.Value)
+			if errors.Is(err, errInvalidCredentials) {
+				writeError(w, http.StatusUnauthorized, "authentication_required", "operator authentication is required")
+				return
+			}
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "authentication_error", err.Error())
+				return
+			}
+			if _, ok := allowed[operator.Role]; !ok {
+				writeError(w, http.StatusForbidden, "insufficient_role", "this action is not available to the current role")
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), operatorContextKey{}, operator)))
+		})
+	}
 }
 
 func (s *AuthStore) login(ctx context.Context, email, password string) (string, error) {
