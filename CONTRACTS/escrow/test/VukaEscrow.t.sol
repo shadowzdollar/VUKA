@@ -71,6 +71,18 @@ contract VukaEscrowTest is Test {
         assertEq(token.balanceOf(supplier), AMOUNT);
     }
 
+    function testCreateStoresAbsoluteTimeout() public {
+        uint256 createdAt = block.timestamp;
+        vm.prank(buyer);
+        uint256 id = escrow.createEscrow(supplier, AMOUNT, "INV-TIMEOUT", 7 days);
+
+        VukaEscrow.Escrow memory item = escrow.getEscrow(id);
+        assertEq(item.timeoutAt, createdAt + 7 days);
+        assertEq(item.buyerConfirmedAt, 0);
+        assertEq(item.supplierConfirmedAt, 0);
+        assertEq(uint256(item.state), uint256(VukaEscrow.State.CREATED));
+    }
+
     function testTimeoutReleasesFundsToSupplier() public {
         uint256 id = _createAndLock(1 days);
         vm.warp(block.timestamp + 1 days);
@@ -115,6 +127,98 @@ contract VukaEscrowTest is Test {
         vm.expectRevert(VukaEscrow.TimeoutExpired.selector);
         vm.prank(buyer);
         escrow.raiseDispute(id, "Too late");
+    }
+
+    function testCannotConfirmAfterDeadlineBeforeTimeoutCheck() public {
+        uint256 id = _createAndLock(1 days);
+        vm.warp(block.timestamp + 1 days);
+
+        vm.expectRevert(VukaEscrow.TimeoutExpired.selector);
+        vm.prank(buyer);
+        escrow.confirmCompletion(id);
+
+        assertEq(uint256(escrow.getEscrow(id).state), uint256(VukaEscrow.State.LOCKED));
+    }
+
+    function testEachParticipantCanConfirmOnlyOnce() public {
+        uint256 id = _createAndLock(7 days);
+
+        vm.prank(buyer);
+        escrow.confirmCompletion(id);
+
+        vm.expectRevert(VukaEscrow.AlreadyConfirmed.selector);
+        vm.prank(buyer);
+        escrow.confirmCompletion(id);
+
+        vm.prank(supplier);
+        escrow.confirmCompletion(id);
+        assertEq(uint256(escrow.getEscrow(id).state), uint256(VukaEscrow.State.RELEASED));
+    }
+
+    function testTimeoutAtDeadlineReleasesOnceAndBecomesTerminal() public {
+        uint256 id = _createAndLock(1 days);
+        vm.warp(escrow.getEscrow(id).timeoutAt);
+
+        escrow.checkTimeout(id);
+        assertEq(uint256(escrow.getEscrow(id).state), uint256(VukaEscrow.State.RELEASED));
+        assertEq(token.balanceOf(supplier), AMOUNT);
+        assertEq(token.balanceOf(address(escrow)), 0);
+
+        vm.expectRevert(VukaEscrow.InvalidState.selector);
+        escrow.checkTimeout(id);
+    }
+
+    function testRefundedEscrowCannotBeChanged() public {
+        uint256 id = _createAndLock(7 days);
+
+        vm.prank(buyer);
+        escrow.raiseDispute(id, "Refund requested");
+        vm.prank(arbiter);
+        escrow.arbitrate(id, false);
+
+        vm.expectRevert(VukaEscrow.InvalidState.selector);
+        vm.prank(buyer);
+        escrow.confirmCompletion(id);
+
+        vm.expectRevert(VukaEscrow.InvalidState.selector);
+        escrow.checkTimeout(id);
+
+        vm.expectRevert(VukaEscrow.InvalidState.selector);
+        vm.prank(arbiter);
+        escrow.arbitrate(id, true);
+    }
+
+    function testReleaseCannotPayMoreThanOnce() public {
+        uint256 id = _createAndLock(7 days);
+        vm.prank(buyer);
+        escrow.confirmCompletion(id);
+        vm.prank(supplier);
+        escrow.confirmCompletion(id);
+
+        uint256 supplierBalance = token.balanceOf(supplier);
+        uint256 escrowBalance = token.balanceOf(address(escrow));
+        assertEq(supplierBalance, AMOUNT);
+        assertEq(escrowBalance, 0);
+
+        vm.expectRevert(VukaEscrow.InvalidState.selector);
+        escrow.checkTimeout(id);
+
+        assertEq(token.balanceOf(supplier), supplierBalance);
+        assertEq(token.balanceOf(address(escrow)), escrowBalance);
+    }
+
+    function testRefundReturnsExactLockedAmount() public {
+        uint256 id = _createAndLock(7 days);
+        vm.prank(supplier);
+        escrow.raiseDispute(id, "Refund");
+
+        uint256 buyerBefore = token.balanceOf(buyer);
+        vm.prank(arbiter);
+        escrow.arbitrate(id, false);
+
+        assertEq(token.balanceOf(buyer), buyerBefore + AMOUNT);
+        assertEq(token.balanceOf(address(escrow)), 0);
+        assertEq(uint256(escrow.getEscrow(id).state), uint256(VukaEscrow.State.REFUNDED));
     }
 
     function testFinalStateCannotBeChanged() public {
