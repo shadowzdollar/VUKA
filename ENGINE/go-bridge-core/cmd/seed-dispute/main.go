@@ -75,14 +75,14 @@ func main() {
 	_, err = pool.Exec(ctx, `
 		INSERT INTO escrows
 			(chain_id, contract_address, escrow_id, buyer_address, supplier_address,
-			 amount, invoice_ref, state, updated_block)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,'DISPUTED',$8)
+			 amount, timeout_at, invoice_ref, state, updated_block)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'DISPUTED',$9)
 		ON CONFLICT (chain_id, contract_address, escrow_id) DO UPDATE
 		SET state = 'DISPUTED', updated_block = EXCLUDED.updated_block`,
 		chainID, contract, escrowID,
 		"0x0000000000000000000000000000000000000011",
 		"0x0000000000000000000000000000000000000022",
-		"1250000", "LOCAL-DISPUTE-990001", 990001)
+		"1250000", time.Now().Add(24*time.Hour).Unix(), "LOCAL-DISPUTE-990001", 990001)
 	if err != nil {
 		log.Error("escrow fixture", "err", err)
 		os.Exit(1)
