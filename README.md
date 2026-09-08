@@ -281,32 +281,133 @@ VUKA/
 
 ## 13. Roadmap
 
-### Phase 0 — Design (current)
-This document, contract state machine, scoring model outline.
+VUKA is a multi-year financial-infrastructure program. A phase is complete only
+when its code, data model, failure paths, permissions, tests, observability,
+runbooks, and recovery behavior are proven together. Passing a demo is not a
+phase gate.
 
-### Phase 1 — Core Ledger + Contract (solo build, GPT-assisted)
-- Off-chain ledger with `ESCROW_HELD` account type
-- Deploy escrow contract to Polygon testnet
-- End-to-end simulated flow: create invoice → lock → release (manual trigger)
+### Phase 0 — Product and safety foundation
+**Status: active**
 
-### Phase 2 — Real Release Logic
-- Timeout auto-release (keeper/cron)
-- Dispute → manual arbitration flow
-- Trust score computed from testnet activity
+- Maintain the domain model, threat model, compliance assumptions, and
+  non-negotiable safety boundaries.
+- Keep all money movement behind explicit feature flags and approval gates.
+- Define country, currency, provider, settlement, dispute, and data-retention
+  contracts before implementation.
+- Establish engineering standards: migrations, audit events, idempotency,
+  reconciliation, incident handling, backup/restore, and evidence-based
+  acceptance.
 
-### Phase 3 — Rails Integration
-- Real stablecoin on/off-ramp
-- MTN MoMo / M-Pesa sandbox cash-in/cash-out adapters
+**Exit gate:** architecture review, threat model, data classification, and
+  acceptance criteria approved for the next build phase.
 
-### Phase 4 — Pilot
-- Onboard a small real trader cohort (Rwanda-Kenya corridor)
-- Tiered KYC live
-- Real disputes, real arbitration, real score data
+### Phase 1 — Auditable operations foundation
+**Status: substantially complete locally**
 
-### Phase 5 — Scale
-- Expand corridors (Uganda, Tanzania)
-- Explore decentralized/automated arbitration
-- Revisit ISO 20022 and licensed PSP partnership for liquidity rebalancing
+- Double-entry ledger and idempotent transaction boundaries.
+- Operator/arbiter authentication and role permissions.
+- Read-only reconciliation, dispute review, immutable timelines, and exports.
+- Append-only operator activity, alert acknowledgement, recovery procedures,
+  and production-safe read-only configuration.
+
+**Exit gate:** full backend suite, frontend build, migration rehearsal,
+append-only verification, backup restore drill, and signed operational
+acceptance record.
+
+### Phase 2 — Escrow domain and chain truth
+**Depends on:** Phase 1
+
+- Finalize the escrow state machine and event specifications.
+- Complete contract security review, invariant tests, and upgrade policy.
+- Build canonical event ingestion, reorg handling, finality rules, and ledger
+  projection.
+- Add testnet-only end-to-end flows without production funds.
+- Keep release, refund, and arbitration execution disabled until separately
+  approved.
+
+**Exit gate:** contract audit, deterministic replay, reorg tests, chain outage
+tests, reconciliation recovery, and testnet evidence package.
+
+### Phase 3 — Identity, compliance, and trust data
+**Depends on:** Phase 1 and the escrow event model
+
+- Implement trader, business, counterparty, consent, and access models.
+- Build tiered KYC/AML case management with provider abstraction and retention
+  controls.
+- Define sanctions, transaction limits, enhanced review, suspicious-activity
+  escalation, and data-subject workflows with legal review.
+- Implement explainable trust-score events and versioned score calculations.
+- Never use protected identity attributes as opaque score inputs.
+
+**Exit gate:** policy approval, privacy/security review, explainability tests,
+manual-review workflows, and deletion/retention evidence.
+
+### Phase 4 — Provider and corridor integrations
+**Depends on:** Phase 2 and Phase 3
+
+- Replace simulated adapters with sandboxed MTN MoMo, M-Pesa, and stablecoin
+  on/off-ramp integrations.
+- Define provider credentials, webhook authentication, replay protection,
+  settlement reconciliation, timeout handling, and provider outage behavior.
+- Model corridor-specific currencies, limits, fees, FX quotes, liquidity, and
+  operational ownership.
+- Keep each provider behind a versioned adapter contract and kill switch.
+
+**Exit gate:** provider certification/sandbox evidence, contract tests, replay
+tests, failure injection, reconciliation proof, and corridor operating manual.
+
+### Phase 5 — Controlled settlement execution
+**Depends on:** Phases 2–4 and explicit approval
+
+- Enable create, lock, release, refund, timeout, and arbitration transactions
+  one capability at a time.
+- Use policy checks, multi-party authorization, transaction simulation,
+  nonce/gas management, signer isolation, and emergency pause controls.
+- Record intent, approval, signed payload, transaction hash, confirmation,
+  reversal/compensation path, and final ledger projection.
+- Start on testnet, then a capped internal pilot; never enable unrestricted
+  production movement by default.
+
+**Exit gate:** independent security review, key-management review, chaos/failure
+tests, capped-loss controls, incident drills, and explicit release approval.
+
+### Phase 6 — Rwanda–Kenya controlled pilot
+**Depends on:** Phase 5
+
+- Onboard a small, approved trader cohort and named operational partners.
+- Run real disputes, KYC reviews, provider failures, reconciliation incidents,
+  and support procedures under supervision.
+- Measure settlement reliability, dispute duration, false positives, liquidity,
+  score stability, customer harm, and operator workload.
+- Keep financial and compliance reporting exportable and auditable.
+
+**Exit gate:** pilot risk review, incident closure, partner sign-off, service
+metrics, customer-protection evidence, and regulator/legal feedback.
+
+### Phase 7 — Multi-country corridor expansion
+**Depends on:** successful pilot evidence
+
+- Add Uganda, Tanzania, and other corridors one at a time.
+- Introduce country-specific legal entities, licenses, data residency,
+  reporting, provider contracts, limits, and operational teams.
+- Add multi-region availability, key rotation, disaster recovery, capacity
+  testing, and formal service-level objectives.
+
+**Exit gate:** per-country launch dossier and independent operational readiness
+  review; no “global” switch enables an unreviewed corridor.
+
+### Phase 8 — Continental network and institutional partnerships
+**Depends on:** proven multi-country operations
+
+- Integrate telecom groups, banks, licensed PSPs, trade platforms, and
+  institutional partners through governed APIs.
+- Revisit PAPSS/ISO 20022, liquidity rebalancing, institutional settlement,
+  reporting, and shared arbitration standards.
+- Establish governance for protocol changes, data sharing, partner access,
+  incident coordination, and public accountability.
+
+**Exit gate:** partnership, regulatory, security, resilience, and governance
+  approvals for each institutional capability.
 
 ---
 
