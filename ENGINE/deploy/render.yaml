@@ -23,8 +23,10 @@ services:
           property: connectionString
       - key: VUKA_FX_RWF_KES
         value: "9.5"
-      - key: MTN_SIM_MODE
-        value: "success"
+      - key: VUKA_ENV
+        value: "production"
+      - key: VUKA_READ_ONLY
+        value: "true"
       - key: VUKA_CORS_ORIGINS
         value: "https://vuka.onrender.com"
         # ⚠️ After Render creates the service, replace this with the real URL
@@ -32,6 +34,14 @@ services:
         # need CORS, so this only matters for direct cross-origin requests.
       - key: VUKA_WEB_DIR
         value: "/app/dist"
+      - key: VUKA_OPERATOR_EMAIL
+        sync: false
+      - key: VUKA_OPERATOR_PASSWORD
+        sync: false
+      - key: VUKA_OPERATOR_ROLE
+        value: "operator"
+      - key: VUKA_RECONCILIATION_ENABLED
+        value: "false"
 
 databases:
   - name: vuka-db
