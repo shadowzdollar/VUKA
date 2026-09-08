@@ -53,6 +53,7 @@ type ChainEvent struct {
 	Buyer              string
 	Supplier           string
 	Amount             string
+	TimeoutAt          int64
 	InvoiceRef         string
 	Actor              string
 	Reason             string
@@ -71,6 +72,7 @@ type Escrow struct {
 	Buyer           string
 	Supplier        string
 	Amount          string
+	TimeoutAt       int64
 	InvoiceRef      string
 	State           State
 }
@@ -82,6 +84,7 @@ type Summary struct {
 	Buyer           string `json:"buyer"`
 	Supplier        string `json:"supplier"`
 	Amount          string `json:"amount"`
+	TimeoutAt       int64  `json:"timeout_at"`
 	InvoiceRef      string `json:"invoice_ref"`
 	State           State  `json:"state"`
 	UpdatedBlock    int64  `json:"updated_block"`
@@ -162,13 +165,14 @@ func Apply(current *Escrow, event ChainEvent) error {
 		if event.Type != EventEscrowCreated {
 			return fmt.Errorf("%w: first event must create escrow", ErrInvalidState)
 		}
-		if event.Buyer == "" || event.Supplier == "" || event.Amount == "" {
+		if event.Buyer == "" || event.Supplier == "" || event.Amount == "" || event.TimeoutAt <= 0 {
 			return ErrInvalidEvent
 		}
 		*current = Escrow{
 			ChainID: event.ChainID, ContractAddress: event.ContractAddress,
 			EscrowID: event.EscrowID, Buyer: event.Buyer, Supplier: event.Supplier,
-			Amount: event.Amount, InvoiceRef: event.InvoiceRef, State: StateCreated,
+			Amount: event.Amount, TimeoutAt: event.TimeoutAt,
+			InvoiceRef: event.InvoiceRef, State: StateCreated,
 		}
 		return nil
 	}
