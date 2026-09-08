@@ -24,9 +24,16 @@ submission link — it dies with this machine.
 4. After creation, copy the **Service URL** (e.g. `https://vuka-xxxx.onrender.com`)
    and put it into `VUKA_CORS_ORIGINS` (Settings → Environment) — replace the
    placeholder `https://vuka.onrender.com`.
-5. Seed the demo data (see below) and verify: `{SERVICE_URL}/`, `{SERVICE_URL}/deck`,
+5. Set `VUKA_OPERATOR_EMAIL` and `VUKA_OPERATOR_PASSWORD` to strong, unique
+   credentials in Render before exposing the service. Do not leave them blank:
+   blank credentials disable the protected operations console.
+6. Seed the demo data (see below) and verify: `{SERVICE_URL}/`, `{SERVICE_URL}/deck`,
    `{SERVICE_URL}/api/fx` should all return 200. The ledger starts EMPTY on a
    fresh DB — run the seed.
+
+The production blueprint intentionally sets `VUKA_READ_ONLY=true`. Ledger
+funding, transfers, reversals, and invoice creation remain disabled until a
+separate settlement-execution phase is explicitly approved.
 
 ### Option B — Render Blueprint with existing DB
 If you already have a Postgres (Render, Neon, Supabase — Neon is recommended:
