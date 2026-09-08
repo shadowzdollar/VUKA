@@ -11,7 +11,6 @@
 #     -e VUKA_DATABASE_URL=postgres://vuka:changeme@pg:5432/vuka?sslmode=disable \
 #     -e VUKA_FX_RWF_KES=9.5 \
 #     -e VUKA_CORS_ORIGINS=https://your-domain.example \
-#     -e MTN_SIM_MODE=success \
 #     vuka:latest
 # ============================================================================
 
@@ -19,10 +18,10 @@
 FROM node:22-alpine AS web
 
 WORKDIR /app
-COPY FRONTEND/web-dashboard/package.json FRONTEND/web-dashboard/package-lock.json ./
+COPY FRONTEND/vuka-dashboard/package.json FRONTEND/vuka-dashboard/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
-COPY FRONTEND/web-dashboard/ ./
+COPY FRONTEND/vuka-dashboard/ ./
 RUN npm run build
 
 # ---- Stage 2: build the Go engine (static binary, no CGO) ------------------
@@ -47,11 +46,13 @@ COPY --from=web /app/dist /app/dist
 USER vuka
 EXPOSE 8080 50051
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1
+
 # VUKA_WEB_DIR is baked in; the API still listens on :8080 (REST) and :50051 (gRPC).
 ENV VUKA_WEB_DIR=/app/dist \
     VUKA_HTTP_ADDR=:8080 \
     VUKA_GRPC_ADDR=:50051 \
-    MTN_SIM_MODE=success \
     VUKA_FX_RWF_KES=9.5 \
     VUKA_ADAPTER=mtn-rw
 
