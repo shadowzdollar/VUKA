@@ -44,6 +44,7 @@ contract VukaEscrow {
     error TransferFailed();
     error TooEarly();
     error TimeoutExpired();
+    error AlreadyConfirmed();
     error EmptyReason();
 
     event EscrowCreated(
@@ -51,6 +52,7 @@ contract VukaEscrow {
         address indexed buyer,
         address indexed supplier,
         uint256 amount,
+        uint256 timeoutAt,
         string invoiceRef
     );
     event FundsLocked(uint256 indexed escrowId);
@@ -90,7 +92,7 @@ contract VukaEscrow {
             invoiceRef: invoiceRef
         });
 
-        emit EscrowCreated(escrowId, msg.sender, supplier, amount, invoiceRef);
+        emit EscrowCreated(escrowId, msg.sender, supplier, amount, block.timestamp + timeoutSeconds, invoiceRef);
     }
 
     function lockFunds(uint256 escrowId) external {
@@ -110,10 +112,13 @@ contract VukaEscrow {
         Escrow storage escrow = _escrow(escrowId);
         if (escrow.state != State.LOCKED) revert InvalidState();
         if (msg.sender != escrow.buyer && msg.sender != escrow.supplier) revert Unauthorized();
+        if (block.timestamp >= escrow.timeoutAt) revert TimeoutExpired();
 
         if (msg.sender == escrow.buyer) {
+            if (escrow.buyerConfirmedAt != 0) revert AlreadyConfirmed();
             escrow.buyerConfirmedAt = block.timestamp;
         } else {
+            if (escrow.supplierConfirmedAt != 0) revert AlreadyConfirmed();
             escrow.supplierConfirmedAt = block.timestamp;
         }
         emit CompletionConfirmed(escrowId, msg.sender);
