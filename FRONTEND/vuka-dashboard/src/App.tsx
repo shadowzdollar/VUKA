@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { addDisputeDecision, addDisputeReview, approveDisputeDecision, getCurrentOperator, getDisputeDecisions, getDisputeReviews, getDisputeTimeline, getDisputes, getEscrowEvents, getEscrows, getHealth, getReconciliationStatus, login, logout, contract } from "./api";
-import type { Dispute, DisputeDecision, DisputeReview, DisputeTimelineEntry, Escrow, EscrowEvent, EscrowState, Operator, ReconciliationStatus } from "./types";
+import { acknowledgeReconciliationAlert, addDisputeDecision, addDisputeReview, approveDisputeDecision, getActivity, getActivityExportUrl, getAlertHistory, getCurrentOperator, getDisputeDecisions, getDisputeReviews, getDisputeTimeline, getDisputeExportUrl, getDisputes, getEscrowEvents, getEscrows, getHealth, getReconciliationStatus, getReconciliationStatusExportUrl, login, logout, contract } from "./api";
+import type { Dispute, DisputeDecision, DisputeReview, DisputeTimelineEntry, Escrow, EscrowEvent, EscrowState, Operator, OperatorActivity, ReconciliationStatus } from "./types";
 
 const refreshInterval = 15000;
 
@@ -37,6 +37,14 @@ export function App() {
   const [loggingIn, setLoggingIn] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [operator, setOperator] = useState<Operator | null>(null);
+  const [activity, setActivity] = useState<OperatorActivity[]>([]);
+  const [activityTotal, setActivityTotal] = useState(0);
+  const [activityPage, setActivityPage] = useState(1);
+  const [activitySearch, setActivitySearch] = useState("");
+  const [activityAction, setActivityAction] = useState("ALL");
+  const [activityFrom, setActivityFrom] = useState("");
+  const [activityTo, setActivityTo] = useState("");
+  const [alertHistory, setAlertHistory] = useState<OperatorActivity[]>([]);
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [disputesLoading, setDisputesLoading] = useState(false);
   const [disputesError, setDisputesError] = useState<string | null>(null);
@@ -50,6 +58,8 @@ export function App() {
   const [disputeDecisions, setDisputeDecisions] = useState<Record<string, DisputeDecision[]>>({});
   const [disputeTimelines, setDisputeTimelines] = useState<Record<string, DisputeTimelineEntry[]>>({});
   const [approvingDecision, setApprovingDecision] = useState<string | null>(null);
+  const [alertAcknowledged, setAlertAcknowledged] = useState(false);
+  const [alertAckError, setAlertAckError] = useState<string | null>(null);
 
   const pageSize = 10;
 
@@ -57,16 +67,21 @@ export function App() {
     try {
       const currentOperator = await getCurrentOperator();
       setDisputesLoading(currentOperator.role === "arbiter" || currentOperator.role === "operator");
-      const [escrowResponse, reconciliationStatus, health, disputeResponse] = await Promise.all([
+      const [escrowResponse, reconciliationStatus, health, disputeResponse, activityResponse, alertHistoryResponse] = await Promise.all([
         getEscrows(),
         getReconciliationStatus(),
         getHealth(),
-        currentOperator.role === "operator" || currentOperator.role === "arbiter" ? getDisputes() : Promise.resolve({ disputes: [] })
+        currentOperator.role === "operator" || currentOperator.role === "arbiter" ? getDisputes() : Promise.resolve({ disputes: [] }),
+        getActivity({ action: activityAction, search: activitySearch.trim(), from: activityFrom, to: activityTo, offset: (activityPage - 1) * 20 }),
+        getAlertHistory()
       ]);
       setEscrows(escrowResponse.escrows);
       setStatus(reconciliationStatus);
       setHealthy(health);
       setOperator(currentOperator);
+      setActivity(activityResponse.activities);
+      setActivityTotal(activityResponse.total);
+      setAlertHistory(alertHistoryResponse.activities);
       setDisputes(disputeResponse.disputes);
       if (currentOperator.role === "arbiter" || currentOperator.role === "operator") {
         const reviewResponses = await Promise.all(
@@ -99,6 +114,8 @@ export function App() {
         setSelectedEvents([]);
         setOperator(null);
         setDisputes([]);
+        setActivity([]);
+        setAlertHistory([]);
         setDisputeReviews({});
         setDisputeDecisions({});
         setDisputeTimelines({});
@@ -113,7 +130,7 @@ export function App() {
     } finally {
       setDisputesLoading(false);
     }
-  }, [operator?.role]);
+  }, [activityAction, activityFrom, activityPage, activitySearch, activityTo, operator?.role]);
 
   async function handleReview(dispute: Dispute) {
     const note = (reviewNotes[dispute.id] ?? "").trim();
@@ -178,6 +195,7 @@ export function App() {
     } finally {
       setApprovingDecision(null);
     }
+
   }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -208,6 +226,7 @@ export function App() {
       setSelectedEvents([]);
       setOperator(null);
       setDisputes([]);
+      setActivity([]);
       setDisputeReviews({});
       setDisputeDecisions({});
       setDisputeTimelines({});
@@ -255,11 +274,29 @@ export function App() {
   const visibleEscrows = filteredEscrows.slice((page - 1) * pageSize, page * pageSize);
   const lagBlocks = status?.lag_blocks ?? null;
   const hasWorkerErrors = (status?.metrics.Errors ?? 0) > 0;
-  const isStale = lagBlocks !== null && lagBlocks > 50;
+  const alertLevel = status?.alert_level ?? "ok";
+  const isStale = alertLevel !== "ok";
+  const alertMessage = hasWorkerErrors
+    ? `The worker has reported ${status?.metrics.Errors} error${status?.metrics.Errors === 1 ? "" : "s"}.`
+    : `Indexing is behind by ${lagBlocks?.toLocaleString()} finalized blocks.`;
+  const activityActions = ["ALL", "SIGN_IN", "SIGN_OUT", "ACTIVITY_VIEWED", "ACTIVITY_EXPORTED", "RECONCILIATION_STATUS_EXPORTED", "ALERT_ACKNOWLEDGED", "REVIEW_NOTE_CREATED", "RECOMMENDATION_CREATED", "RECOMMENDATION_APPROVED", "DISPUTE_EXPORTED"];
+  const filteredActivity = useMemo(() => {
+    return activity;
+  }, [activity]);
+  const activityPageCount = Math.max(1, Math.ceil(activityTotal / 20));
 
   useEffect(() => {
     setPage(1);
   }, [search, stateFilter]);
+
+  useEffect(() => {
+    setActivityPage(1);
+  }, [activityAction, activityFrom, activitySearch, activityTo]);
+
+  useEffect(() => {
+    setAlertAcknowledged(false);
+    setAlertAckError(null);
+  }, [status?.alert_level, status?.lag_blocks, status?.metrics.Errors]);
 
   useEffect(() => {
     setPage((currentPage) => Math.min(currentPage, pageCount));
@@ -304,6 +341,7 @@ export function App() {
           <a className="nav-item active" href="#overview">Overview</a>
           <a className="nav-item" href="#escrows">Escrows</a>
           <a className="nav-item" href="#reconciliation">Reconciliation</a>
+          <a className="nav-item" href="#activity">System audit</a>
           {operator?.role === "arbiter" && <a className="nav-item" href="#disputes">Dispute review</a>}
         </nav>
         <div className="sidebar-footer">
@@ -327,9 +365,18 @@ export function App() {
         </header>
 
         {error && <div className="alert" role="alert"><strong>Data unavailable.</strong> {error}</div>}
-        {status && (isStale || hasWorkerErrors) && <div className="alert" role="status">
-          <strong>{isStale ? "Reconciliation is behind." : "Reconciliation needs attention."}</strong>{" "}
-          {isStale ? `${lagBlocks.toLocaleString()} finalized blocks remain to be indexed.` : "The worker has reported one or more errors; inspect telemetry below."}
+        {status && (isStale || hasWorkerErrors) && <div className={`alert alert-${alertLevel}`} role="status">
+          <div><strong>{alertLevel === "critical" ? "Critical reconciliation alert." : "Reconciliation warning."}</strong>{" "}{alertMessage}</div>
+          <div className="alert-actions">
+            {alertAcknowledged || (status?.acknowledged_level === alertLevel && status?.acknowledged_message === alertMessage) ? <span className="alert-acknowledged">Acknowledged{status?.acknowledged_by ? ` by ${status.acknowledged_by}` : ""}</span> :
+              <button className="row-button" onClick={() => {
+                setAlertAckError(null);
+                void acknowledgeReconciliationAlert(alertLevel === "critical" ? "critical" : "warning", alertMessage)
+                  .then(() => setAlertAcknowledged(true))
+                  .catch((ackError) => setAlertAckError(ackError instanceof Error ? ackError.message : "Unable to acknowledge alert"));
+              }}>Acknowledge alert</button>}
+            {alertAckError && <span className="alert-error">{alertAckError}</span>}
+          </div>
         </div>}
 
         <section id="overview" className="metric-grid" aria-label="Escrow overview">
@@ -418,7 +465,13 @@ export function App() {
 
         <section id="reconciliation" className="content-section bottom-grid">
           <article className="panel">
-            <div className="section-heading compact"><div><p className="eyebrow">SYNC TELEMETRY</p><h2>Reconciliation health</h2></div></div>
+            <div className="section-heading compact">
+              <div><p className="eyebrow">SYNC TELEMETRY</p><h2>Reconciliation health</h2></div>
+              <a className="row-button export-link" href={getReconciliationStatusExportUrl()} download>Export status CSV</a>
+            </div>
+            {hasWorkerErrors && <div className="health-alert health-critical" role="status">Reconciliation has recorded {status?.metrics.Errors} worker error{status?.metrics.Errors === 1 ? "" : "s"}.</div>}
+            {isStale && !hasWorkerErrors && <div className={`health-alert health-${alertLevel}`} role="status">Indexing is behind by {lagBlocks?.toLocaleString()} blocks. Warning at {status?.warning_lag_blocks.toLocaleString()} blocks; critical at {status?.critical_lag_blocks.toLocaleString()}.</div>}
+            {!hasWorkerErrors && !isStale && status && <div className="health-ok" role="status">Reconciler is operating within the expected range.</div>}
             <div className="health-list">
               <div><span>Cursor</span><strong className="mono">{status?.cursor.toLocaleString() ?? "—"}</strong></div>
               <div><span>Latest finalized block</span><strong className="mono">{status?.finalized_block.toLocaleString() ?? "—"}</strong></div>
@@ -426,6 +479,24 @@ export function App() {
               <div><span>Events applied</span><strong>{status?.metrics.EventsApplied ?? "—"}</strong></div>
               <div><span>Successful polls</span><strong>{status?.metrics.SuccessfulPolls ?? "—"}</strong></div>
               <div><span>Errors</span><strong>{status?.metrics.Errors ?? "—"}</strong></div>
+              <div><span>Dashboard refreshed</span><strong>{lastUpdated?.toLocaleTimeString() ?? "—"}</strong></div>
+            </div>
+            <div className="alert-history">
+              <div className="section-heading compact">
+                <div><p className="eyebrow">AUDITABLE ALERTS</p><h3>Alert history</h3></div>
+                <span className="refresh-note">{alertHistory.length} recent acknowledgement{alertHistory.length === 1 ? "" : "s"}</span>
+              </div>
+              {alertHistory.length === 0 && <div className="empty-state">No reconciliation alerts have been acknowledged.</div>}
+              {alertHistory.map((item) => {
+                const details = item.details ?? "";
+                const separator = details.indexOf(":");
+                const level = separator > 0 ? details.slice(0, separator) : "ALERT";
+                const message = separator > 0 ? details.slice(separator + 1).trim() : details;
+                return <div className="alert-history-entry" key={item.id}>
+                  <div><strong>{level}</strong><span>{message}</span><small>{item.resource ?? "reconciliation"}</small></div>
+                  <div><span>{item.actor}</span><time>{new Date(item.created_at).toLocaleString()}</time></div>
+                </div>;
+              })}
             </div>
           </article>
           <article className="panel network-panel">
@@ -435,6 +506,50 @@ export function App() {
             <div className="network-meta"><span>Chain ID</span><strong>80002</strong></div>
             <div className="network-meta"><span>Mode</span><strong>Read-only</strong></div>
           </article>
+        </section>
+
+        <section id="activity" className="content-section">
+          <div className="section-heading">
+            <div><p className="eyebrow">SYSTEM AUDIT</p><h2>Operator activity</h2></div>
+            <div className="activity-heading-actions">
+              <span className="refresh-note">{activityTotal} matching actions</span>
+              <a className="row-button export-link" href={getActivityExportUrl({ action: activityAction, search: activitySearch.trim(), from: activityFrom, to: activityTo })} download>Export activity CSV</a>
+            </div>
+          </div>
+          <div className="activity-tools">
+            <input
+              aria-label="Search operator activity"
+              value={activitySearch}
+              onChange={(event) => setActivitySearch(event.target.value)}
+              placeholder="Search actor or activity"
+            />
+            <select aria-label="Filter activity by action" value={activityAction} onChange={(event) => setActivityAction(event.target.value)}>
+              {activityActions.map((action) => <option key={action} value={action}>{action === "ALL" ? "All actions" : action.replaceAll("_", " ")}</option>)}
+            </select>
+            <input aria-label="Activity start date" type="date" value={activityFrom} onChange={(event) => setActivityFrom(event.target.value)} />
+            <input aria-label="Activity end date" type="date" value={activityTo} onChange={(event) => setActivityTo(event.target.value)} />
+          </div>
+          <div className="panel activity-list">
+            {activity.length === 0 && <div className="empty-state">No operator activity has been recorded.</div>}
+            {activity.length === 0 && activityTotal > 0 && <div className="empty-state">No activity matches the current filters.</div>}
+            {filteredActivity.map((item) => (
+              <div className="activity-entry" key={item.id}>
+                <div>
+                  <strong>{item.action.replaceAll("_", " ")}</strong>
+                  <span className="cell-sub">{item.actor} · {item.role}</span>
+                  {item.details && <span className="cell-sub">{item.details}</span>}
+                </div>
+                <span className="refresh-note">{new Date(item.created_at).toLocaleString()}</span>
+              </div>
+            ))}
+            {activityTotal > 0 && <div className="activity-pagination">
+              <span className="refresh-note">Page {activityPage} of {activityPageCount}</span>
+              <div className="pagination-actions">
+                <button className="row-button" disabled={activityPage === 1} onClick={() => setActivityPage((page) => page - 1)}>Previous</button>
+                <button className="row-button" disabled={activityPage === activityPageCount} onClick={() => setActivityPage((page) => page + 1)}>Next</button>
+              </div>
+            </div>}
+          </div>
         </section>
 
         {(operator?.role === "arbiter" || operator?.role === "operator") && <section id="disputes" className="content-section">
@@ -463,6 +578,9 @@ export function App() {
                   <span>Raised {new Date(dispute.created_at).toLocaleString()}</span>
                   <span className="mono">{shorten(dispute.raised_transaction_hash)}</span>
                 </div>
+                <a className="row-button export-link" href={getDisputeExportUrl(dispute.id)} download>
+                  Export audit CSV
+                </a>
                 {(disputeTimelines[dispute.id] ?? []).length > 0 && <div className="dispute-timeline">
                   <p className="eyebrow">AUDIT TIMELINE</p>
                   <ol>
