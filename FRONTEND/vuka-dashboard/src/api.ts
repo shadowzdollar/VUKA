@@ -1,4 +1,4 @@
-import type { Dispute, DisputeDecision, DisputeReview, DisputeTimelineEntry, Escrow, EscrowEvent, Operator, ReconciliationStatus } from "./types";
+import type { Dispute, DisputeDecision, DisputeReview, DisputeTimelineEntry, Escrow, EscrowEvent, Operator, OperatorActivity, ReconciliationStatus } from "./types";
 
 const contract = import.meta.env.VITE_ESCROW_CONTRACT ??
   "0x491a0E68B440621435B606D17FDa50f7999DE4ef";
@@ -43,12 +43,60 @@ export function getCurrentOperator(): Promise<Operator> {
   return request("/api/auth/me");
 }
 
+export function getActivity(filters: { action: string; search: string; from: string; to: string; offset: number }): Promise<{ activities: OperatorActivity[]; total: number }> {
+  const params = new URLSearchParams({
+    action: filters.action === "ALL" ? "" : filters.action,
+    search: filters.search,
+    from: filters.from,
+    to: filters.to,
+    limit: "20",
+    offset: String(filters.offset)
+  });
+  return request(`/api/activity?${params.toString()}`);
+}
+
+export function getAlertHistory(): Promise<{ activities: OperatorActivity[]; total: number }> {
+  return getActivity({
+    action: "ALERT_ACKNOWLEDGED",
+    search: "",
+    from: "",
+    to: "",
+    offset: 0
+  });
+}
+
+export function getActivityExportUrl(filters: { action: string; search: string; from: string; to: string }): string {
+  const params = new URLSearchParams({
+    action: filters.action === "ALL" ? "" : filters.action,
+    search: filters.search,
+    from: filters.from,
+    to: filters.to
+  });
+  return `${baseUrl}/api/activity/export?${params.toString()}`;
+}
+
 export function getEscrows(): Promise<{ escrows: Escrow[] }> {
   return request(`/api/escrows?chain_id=80002&contract=${contract}`);
 }
 
 export function getReconciliationStatus(): Promise<ReconciliationStatus> {
   return request(`/api/reconciliation/status?chain_id=80002&contract=${contract}`);
+}
+
+export function acknowledgeReconciliationAlert(level: "warning" | "critical", message: string): Promise<{ status: string }> {
+  return request("/api/reconciliation/alerts/ack", {
+    method: "POST",
+    body: JSON.stringify({
+      chain_id: 80002,
+      contract,
+      level,
+      message
+    })
+  });
+}
+
+export function getReconciliationStatusExportUrl(): string {
+  return `${baseUrl}/api/reconciliation/status/export?chain_id=80002&contract=${contract}`;
 }
 
 export function getEscrowEvents(escrowId: number): Promise<{ events: EscrowEvent[] }> {
@@ -72,6 +120,10 @@ export function getDisputeReviews(disputeId: string): Promise<{ reviews: Dispute
 
 export function getDisputeTimeline(disputeId: string): Promise<{ timeline: DisputeTimelineEntry[] }> {
   return request(`/api/disputes/${disputeId}/timeline`);
+}
+
+export function getDisputeExportUrl(disputeId: string): string {
+  return `${baseUrl}/api/disputes/${encodeURIComponent(disputeId)}/export`;
 }
 
 export function addDisputeDecision(disputeId: string, decision: DisputeDecision["decision"], rationale: string): Promise<DisputeDecision> {
