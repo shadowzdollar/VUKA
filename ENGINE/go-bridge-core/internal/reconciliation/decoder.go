@@ -43,7 +43,7 @@ func decodeLog(chainID int64, contract string, log rpcLog) (ChainEvent, error) {
 		if err != nil {
 			return ChainEvent{}, err
 		}
-		event.Amount, event.InvoiceRef, err = decodeAmountAndString(log.Data)
+		event.Amount, event.TimeoutAt, event.InvoiceRef, err = decodeAmountTimeoutAndString(log.Data)
 	case topicFundsLocked:
 		event.Type = EventFundsLocked
 	case topicCompletionConfirmed:
@@ -78,14 +78,21 @@ func decodeLog(chainID int64, contract string, log rpcLog) (ChainEvent, error) {
 	return event, nil
 }
 
-func decodeAmountAndString(data string) (string, string, error) {
+func decodeAmountTimeoutAndString(data string) (string, int64, string, error) {
 	raw, err := hex.DecodeString(strings.TrimPrefix(data, "0x"))
-	if err != nil || len(raw) < 64 {
-		return "", "", ErrInvalidEvent
+	if err != nil || len(raw) < 96 {
+		return "", 0, "", ErrInvalidEvent
 	}
 	amount := new(big.Int).SetBytes(raw[:32]).String()
-	value, err := decodeString(data, 1)
-	return amount, value, err
+	timeout := new(big.Int).SetBytes(raw[32:64])
+	if !timeout.IsInt64() {
+		return "", 0, "", ErrInvalidEvent
+	}
+	invoice, err := decodeString(data, 2)
+	if err != nil {
+		return "", 0, "", err
+	}
+	return amount, timeout.Int64(), invoice, nil
 }
 
 func decodeString(data string, offsetIndex int) (string, error) {
