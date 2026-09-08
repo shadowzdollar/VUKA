@@ -14,7 +14,7 @@ var schemaSQL string
 
 const (
 	schemaName    = "reconciliation"
-	schemaVersion = 1
+	schemaVersion = 2
 )
 
 func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
