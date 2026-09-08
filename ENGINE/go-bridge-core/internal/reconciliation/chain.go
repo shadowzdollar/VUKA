@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	topicEscrowCreated       = "079316c6cb044ce8147d3a031eb8c26e06754da3a9393a80d7619a0e1269675f"
+	topicEscrowCreated       = "dc9a04dd5e45e9ab6f396372e092b395e6523394518e770849fe9f49c61d96b5"
 	topicFundsLocked         = "116c1aa90d7c9aeabdd6dc366dc0def60808db13d9c05023bde6fe57ca7625a8"
 	topicCompletionConfirmed = "4e49e2d3c8ae26600fd3fde8c51304185090f46a8a990173913e4067f72bfd3e"
 	topicDisputeRaised       = "1b84372106d77c6daea0dda35bbc0229d10a83f58ec899092884925193682341"
@@ -57,6 +57,9 @@ func (c *rpcClient) call(ctx context.Context, method string, params any, result 
 		return fmt.Errorf("reconciliation: RPC request: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("reconciliation: RPC HTTP status %s", resp.Status)
+	}
 	var envelope struct {
 		Result json.RawMessage `json:"result"`
 		Error  *struct {
