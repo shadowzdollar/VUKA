@@ -3,6 +3,7 @@ package reconciliation
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync/atomic"
 	"time"
 )
@@ -92,10 +93,12 @@ func (p *Poller) PollRange(ctx context.Context, fromBlock int64) (int, error) {
 		p.metrics.errors.Add(1)
 		return 0, err
 	}
-	finalized := latest - p.confirmationDepth
-	if p.maxBlockRange > 0 && finalized >= fromBlock+p.maxBlockRange {
+	finalized := finalizedBlock(latest, p.confirmationDepth)
+	if p.maxBlockRange > 0 && fromBlock <= math.MaxInt64-p.maxBlockRange &&
+		finalized >= fromBlock+p.maxBlockRange {
 		finalized = fromBlock + p.maxBlockRange - 1
 	}
+
 	if finalized < fromBlock {
 		p.metrics.successfulPolls.Add(1)
 		return 0, nil
@@ -130,6 +133,13 @@ func (p *Poller) PollRange(ctx context.Context, fromBlock int64) (int, error) {
 	p.metrics.eventsApplied.Add(uint64(applied))
 	p.metrics.successfulPolls.Add(1)
 	return applied, nil
+}
+
+func finalizedBlock(latest, confirmationDepth int64) int64 {
+	if latest < 0 || confirmationDepth < 0 || confirmationDepth > latest {
+		return -1
+	}
+	return latest - confirmationDepth
 }
 
 // PollOnce resumes from the durable cursor and advances it only after the
