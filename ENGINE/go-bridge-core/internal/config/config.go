@@ -13,6 +13,8 @@ import (
 
 // Config holds all runtime settings for the VUKA Go bridge engine.
 type Config struct {
+	Environment string
+	ReadOnly    bool
 	// HTTPAddr is the listen address for the REST API, e.g. ":8080".
 	HTTPAddr string
 	// GRPCAddr is the listen address for the gRPC bridge consumed by the
@@ -41,6 +43,9 @@ type Config struct {
 	OperatorEmail    string
 	OperatorPassword string
 	OperatorRole     string
+	// ActivityRetentionDays limits activity visibility without deleting the
+	// append-only records. Zero keeps the full history visible.
+	ActivityRetentionDays int64
 
 	// Adapter settings ----------------------------------------------------
 	// AdapterName selects the telecom adapter from the registry, e.g. "mtn-rw".
@@ -69,6 +74,8 @@ type Config struct {
 	ReconciliationConfirmations int64
 	ReconciliationInterval      time.Duration
 	ReconciliationMaxRange      int64
+	ReconciliationLagWarning    int64
+	ReconciliationLagCritical   int64
 }
 
 // Load reads configuration from the environment. Missing optional values fall
@@ -76,6 +83,8 @@ type Config struct {
 // process fails fast instead of starting half-configured.
 func Load() (*Config, error) {
 	cfg := &Config{
+		Environment:                 getEnv("VUKA_ENV", "development"),
+		ReadOnly:                    getBool("VUKA_READ_ONLY", false),
 		HTTPAddr:                    getEnv("VUKA_HTTP_ADDR", ":8080"),
 		GRPCAddr:                    getEnv("VUKA_GRPC_ADDR", ":50051"),
 		DatabaseURL:                 os.Getenv("VUKA_DATABASE_URL"),
@@ -85,6 +94,7 @@ func Load() (*Config, error) {
 		OperatorEmail:               os.Getenv("VUKA_OPERATOR_EMAIL"),
 		OperatorPassword:            os.Getenv("VUKA_OPERATOR_PASSWORD"),
 		OperatorRole:                getEnv("VUKA_OPERATOR_ROLE", "operator"),
+		ActivityRetentionDays:       getInt64("VUKA_ACTIVITY_RETENTION_DAYS", 0),
 		AdapterName:                 getEnv("VUKA_ADAPTER", "mtn-rw"),
 		MTNSimDelay:                 getDuration("MTN_SIM_DELAY_MS", 150*time.Millisecond),
 		MTNSimFailRate:              getFloat("MTN_SIM_FAIL_RATE", 0.0),
@@ -100,6 +110,8 @@ func Load() (*Config, error) {
 		ReconciliationConfirmations: getInt64("VUKA_RECONCILIATION_CONFIRMATIONS", 128),
 		ReconciliationInterval:      getDuration("VUKA_RECONCILIATION_INTERVAL_MS", 15000*time.Millisecond),
 		ReconciliationMaxRange:      getInt64("VUKA_RECONCILIATION_MAX_RANGE", 9),
+		ReconciliationLagWarning:    getInt64("VUKA_RECONCILIATION_LAG_WARNING_BLOCKS", 50),
+		ReconciliationLagCritical:   getInt64("VUKA_RECONCILIATION_LAG_CRITICAL_BLOCKS", 500),
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -121,7 +133,8 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("config: reconciliation RPC URL and contract are required when enabled")
 		}
 		if cfg.ReconciliationChainID <= 0 || cfg.ReconciliationConfirmations < 0 ||
-			cfg.ReconciliationInterval <= 0 || cfg.ReconciliationMaxRange <= 0 {
+			cfg.ReconciliationInterval <= 0 || cfg.ReconciliationMaxRange <= 0 ||
+			cfg.ReconciliationLagWarning <= 0 || cfg.ReconciliationLagCritical <= cfg.ReconciliationLagWarning {
 			return nil, fmt.Errorf("config: invalid reconciliation settings")
 		}
 	}
@@ -132,6 +145,9 @@ func Load() (*Config, error) {
 // Validate returns an error when required configuration is missing or invalid.
 // Called explicitly by the entrypoint before any connection is attempted.
 func (c *Config) Validate() error {
+	if c.Environment != "development" && c.Environment != "staging" && c.Environment != "production" {
+		return fmt.Errorf("config: VUKA_ENV must be development, staging, or production")
+	}
 	if c.DatabaseURL == "" {
 		return fmt.Errorf("config: VUKA_DATABASE_URL is required")
 	}
@@ -144,11 +160,31 @@ func (c *Config) Validate() error {
 	if (c.OperatorEmail == "") != (c.OperatorPassword == "") {
 		return fmt.Errorf("config: VUKA_OPERATOR_EMAIL and VUKA_OPERATOR_PASSWORD must be provided together")
 	}
+	if c.Environment == "production" {
+		if c.OperatorEmail == "" || c.OperatorPassword == "" {
+			return fmt.Errorf("config: operator credentials are required in production")
+		}
+		if len(c.OperatorPassword) < 12 {
+			return fmt.Errorf("config: VUKA_OPERATOR_PASSWORD must be at least 12 characters in production")
+		}
+		if len(c.CORSOrigins) == 0 {
+			return fmt.Errorf("config: VUKA_CORS_ORIGINS is required in production")
+		}
+		if c.MTNSimMode != "" || c.MTNSimFailRate != 0 {
+			return fmt.Errorf("config: deterministic or failing simulated adapter settings are not allowed in production")
+		}
+		if !c.ReadOnly {
+			return fmt.Errorf("config: VUKA_READ_ONLY must be true in production")
+		}
+	}
 	if c.OperatorRole != "operator" && c.OperatorRole != "arbiter" {
 		return fmt.Errorf("config: VUKA_OPERATOR_ROLE must be operator or arbiter")
 	}
 	if c.FxRateRWFKES < 0 {
 		return fmt.Errorf("config: VUKA_FX_RWF_KES must be >= 0, got %v", c.FxRateRWFKES)
+	}
+	if c.ActivityRetentionDays < 0 {
+		return fmt.Errorf("config: VUKA_ACTIVITY_RETENTION_DAYS must be >= 0, got %v", c.ActivityRetentionDays)
 	}
 	return nil
 }
