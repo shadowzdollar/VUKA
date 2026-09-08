@@ -191,6 +191,16 @@ vuka-engine/
 
 ## 7. Developer Onboarding & Local Setup
 
+### Production Recovery
+
+Database backup and restore procedures, deployment recovery checks, and
+quarterly restore-drill guidance are documented in
+[`deploy/RECOVERY_RUNBOOK.md`](deploy/RECOVERY_RUNBOOK.md).
+
+The local Makefile exposes explicit `backup` and `restore` targets. Restore
+requires `CONFIRM_RESTORE=YES` and must never be run against production
+without an approved maintenance window.
+
 ### Prerequisites
 * **Docker & Docker Compose** (v24.0+)
 * **Go** (v1.22+)
