@@ -113,6 +113,21 @@ func run(log *slog.Logger) error {
 	var reconciliationRepo *reconciliation.Repository
 	var reconciliationPoller *reconciliation.Poller
 	var authStore *api.AuthStore
+	if cfg.OperatorEmail != "" {
+		authStore = api.NewAuthStore(pool)
+		authStore.ConfigureActivityRetention(cfg.ActivityRetentionDays)
+		authCtx, authCancel := context.WithTimeout(ctx, 10*time.Second)
+		if err := authStore.EnsureSchema(authCtx); err != nil {
+			authCancel()
+			return err
+		}
+		if err := authStore.EnsureOperator(authCtx, cfg.OperatorEmail, cfg.OperatorPassword, cfg.OperatorRole); err != nil {
+			authCancel()
+			return err
+		}
+		authCancel()
+		log.Info("operator authentication enabled")
+	}
 	if cfg.ReconciliationEnabled {
 		reconcileCtx, reconcileCancel := context.WithTimeout(ctx, 30*time.Second)
 		if err := reconciliation.EnsureSchema(reconcileCtx, pool); err != nil {
@@ -120,20 +135,6 @@ func run(log *slog.Logger) error {
 			return fmt.Errorf("ensure reconciliation schema: %w", err)
 		}
 
-		if cfg.OperatorEmail != "" {
-			authStore = api.NewAuthStore(pool)
-			authCtx, authCancel := context.WithTimeout(ctx, 10*time.Second)
-			if err := authStore.EnsureSchema(authCtx); err != nil {
-				authCancel()
-				return err
-			}
-			if err := authStore.EnsureOperator(authCtx, cfg.OperatorEmail, cfg.OperatorPassword, cfg.OperatorRole); err != nil {
-				authCancel()
-				return err
-			}
-			authCancel()
-			log.Info("operator authentication enabled")
-		}
 		reconcileCancel()
 		reconciliationRepo = reconciliation.NewRepository(pool)
 		reconciliationPoller, err = reconciliation.NewPoller(
@@ -179,7 +180,7 @@ func run(log *slog.Logger) error {
 	// Build the REST handler. When VUKA_WEB_DIR points at the built SPA,
 	// serve the dashboard and the API from the same port (single-origin
 	// production shape; tunnel-friendly).
-	handler := api.NewServerWithReconciliation(ledgerSvc, log, cfg.CORSOrigins, reconciliationRepo, reconciliationPoller, authStore)
+	handler := api.NewServerWithReconciliation(ledgerSvc, log, cfg.CORSOrigins, reconciliationRepo, reconciliationPoller, authStore, cfg.ReconciliationLagWarning, cfg.ReconciliationLagCritical, cfg.ReadOnly)
 	if cfg.WebDir != "" {
 		handler = api.WithWebDir(handler, cfg.WebDir)
 		log.Info("serving web dashboard", "dir", cfg.WebDir)
