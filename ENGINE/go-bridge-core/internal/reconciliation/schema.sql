@@ -14,12 +14,15 @@ CREATE TABLE IF NOT EXISTS escrows (
     buyer_address VARCHAR(42) NOT NULL,
     supplier_address VARCHAR(42) NOT NULL,
     amount NUMERIC(78, 0) NOT NULL CHECK (amount > 0),
+    timeout_at BIGINT NOT NULL CHECK (timeout_at >= 0),
     invoice_ref VARCHAR(255) NOT NULL,
     state VARCHAR(12) NOT NULL CHECK (state IN ('CREATED', 'LOCKED', 'RELEASED', 'REFUNDED', 'DISPUTED')),
     updated_block BIGINT NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (chain_id, contract_address, escrow_id)
 );
+
+ALTER TABLE escrows ADD COLUMN IF NOT EXISTS timeout_at BIGINT NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS chain_events (
     chain_id BIGINT NOT NULL,
