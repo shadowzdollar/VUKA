@@ -40,7 +40,7 @@ func TestRepositoryAppliesEventsIdempotently(t *testing.T) {
 		ChainID: 80002, ContractAddress: contract, BlockNumber: 10,
 		BlockHash: "0xblock", TransactionHash: "0xcreated", LogIndex: 0,
 		EscrowID: 1, Type: EventEscrowCreated, Buyer: "0xbuyer",
-		Supplier: "0xsupplier", Amount: "1000000", InvoiceRef: "INV",
+		Supplier: "0xsupplier", Amount: "1000000", TimeoutAt: 1, InvoiceRef: "INV",
 	}
 	locked := created
 	locked.Type = EventFundsLocked
@@ -71,5 +71,42 @@ func TestRepositoryAppliesEventsIdempotently(t *testing.T) {
 	conflict.BlockHash = "0xreorged"
 	if _, err := repo.ApplyEvent(ctx, conflict); !errors.Is(err, ErrReorgDetected) {
 		t.Fatalf("conflicting block = %v, want reorg error", err)
+	}
+
+	conflictingPayload := locked
+	conflictingPayload.BlockHash = "0xblock"
+	conflictingPayload.Type = EventCompletionConfirmed
+	if _, err := repo.ApplyEvent(ctx, conflictingPayload); !errors.Is(err, ErrDuplicateEvent) {
+		t.Fatalf("conflicting replay = %v, want duplicate event error", err)
+	}
+
+	atomicContract := "0xatomic"
+	for _, table := range []string{"chain_events", "canonical_blocks", "escrows", "reconciliation_cursors"} {
+		if _, err = pool.Exec(ctx, "DELETE FROM "+table+" WHERE chain_id = 80002 AND contract_address = $1", atomicContract); err != nil {
+			t.Fatal(err)
+		}
+	}
+	atomicCreated := created
+	atomicCreated.ContractAddress = atomicContract
+	atomicCreated.TransactionHash = "0xatomic-created"
+	atomicInvalid := atomicCreated
+	atomicInvalid.TransactionHash = "0xatomic-invalid"
+	atomicInvalid.Type = EventFundsLocked
+
+	if _, err := repo.ApplyEventsAndAdvance(ctx, []ChainEvent{atomicCreated, atomicInvalid}, 21); !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("failed atomic batch = %v, want invalid state", err)
+	}
+	var atomicEvents, atomicEscrows, atomicCursors int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM chain_events WHERE chain_id = 80002 AND contract_address = $1`, atomicContract).Scan(&atomicEvents); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM escrows WHERE chain_id = 80002 AND contract_address = $1`, atomicContract).Scan(&atomicEscrows); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM reconciliation_cursors WHERE chain_id = 80002 AND contract_address = $1`, atomicContract).Scan(&atomicCursors); err != nil {
+		t.Fatal(err)
+	}
+	if atomicEvents != 0 || atomicEscrows != 0 || atomicCursors != 0 {
+		t.Fatalf("failed batch left durable state: events=%d escrows=%d cursors=%d", atomicEvents, atomicEscrows, atomicCursors)
 	}
 }
