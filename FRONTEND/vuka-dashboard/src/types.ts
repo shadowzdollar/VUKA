@@ -7,6 +7,7 @@ export type Escrow = {
   buyer: string;
   supplier: string;
   amount: string;
+  timeout_at: number;
   invoice_ref: string;
   state: EscrowState;
   updated_block: number;
@@ -23,6 +24,13 @@ export type ReconciliationStatus = {
   latest_block: number;
   finalized_block: number;
   lag_blocks: number;
+  warning_lag_blocks: number;
+  critical_lag_blocks: number;
+  alert_level: "ok" | "warning" | "critical";
+  acknowledged_by?: string;
+  acknowledged_at?: string;
+  acknowledged_level?: "warning" | "critical";
+  acknowledged_message?: string;
 };
 
 export type EscrowEvent = {
@@ -41,6 +49,16 @@ export type EscrowEvent = {
 export type Operator = {
   email: string;
   role: string;
+};
+
+export type OperatorActivity = {
+  id: string;
+  actor: string;
+  role: string;
+  action: string;
+  resource?: string;
+  details?: string;
+  created_at: string;
 };
 
 export type Dispute = {
