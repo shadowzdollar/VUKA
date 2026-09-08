@@ -15,6 +15,8 @@
 #                           engine is running with gRPC on VUKA_ENGINE_GRPC_ADDR)
 #   make up / make down     start / stop dockerized PostgreSQL + Adminer
 #   make reconcile-run      start PostgreSQL and the read-only Amoy reconciler
+#   make backup             create a local PostgreSQL custom-format backup
+#   make restore            restore BACKUP_FILE after explicit confirmation
 #   make clean              drop the vuka_test database
 # ============================================================================
 
@@ -36,7 +38,7 @@ TEST_DATABASE_URL ?= postgres://$(PG_USER):$(PG_PASSWORD)@localhost:$(PG_HOST_PO
 
 MKFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
-.PHONY: build vet test test-integration up down clean psql provision reconcile-run
+.PHONY: build vet test test-integration up down clean psql provision backup restore reconcile-run
 
 build:
 	cd $(MKFILE_DIR)go-bridge-core && go build ./...
@@ -45,7 +47,17 @@ vet:
 	cd $(MKFILE_DIR)go-bridge-core && go vet ./...
 
 test:
-	cd $(MKFILE_DIR)go-bridge-core && TEST_DATABASE_URL='$(TEST_DATABASE_URL)' go test ./internal/... -count=1
+	@set -a; [ ! -f "$(MKFILE_DIR)deploy/.env" ] || . "$(MKFILE_DIR)deploy/.env"; set +a; \
+		configured_test_url='$(if $(filter command line environment,$(origin TEST_DATABASE_URL)),$(TEST_DATABASE_URL),)'; \
+		test -n "$${TEST_DATABASE_URL:-$$configured_test_url}" || \
+		test -n "$${POSTGRES_PASSWORD:-}" || \
+		{ echo "ERROR: set TEST_DATABASE_URL or POSTGRES_PASSWORD."; exit 1; }; \
+		test_url="$${TEST_DATABASE_URL:-$$configured_test_url}"; \
+		if [ -z "$$test_url" ]; then \
+			test_password="$${POSTGRES_PASSWORD//\'/\'\'}"; \
+			test_url="user=$(PG_USER) password='$$test_password' host=localhost port=$(PG_HOST_PORT) dbname=$(PG_TEST_DB) sslmode=disable"; \
+		fi; \
+		cd "$(MKFILE_DIR)go-bridge-core" && TEST_DATABASE_URL="$$test_url" go test ./internal/... -count=1
 
 # Deterministic container name for psql/pg_isready/copy targets.
 PG_CONTAINER := $(shell docker compose -f $(MKFILE_DIR)$(COMPOSE_FILE) ps -q $(PG_SERVICE) 2>/dev/null | head -n1)
@@ -87,6 +99,25 @@ clean: down
 psql:
 	@test -n "$(PG_CONTAINER)" || { echo "ERROR: postgres container is not running; run 'make up' first."; exit 1; }
 	docker exec -it "$(PG_CONTAINER)" psql -U $(PG_USER) -d $(PG_TEST_DB)
+
+BACKUP_FILE ?= $(MKFILE_DIR)deploy/backups/vuka-$(shell date -u +%Y%m%dT%H%M%SZ).dump
+
+backup:
+	@test -n "$(PG_CONTAINER)" || { echo "ERROR: postgres container is not running; run 'make up' first."; exit 1; }
+	@mkdir -p "$$(dirname "$(BACKUP_FILE)")"
+	@echo "Creating backup at $(BACKUP_FILE)..."
+	docker exec "$(PG_CONTAINER)" pg_dump -U $(PG_USER) -d $(PG_SUPER_DB) -Fc > "$(BACKUP_FILE)"
+	@test -s "$(BACKUP_FILE)" || { echo "ERROR: backup file is empty."; exit 1; }
+	@echo "Backup created: $(BACKUP_FILE)"
+
+restore:
+	@test "$(CONFIRM_RESTORE)" = "YES" || { echo "ERROR: restore replaces database contents; rerun with CONFIRM_RESTORE=YES BACKUP_FILE=..."; exit 1; }
+	@test -n "$(BACKUP_FILE)" || { echo "ERROR: set BACKUP_FILE=/path/to/backup.dump."; exit 1; }
+	@test -f "$(BACKUP_FILE)" || { echo "ERROR: backup file not found: $(BACKUP_FILE)"; exit 1; }
+	@test -n "$(PG_CONTAINER)" || { echo "ERROR: postgres container is not running; run 'make up' first."; exit 1; }
+	@echo "Restoring $(BACKUP_FILE) into $(PG_SUPER_DB)..."
+	cat "$(BACKUP_FILE)" | docker exec -i "$(PG_CONTAINER)" pg_restore -U $(PG_USER) -d $(PG_SUPER_DB) --clean --if-exists --no-owner --exit-on-error
+	@echo "Restore completed. Run the smoke checks before reopening traffic."
 
 # Start PostgreSQL and run the read-only Polygon escrow reconciler. The RPC
 # endpoint and database DSN must be supplied by the caller; no private key is
