@@ -21,12 +21,23 @@ const sessionCookie = "vuka_operator_session"
 var errInvalidCredentials = errors.New("invalid credentials")
 
 type AuthStore struct {
-	pool *pgxpool.Pool
+	pool          *pgxpool.Pool
+	retentionDays int64
 }
 
 type Operator struct {
 	Email string `json:"email"`
 	Role  string `json:"role"`
+}
+
+type Activity struct {
+	ID        string `json:"id"`
+	Actor     string `json:"actor"`
+	Role      string `json:"role"`
+	Action    string `json:"action"`
+	Resource  string `json:"resource,omitempty"`
+	Details   string `json:"details,omitempty"`
+	CreatedAt string `json:"created_at"`
 }
 
 type operatorContextKey struct{}
@@ -40,8 +51,17 @@ func NewAuthStore(pool *pgxpool.Pool) *AuthStore {
 	return &AuthStore{pool: pool}
 }
 
+// ConfigureActivityRetention sets a read window without deleting audit records.
+// Zero keeps the full append-only history visible.
+func (s *AuthStore) ConfigureActivityRetention(days int64) {
+	if days >= 0 {
+		s.retentionDays = days
+	}
+}
+
 func (s *AuthStore) EnsureSchema(ctx context.Context) error {
-	_, err := s.pool.Exec(ctx, `
+	statements := []string{
+		`
 		CREATE TABLE IF NOT EXISTS operators (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			email VARCHAR(255) UNIQUE NOT NULL,
@@ -57,11 +77,118 @@ func (s *AuthStore) EnsureSchema(ctx context.Context) error {
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
 		CREATE INDEX IF NOT EXISTS idx_operator_sessions_expiry ON operator_sessions(expires_at);
-	`)
-	if err != nil {
-		return fmt.Errorf("auth: ensure schema: %w", err)
+		CREATE TABLE IF NOT EXISTS operator_activity (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			actor_email VARCHAR(255) NOT NULL,
+			role VARCHAR(32) NOT NULL,
+			action VARCHAR(64) NOT NULL,
+			resource VARCHAR(255),
+			details TEXT,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+		CREATE INDEX IF NOT EXISTS idx_operator_activity_created_at ON operator_activity(created_at DESC);
+		CREATE OR REPLACE FUNCTION prevent_operator_activity_mutation()
+		RETURNS trigger AS $$
+		BEGIN
+			RAISE EXCEPTION 'operator activity is append-only';
+		END;
+		$$ LANGUAGE plpgsql;
+		DROP TRIGGER IF EXISTS operator_activity_append_only ON operator_activity;
+		`,
+		`CREATE TRIGGER operator_activity_append_only
+		BEFORE UPDATE OR DELETE ON operator_activity
+		FOR EACH ROW EXECUTE FUNCTION prevent_operator_activity_mutation();
+		`,
+	}
+	for index, statement := range statements {
+		if _, err := s.pool.Exec(ctx, statement); err != nil {
+			return fmt.Errorf("auth: ensure schema statement %d: %w", index+1, err)
+		}
 	}
 	return nil
+}
+
+func (s *AuthStore) recordActivity(ctx context.Context, operator Operator, action, resource, details string) error {
+	_, err := s.pool.Exec(ctx, `
+			INSERT INTO operator_activity (actor_email, role, action, resource, details)
+			VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, ''))`,
+		operator.Email, operator.Role, action, resource, details)
+	if err != nil {
+		return fmt.Errorf("auth: record activity: %w", err)
+	}
+	return nil
+}
+
+func (s *AuthStore) listActivity(ctx context.Context, limit, offset int, action, search, from, to string) ([]Activity, int, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	rows, err := s.pool.Query(ctx, `
+			SELECT id, actor_email, role, action, COALESCE(resource, ''), COALESCE(details, ''), created_at
+			FROM operator_activity
+			WHERE ($1 = '' OR action = $1)
+			  AND ($2 = '' OR actor_email ILIKE '%' || $2 || '%' OR role ILIKE '%' || $2 || '%'
+			       OR COALESCE(resource, '') ILIKE '%' || $2 || '%' OR COALESCE(details, '') ILIKE '%' || $2 || '%')
+			  AND ($3 = '' OR created_at >= $3::timestamptz)
+			  AND ($4 = '' OR created_at < ($4::date + INTERVAL '1 day'))
+			  AND ($5 = 0 OR created_at >= now() - ($5 * INTERVAL '1 day'))
+			ORDER BY created_at DESC
+			LIMIT $6 OFFSET $7`, action, search, from, to, s.retentionDays, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("auth: list activity: %w", err)
+	}
+	defer rows.Close()
+	activities := make([]Activity, 0)
+	for rows.Next() {
+		var item Activity
+		var createdAt time.Time
+		if err := rows.Scan(&item.ID, &item.Actor, &item.Role, &item.Action, &item.Resource, &item.Details, &createdAt); err != nil {
+			return nil, 0, fmt.Errorf("auth: scan activity: %w", err)
+		}
+		item.CreatedAt = createdAt.UTC().Format(time.RFC3339)
+		activities = append(activities, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	var total int
+	err = s.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM operator_activity
+		WHERE ($1 = '' OR action = $1)
+		  AND ($2 = '' OR actor_email ILIKE '%' || $2 || '%' OR role ILIKE '%' || $2 || '%'
+		       OR COALESCE(resource, '') ILIKE '%' || $2 || '%' OR COALESCE(details, '') ILIKE '%' || $2 || '%')
+		  AND ($3 = '' OR created_at >= $3::timestamptz)
+		  AND ($4 = '' OR created_at < ($4::date + INTERVAL '1 day'))
+		  AND ($5 = 0 OR created_at >= now() - ($5 * INTERVAL '1 day'))`,
+		action, search, from, to, s.retentionDays).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("auth: count activity: %w", err)
+	}
+	return activities, total, nil
+}
+
+func (s *AuthStore) latestActivity(ctx context.Context, action, resource string) (*Activity, error) {
+	var item Activity
+	var createdAt time.Time
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, actor_email, role, action, COALESCE(resource, ''), COALESCE(details, ''), created_at
+		FROM operator_activity
+		WHERE action = $1 AND COALESCE(resource, '') = $2
+		ORDER BY created_at DESC
+		LIMIT 1`, action, resource).Scan(
+		&item.ID, &item.Actor, &item.Role, &item.Action, &item.Resource, &item.Details, &createdAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("auth: latest activity: %w", err)
+	}
+	item.CreatedAt = createdAt.UTC().Format(time.RFC3339)
+	return &item, nil
 }
 
 func (s *AuthStore) EnsureOperator(ctx context.Context, email, password, role string) error {
