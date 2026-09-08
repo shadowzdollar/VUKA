@@ -1,6 +1,7 @@
 package reconciliation
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -51,10 +52,15 @@ func (r *Repository) ApplyEventsAndAdvance(ctx context.Context, events []ChainEv
 	if len(events) == 0 || nextBlock < 0 {
 		return 0, fmt.Errorf("reconciliation: invalid finalized batch")
 	}
+	chainID, contractAddress, err := validateFinalizedBatch(events)
+	if err != nil {
+		return 0, err
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("reconciliation: begin: %w", err)
 	}
+
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	applied := 0
@@ -67,13 +73,42 @@ func (r *Repository) ApplyEventsAndAdvance(ctx context.Context, events []ChainEv
 			applied++
 		}
 	}
-	if err := upsertCursor(ctx, tx, events[0].ChainID, events[0].ContractAddress, nextBlock); err != nil {
+	if err := upsertCursor(ctx, tx, chainID, contractAddress, nextBlock); err != nil {
 		return 0, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return 0, fmt.Errorf("reconciliation: commit batch: %w", err)
 	}
 	return applied, nil
+}
+
+func validateFinalizedBatch(events []ChainEvent) (int64, string, error) {
+	if len(events) == 0 {
+		return 0, "", fmt.Errorf("reconciliation: invalid finalized batch")
+	}
+	chainID := events[0].ChainID
+	contractAddress := events[0].ContractAddress
+	if chainID <= 0 || contractAddress == "" {
+		return 0, "", fmt.Errorf("reconciliation: finalized batch has invalid chain resource")
+	}
+	previousBlock := events[0].BlockNumber
+	previousLog := events[0].LogIndex
+	if previousBlock < 0 || previousLog < 0 {
+		return 0, "", fmt.Errorf("reconciliation: finalized batch contains invalid event position")
+	}
+	for _, event := range events[1:] {
+		if event.ChainID != chainID || event.ContractAddress != contractAddress {
+			return 0, "", fmt.Errorf("reconciliation: finalized batch contains multiple chain resources")
+		}
+		if event.BlockNumber < 0 || event.LogIndex < 0 ||
+			event.BlockNumber < previousBlock ||
+			(event.BlockNumber == previousBlock && event.LogIndex < previousLog) {
+			return 0, "", fmt.Errorf("reconciliation: finalized batch is not ordered by chain position")
+		}
+		previousBlock = event.BlockNumber
+		previousLog = event.LogIndex
+	}
+	return chainID, contractAddress, nil
 }
 
 func (r *Repository) Cursor(ctx context.Context, chainID int64, contractAddress string) (int64, error) {
@@ -102,7 +137,7 @@ func (r *Repository) ListEscrows(ctx context.Context, chainID int64, contractAdd
 	}
 	rows, err := r.pool.Query(ctx, `
 		SELECT chain_id, contract_address, escrow_id, buyer_address,
-		       supplier_address, amount::text, invoice_ref, state, updated_block
+		       supplier_address, amount::text, timeout_at, invoice_ref, state, updated_block
 		FROM escrows
 		WHERE chain_id = $1 AND contract_address = $2
 		ORDER BY escrow_id`, chainID, contractAddress)
@@ -114,7 +149,7 @@ func (r *Repository) ListEscrows(ctx context.Context, chainID int64, contractAdd
 	for rows.Next() {
 		var item Summary
 		if err := rows.Scan(&item.ChainID, &item.ContractAddress, &item.EscrowID,
-			&item.Buyer, &item.Supplier, &item.Amount, &item.InvoiceRef,
+			&item.Buyer, &item.Supplier, &item.Amount, &item.TimeoutAt, &item.InvoiceRef,
 			&item.State, &item.UpdatedBlock); err != nil {
 			return nil, fmt.Errorf("reconciliation: scan escrow: %w", err)
 		}
@@ -184,6 +219,33 @@ func (r *Repository) ListDisputes(ctx context.Context, chainID int64, contractAd
 		result = append(result, item)
 	}
 	return result, rows.Err()
+}
+
+func (r *Repository) GetDispute(ctx context.Context, disputeID string) (Dispute, error) {
+	if r == nil || r.pool == nil {
+		return Dispute{}, errors.New("reconciliation: repository has nil pool")
+	}
+	var dispute Dispute
+	var createdAt time.Time
+	var resolvedAt *time.Time
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, chain_id, contract_address, escrow_id, raised_transaction_hash,
+		       raised_log_index, reason, status, created_at, resolved_at
+		FROM escrow_disputes WHERE id = $1`, disputeID).Scan(
+		&dispute.ID, &dispute.ChainID, &dispute.ContractAddress, &dispute.EscrowID,
+		&dispute.RaisedTransactionHash, &dispute.RaisedLogIndex, &dispute.Reason,
+		&dispute.Status, &createdAt, &resolvedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Dispute{}, fmt.Errorf("reconciliation: dispute not found")
+	}
+	if err != nil {
+		return Dispute{}, fmt.Errorf("reconciliation: get dispute: %w", err)
+	}
+	dispute.CreatedAt = createdAt.UTC().Format(time.RFC3339)
+	if resolvedAt != nil {
+		dispute.ResolvedAt = resolvedAt.UTC().Format(time.RFC3339)
+	}
+	return dispute, nil
 }
 
 func (r *Repository) AddDisputeReview(ctx context.Context, disputeID, reviewer, note string) (DisputeReview, error) {
@@ -427,6 +489,32 @@ func applyEventTx(ctx context.Context, tx pgx.Tx, event ChainEvent) (bool, error
 		event.ChainID, event.ContractAddress, event.BlockNumber, event.BlockHash); err != nil {
 		return false, fmt.Errorf("reconciliation: store canonical block: %w", err)
 	}
+	var existingBlockNumber int64
+	var existingBlockHash string
+	var existingEscrowID int64
+	var existingEventType EventType
+	var existingPayload []byte
+	err = tx.QueryRow(ctx, `
+		SELECT block_number, block_hash, escrow_id, event_type, payload
+		FROM chain_events
+		WHERE chain_id = $1 AND contract_address = $2
+		  AND transaction_hash = $3 AND log_index = $4`,
+		event.ChainID, event.ContractAddress, event.TransactionHash, event.LogIndex,
+	).Scan(&existingBlockNumber, &existingBlockHash, &existingEscrowID,
+		&existingEventType, &existingPayload)
+	if err == nil {
+		if existingBlockNumber != event.BlockNumber ||
+			existingBlockHash != event.BlockHash ||
+			existingEscrowID != event.EscrowID ||
+			existingEventType != event.Type ||
+			!bytes.Equal(existingPayload, payload) {
+			return false, fmt.Errorf("%w: event identity %s", ErrDuplicateEvent, event.Key())
+		}
+		return false, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return false, fmt.Errorf("reconciliation: check existing chain event: %w", err)
+	}
 	if event.Type == EventDisputeRaised {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO escrow_disputes
@@ -458,13 +546,14 @@ func applyEventTx(ctx context.Context, tx pgx.Tx, event ChainEvent) (bool, error
 	var current Escrow
 	err = tx.QueryRow(ctx, `
 		SELECT chain_id, contract_address, escrow_id, buyer_address,
-		       supplier_address, amount::text, invoice_ref, state
+		       supplier_address, amount::text, timeout_at, invoice_ref, state
 		FROM escrows
 		WHERE chain_id = $1 AND contract_address = $2 AND escrow_id = $3
 		FOR UPDATE`,
 		event.ChainID, event.ContractAddress, event.EscrowID,
 	).Scan(&current.ChainID, &current.ContractAddress, &current.EscrowID,
-		&current.Buyer, &current.Supplier, &current.Amount, &current.InvoiceRef, &current.State)
+		&current.Buyer, &current.Supplier, &current.Amount, &current.TimeoutAt,
+		&current.InvoiceRef, &current.State)
 	if errors.Is(err, pgx.ErrNoRows) {
 		if event.Type != EventEscrowCreated || event.Buyer == "" ||
 			event.Supplier == "" || event.Amount == "" {
@@ -473,10 +562,10 @@ func applyEventTx(ctx context.Context, tx pgx.Tx, event ChainEvent) (bool, error
 		_, err = tx.Exec(ctx, `
 			INSERT INTO escrows
 				(chain_id, contract_address, escrow_id, buyer_address,
-				 supplier_address, amount, invoice_ref, state, updated_block)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+				 supplier_address, amount, timeout_at, invoice_ref, state, updated_block)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
 			event.ChainID, event.ContractAddress, event.EscrowID, event.Buyer,
-			event.Supplier, event.Amount, event.InvoiceRef, StateCreated, event.BlockNumber)
+			event.Supplier, event.Amount, event.TimeoutAt, event.InvoiceRef, StateCreated, event.BlockNumber)
 		if err != nil {
 			return false, fmt.Errorf("reconciliation: insert escrow: %w", err)
 		}
