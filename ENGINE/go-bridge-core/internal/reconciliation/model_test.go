@@ -14,7 +14,7 @@ func event(eventType EventType) ChainEvent {
 
 func TestApplyLifecycle(t *testing.T) {
 	created := event(EventEscrowCreated)
-	created.Buyer, created.Supplier, created.Amount = "0xbuyer", "0xsupplier", "1000000"
+	created.Buyer, created.Supplier, created.Amount, created.TimeoutAt = "0xbuyer", "0xsupplier", "1000000", 1
 	var item Escrow
 
 	if err := Apply(&item, created); err != nil {
@@ -45,12 +45,45 @@ func TestApplyRejectsInvalidOrder(t *testing.T) {
 	}
 
 	created := event(EventEscrowCreated)
-	created.Buyer, created.Supplier, created.Amount = "0xbuyer", "0xsupplier", "1"
+	created.Buyer, created.Supplier, created.Amount, created.TimeoutAt = "0xbuyer", "0xsupplier", "1", 1
 	if err := Apply(&item, created); err != nil {
 		t.Fatal(err)
 	}
 	if err := Apply(&item, event(EventEscrowRefunded)); !errors.Is(err, ErrInvalidState) {
 		t.Fatalf("error = %v, want invalid state", err)
+	}
+}
+
+func TestApplyRejectsTerminalStateTransitions(t *testing.T) {
+	created := event(EventEscrowCreated)
+	created.Buyer, created.Supplier, created.Amount, created.TimeoutAt = "0xbuyer", "0xsupplier", "1", 1
+
+	for _, terminal := range []EventType{EventEscrowReleased, EventEscrowRefunded} {
+		t.Run(string(terminal), func(t *testing.T) {
+			var item Escrow
+			if err := Apply(&item, created); err != nil {
+				t.Fatal(err)
+			}
+			if err := Apply(&item, event(EventFundsLocked)); err != nil {
+				t.Fatal(err)
+			}
+			if terminal == EventEscrowRefunded {
+				if err := Apply(&item, event(EventDisputeRaised)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := Apply(&item, event(terminal)); err != nil {
+				t.Fatal(err)
+			}
+			for _, next := range []EventType{
+				EventFundsLocked, EventCompletionConfirmed, EventDisputeRaised,
+				EventEscrowReleased, EventEscrowRefunded,
+			} {
+				if err := Apply(&item, event(next)); !errors.Is(err, ErrInvalidState) {
+					t.Fatalf("event %s error = %v, want invalid state", next, err)
+				}
+			}
+		})
 	}
 }
 
