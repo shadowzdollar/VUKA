@@ -9,6 +9,17 @@ It must be compiled and tested with a pinned Solidity toolchain before any
 testnet deployment. The Go service will later reconcile these emitted events
 into the off-chain ledger; it must not invent escrow state independently.
 
+`EscrowCreated` emits the absolute Unix timestamp `timeoutAt` alongside the
+amount and invoice reference. Reconciliation persists this deadline as
+canonical chain truth, and completion confirmation is rejected at or after the
+deadline even if timeout processing has not yet been called.
+
+Each participant may confirm completion only once. If both confirmations are
+recorded before the deadline, funds are released to the supplier. If the
+deadline is reached while the escrow remains locked, `checkTimeout` releases
+the funds to the supplier; disputed escrows must instead be resolved by the
+arbiter and cannot be changed after a terminal outcome.
+
 ## Polygon Amoy preparation
 
 The first public-network target is Polygon Amoy. Deployment is intentionally
