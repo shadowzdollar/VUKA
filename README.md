@@ -316,6 +316,7 @@ acceptance record.
 
 ### Phase 2 — Escrow domain and chain truth
 **Depends on:** Phase 1
+**Status: exit-gate evidence assembled; acceptance items remain**
 
 - Finalize the escrow state machine and event specifications.
 - Complete contract security review, invariant tests, and upgrade policy.
