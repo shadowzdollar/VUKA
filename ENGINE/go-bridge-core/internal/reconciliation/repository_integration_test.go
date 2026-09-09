@@ -91,7 +91,7 @@ func TestRepositoryAppliesEventsIdempotently(t *testing.T) {
 	atomicCreated.TransactionHash = "0xatomic-created"
 	atomicInvalid := atomicCreated
 	atomicInvalid.TransactionHash = "0xatomic-invalid"
-	atomicInvalid.Type = EventFundsLocked
+	atomicInvalid.Type = EventCompletionConfirmed
 
 	if _, err := repo.ApplyEventsAndAdvance(ctx, []ChainEvent{atomicCreated, atomicInvalid}, 21); !errors.Is(err, ErrInvalidState) {
 		t.Fatalf("failed atomic batch = %v, want invalid state", err)
