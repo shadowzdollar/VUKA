@@ -1,7 +1,6 @@
 package reconciliation
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -503,11 +502,15 @@ func applyEventTx(ctx context.Context, tx pgx.Tx, event ChainEvent) (bool, error
 	).Scan(&existingBlockNumber, &existingBlockHash, &existingEscrowID,
 		&existingEventType, &existingPayload)
 	if err == nil {
+		var existingEvent ChainEvent
+		if unmarshalErr := json.Unmarshal(existingPayload, &existingEvent); unmarshalErr != nil {
+			return false, fmt.Errorf("reconciliation: decode existing chain event: %w", unmarshalErr)
+		}
 		if existingBlockNumber != event.BlockNumber ||
 			existingBlockHash != event.BlockHash ||
 			existingEscrowID != event.EscrowID ||
 			existingEventType != event.Type ||
-			!bytes.Equal(existingPayload, payload) {
+			existingEvent != event {
 			return false, fmt.Errorf("%w: event identity %s", ErrDuplicateEvent, event.Key())
 		}
 		return false, nil
