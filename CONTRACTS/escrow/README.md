@@ -9,6 +9,10 @@ It must be compiled and tested with a pinned Solidity toolchain before any
 testnet deployment. The Go service will later reconcile these emitted events
 into the off-chain ledger; it must not invent escrow state independently.
 
+Phase 2 validation evidence is tracked in
+`PHASE2_TESTNET_EVIDENCE.md`. It records contract, reconciliation, recovery,
+and safety-gate status without authorizing deployment.
+
 `EscrowCreated` emits the absolute Unix timestamp `timeoutAt` alongside the
 amount and invoice reference. Reconciliation persists this deadline as
 canonical chain truth, and completion confirmation is rejected at or after the
