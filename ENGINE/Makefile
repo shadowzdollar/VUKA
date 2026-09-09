@@ -17,6 +17,7 @@
 #   make reconcile-run      start PostgreSQL and the read-only Amoy reconciler
 #   make backup             create a local PostgreSQL custom-format backup
 #   make restore            restore BACKUP_FILE after explicit confirmation
+#   make restore-drill      restore the latest backup into a disposable database
 #   make clean              drop the vuka_test database
 # ============================================================================
 
@@ -38,7 +39,7 @@ TEST_DATABASE_URL ?= postgres://$(PG_USER):$(PG_PASSWORD)@localhost:$(PG_HOST_PO
 
 MKFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
-.PHONY: build vet test test-integration up down clean psql provision backup restore reconcile-run
+.PHONY: build vet test test-integration up down clean psql provision backup restore restore-drill reconcile-run
 
 build:
 	cd $(MKFILE_DIR)go-bridge-core && go build ./...
@@ -100,24 +101,59 @@ psql:
 	@test -n "$(PG_CONTAINER)" || { echo "ERROR: postgres container is not running; run 'make up' first."; exit 1; }
 	docker exec -it "$(PG_CONTAINER)" psql -U $(PG_USER) -d $(PG_TEST_DB)
 
-BACKUP_FILE ?= $(MKFILE_DIR)deploy/backups/vuka-$(shell date -u +%Y%m%dT%H%M%SZ).dump
+BACKUP_DIR ?= $(MKFILE_DIR)deploy/backups
 
 backup:
 	@test -n "$(PG_CONTAINER)" || { echo "ERROR: postgres container is not running; run 'make up' first."; exit 1; }
-	@mkdir -p "$$(dirname "$(BACKUP_FILE)")"
-	@echo "Creating backup at $(BACKUP_FILE)..."
-	docker exec "$(PG_CONTAINER)" pg_dump -U $(PG_USER) -d $(PG_SUPER_DB) -Fc > "$(BACKUP_FILE)"
-	@test -s "$(BACKUP_FILE)" || { echo "ERROR: backup file is empty."; exit 1; }
-	@echo "Backup created: $(BACKUP_FILE)"
+	@backup_file="$(BACKUP_FILE)"; \
+	if [ -z "$$backup_file" ]; then \
+		backup_file="$(BACKUP_DIR)/vuka-$$(date -u +%Y%m%dT%H%M%SZ).dump"; \
+	fi; \
+	mkdir -p "$$(dirname "$$backup_file")"; \
+	echo "Creating backup at $$backup_file..."; \
+	docker exec "$(PG_CONTAINER)" pg_dump -U $(PG_USER) -d $(PG_SUPER_DB) -Fc > "$$backup_file"; \
+	test -s "$$backup_file" || { echo "ERROR: backup file is empty."; exit 1; }; \
+	echo "Backup created: $$backup_file"
 
 restore:
 	@test "$(CONFIRM_RESTORE)" = "YES" || { echo "ERROR: restore replaces database contents; rerun with CONFIRM_RESTORE=YES BACKUP_FILE=..."; exit 1; }
-	@test -n "$(BACKUP_FILE)" || { echo "ERROR: set BACKUP_FILE=/path/to/backup.dump."; exit 1; }
-	@test -f "$(BACKUP_FILE)" || { echo "ERROR: backup file not found: $(BACKUP_FILE)"; exit 1; }
 	@test -n "$(PG_CONTAINER)" || { echo "ERROR: postgres container is not running; run 'make up' first."; exit 1; }
-	@echo "Restoring $(BACKUP_FILE) into $(PG_SUPER_DB)..."
-	cat "$(BACKUP_FILE)" | docker exec -i "$(PG_CONTAINER)" pg_restore -U $(PG_USER) -d $(PG_SUPER_DB) --clean --if-exists --no-owner --exit-on-error
+	@backup_file="$(BACKUP_FILE)"; \
+	if [ -z "$$backup_file" ]; then \
+		backup_file="$$(find "$(BACKUP_DIR)" -maxdepth 1 -type f -name 'vuka-*.dump' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)"; \
+	fi; \
+	test -n "$$backup_file" || { echo "ERROR: no backup file found in $(BACKUP_DIR); set BACKUP_FILE=/path/to/backup.dump."; exit 1; }; \
+	test -f "$$backup_file" || { echo "ERROR: backup file not found: $$backup_file"; exit 1; }; \
+	echo "Restoring $$backup_file into $(PG_SUPER_DB)..."; \
+	cat "$$backup_file" | docker exec -i "$(PG_CONTAINER)" pg_restore -U $(PG_USER) -d $(PG_SUPER_DB) --clean --if-exists --no-owner --exit-on-error
 	@echo "Restore completed. Run the smoke checks before reopening traffic."
+
+DRILL_DB ?= vuka_restore_drill
+
+restore-drill:
+	@test -n "$(PG_CONTAINER)" || { echo "ERROR: postgres container is not running; run 'make up' first."; exit 1; }
+	@backup_file="$(BACKUP_FILE)"; \
+	if [ -z "$$backup_file" ]; then \
+		backup_file="$$(find "$(BACKUP_DIR)" -maxdepth 1 -type f -name 'vuka-*.dump' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)"; \
+	fi; \
+	test -n "$$backup_file" && test -s "$$backup_file" || { echo "ERROR: no non-empty backup file found."; exit 1; }; \
+	docker exec "$(PG_CONTAINER)" psql -U $(PG_USER) -d $(PG_SUPER_DB) -v ON_ERROR_STOP=1 \
+		-c "DROP DATABASE IF EXISTS $(DRILL_DB);" \
+		-c "CREATE DATABASE $(DRILL_DB);"; \
+	trap 'docker exec "$(PG_CONTAINER)" psql -U $(PG_USER) -d $(PG_SUPER_DB) -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $(DRILL_DB);" >/dev/null' EXIT; \
+	echo "Restoring $$backup_file into disposable database $(DRILL_DB)..."; \
+	cat "$$backup_file" | docker exec -i "$(PG_CONTAINER)" pg_restore -U $(PG_USER) -d $(DRILL_DB) --clean --if-exists --no-owner --exit-on-error; \
+	echo "Checking restored schema and projections..."; \
+	docker exec "$(PG_CONTAINER)" psql -U $(PG_USER) -d $(DRILL_DB) -v ON_ERROR_STOP=1 -Atc \
+		"SELECT current_database(); \
+		 SELECT to_regclass('public.escrows'); \
+		 SELECT to_regclass('public.chain_events'); \
+		 SELECT to_regclass('public.operator_activity'); \
+		 SELECT COUNT(*) FROM escrows; \
+		 SELECT COUNT(*) FROM chain_events; \
+		 SELECT COUNT(*) FROM operator_activity; \
+		 SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='escrows' AND column_name='timeout_at');"; \
+	echo "Restore drill completed; disposable database will be removed."
 
 # Start PostgreSQL and run the read-only Polygon escrow reconciler. The RPC
 # endpoint and database DSN must be supplied by the caller; no private key is
