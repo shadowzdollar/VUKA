@@ -71,6 +71,12 @@ Local recovery evidence recorded on 2026-09-09:
 - SHA-256: `c9e76300142a0e79010d05a28d62ca24bdde4996eb0075e2e1935201e9f3814c`
 - Restore command: `make restore CONFIRM_RESTORE=YES`
 - Result: restore completed successfully into the local `vuka` database
+- Disposable drill command: `make restore-drill`
+- Disposable drill database: `vuka_restore_drill`
+- Restored projection counts: 5 escrows, 8 chain events, 482 operator-activity records
+- Restored schema checks: `escrows`, `chain_events`, `operator_activity`, and
+  `escrows.timeout_at` all present
+- Cleanup: disposable drill database removed automatically
 
 Required evidence before any externally controlled testnet operation remains:
 
@@ -103,7 +109,8 @@ Before testnet deployment is considered, the project still requires:
 - a testnet-only end-to-end observation plan;
 - explicit approval for any broadcast transaction.
 
-The local backup and restore path is now verified. A restore against a
-separately disposable database, followed by the documented post-restore
-smoke checks and projection-count comparison, is still required before this
-evidence package can be accepted for externally controlled testnet activity.
+The local backup and restore path is now verified, including a disposable
+database restore and projection/schema checks. Application-level smoke checks
+such as `/healthz`, operator sign-in, audit recording, and read-only
+reconciliation confirmation remain required before this evidence package can
+be accepted for externally controlled testnet activity.
