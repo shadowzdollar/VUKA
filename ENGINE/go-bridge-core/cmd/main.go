@@ -27,8 +27,15 @@ import (
 	bridgegrpc "vuka/go-bridge-core/internal/grpc"
 	"vuka/go-bridge-core/internal/grpcpb"
 	"vuka/go-bridge-core/internal/idempotency"
+	"vuka/go-bridge-core/internal/identity"
 	"vuka/go-bridge-core/internal/ledger"
+	"vuka/go-bridge-core/internal/pilot"
+	"vuka/go-bridge-core/internal/providerexec"
+	"vuka/go-bridge-core/internal/providers"
 	"vuka/go-bridge-core/internal/reconciliation"
+	"vuka/go-bridge-core/internal/settlement"
+	"vuka/go-bridge-core/internal/support"
+	"vuka/go-bridge-core/internal/transactionworkflow"
 )
 
 func main() {
@@ -113,14 +120,19 @@ func run(log *slog.Logger) error {
 	var reconciliationRepo *reconciliation.Repository
 	var reconciliationPoller *reconciliation.Poller
 	var authStore *api.AuthStore
+	// Operators are a foreign-key target for organization memberships, so the
+	// auth tables exist even when authentication is disabled in development.
+	authSchema := api.NewAuthStore(pool)
+	authCtx, authCancel := context.WithTimeout(ctx, 10*time.Second)
+	if err := authSchema.EnsureSchema(authCtx); err != nil {
+		authCancel()
+		return fmt.Errorf("ensure auth schema: %w", err)
+	}
+	authCancel()
 	if cfg.OperatorEmail != "" {
-		authStore = api.NewAuthStore(pool)
+		authStore = authSchema
 		authStore.ConfigureActivityRetention(cfg.ActivityRetentionDays)
 		authCtx, authCancel := context.WithTimeout(ctx, 10*time.Second)
-		if err := authStore.EnsureSchema(authCtx); err != nil {
-			authCancel()
-			return err
-		}
 		if err := authStore.EnsureOperator(authCtx, cfg.OperatorEmail, cfg.OperatorPassword, cfg.OperatorRole); err != nil {
 			authCancel()
 			return err
@@ -128,6 +140,69 @@ func run(log *slog.Logger) error {
 		authCancel()
 		log.Info("operator authentication enabled")
 	}
+	identityCtx, identityCancel := context.WithTimeout(ctx, 10*time.Second)
+	if err := identity.EnsureSchema(identityCtx, pool); err != nil {
+		identityCancel()
+		return fmt.Errorf("ensure identity schema: %w", err)
+	}
+	identityCancel()
+	log.Info("identity and compliance schema ready", "mode", "local-only")
+	providerCtx, providerCancel := context.WithTimeout(ctx, 10*time.Second)
+	if err := providers.EnsureSchema(providerCtx, pool); err != nil {
+		providerCancel()
+		return fmt.Errorf("ensure provider schema: %w", err)
+	}
+	providerCancel()
+	log.Info("provider control-plane schema ready", "mode", "sandbox-only", "external_calls", false)
+	executionCtx, executionCancel := context.WithTimeout(ctx, 10*time.Second)
+	if err := providerexec.EnsureSchema(executionCtx, pool); err != nil {
+		executionCancel()
+		return fmt.Errorf("ensure provider execution schema: %w", err)
+	}
+	executionCancel()
+	providerExecutionSvc := providerexec.NewService(registry, providerexec.NewPostgresStore(pool))
+	if cfg.ProviderCredentialRef != "" {
+		providerExecutionSvc.SetCredentialReference(cfg.AdapterName, cfg.ProviderCredentialRef)
+	}
+	log.Info("provider execution schema ready", "durable_evidence", true, "external_calls", false)
+	workflowCtx, workflowCancel := context.WithTimeout(ctx, 10*time.Second)
+	if err := transactionworkflow.EnsureSchema(workflowCtx, pool); err != nil {
+		workflowCancel()
+		return fmt.Errorf("ensure transaction workflow schema: %w", err)
+	}
+	workflowCancel()
+	log.Info("transaction workflow schema ready", "external_calls", false, "approval_gated", true)
+	settlementPolicy := settlement.DefaultPolicy()
+	settlementPolicy.RequiredApprovals = cfg.SettlementRequiredApprovals
+	settlementPolicy.MaxAmountMinor = cfg.SettlementMaxAmountMinor
+	settlementPolicy.DailyLimitMinor = cfg.SettlementDailyLimitMinor
+	settlementPolicy.GlobalKillSwitch = cfg.SettlementGlobalKillSwitch
+	settlementPolicy.ExecutionEnabled = cfg.SettlementExecutionEnabled
+	settlementPolicy.ReadOnly = cfg.ReadOnly
+	settlementSvc := settlement.NewService(pool, settlementPolicy)
+	settlementCtx, settlementCancel := context.WithTimeout(ctx, 10*time.Second)
+	if err := settlementSvc.EnsureSchema(settlementCtx); err != nil {
+		settlementCancel()
+		return fmt.Errorf("ensure settlement schema: %w", err)
+	}
+	settlementCancel()
+	log.Info("controlled settlement schema ready", "dry_run_only", true, "global_kill_switch", true)
+	pilotSvc := pilot.NewService(pool, cfg.ReadOnly, cfg.SettlementGlobalKillSwitch)
+	pilotCtx, pilotCancel := context.WithTimeout(ctx, 10*time.Second)
+	if err := pilotSvc.EnsureSchema(pilotCtx); err != nil {
+		pilotCancel()
+		return fmt.Errorf("ensure pilot schema: %w", err)
+	}
+	pilotCancel()
+	log.Info("supervised pilot schema ready", "observation_only", true, "live_execution", false)
+	supportSvc := support.NewService(pool, cfg.ReadOnly)
+	supportCtx, supportCancel := context.WithTimeout(ctx, 10*time.Second)
+	if err := supportSvc.EnsureSchema(supportCtx); err != nil {
+		supportCancel()
+		return fmt.Errorf("ensure support schema: %w", err)
+	}
+	supportCancel()
+	log.Info("trader support schema ready", "local_only", true)
 	if cfg.ReconciliationEnabled {
 		reconcileCtx, reconcileCancel := context.WithTimeout(ctx, 30*time.Second)
 		if err := reconciliation.EnsureSchema(reconcileCtx, pool); err != nil {
@@ -180,11 +255,12 @@ func run(log *slog.Logger) error {
 	// Build the REST handler. When VUKA_WEB_DIR points at the built SPA,
 	// serve the dashboard and the API from the same port (single-origin
 	// production shape; tunnel-friendly).
-	handler := api.NewServerWithReconciliation(ledgerSvc, log, cfg.CORSOrigins, reconciliationRepo, reconciliationPoller, authStore, cfg.ReconciliationLagWarning, cfg.ReconciliationLagCritical, cfg.ReadOnly)
+	handler := api.NewServerWithRuntimeOptionsAndProviderExecution(ledgerSvc, log, cfg.CORSOrigins, reconciliationRepo, reconciliationPoller, authStore, cfg.ReconciliationLagWarning, cfg.ReconciliationLagCritical, cfg.ReadOnly, settlementSvc, pilotSvc, supportSvc, cfg.LocalSyntheticExecution, providerExecutionSvc)
 	if cfg.WebDir != "" {
 		handler = api.WithWebDir(handler, cfg.WebDir)
 		log.Info("serving web dashboard", "dir", cfg.WebDir)
 	}
+	handler = api.RateLimitMiddleware(handler, cfg.RateLimitRequests, cfg.RateLimitWindow)
 
 	srv := &http.Server{
 		Addr:         cfg.HTTPAddr,
