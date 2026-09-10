@@ -16,10 +16,17 @@
 //	GET    /api/fx                        engine corridor FX rate
 //	GET    /api/escrows                   reconciled on-chain escrow read model
 //	GET    /api/reconciliation/status     reconciliation cursor and metrics
+//	POST   /api/provider-executions       idempotent provider dispatch
+//	GET    /api/provider-executions/{id}  provider execution evidence/status
 //	GET    /healthz                       liveness probe
 //
 // Transfers require the Idempotency-Key header (UUIDv4). Replaying a key
 // returns the original transfer with HTTP 200 (never a duplicate charge).
+//
+// Every response includes X-Request-ID (client supplied or generated) and
+// X-API-Version: 1. Errors use {"error":{"code":"...","message":"..."}}.
+// Set VUKA_RATE_LIMIT_REQUESTS and VUKA_RATE_LIMIT_WINDOW_MS to enable the
+// in-process per-client/IP fixed-window limiter. /healthz is excluded.
 package api
 
 import (
@@ -28,14 +35,23 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"vuka/go-bridge-core/internal/adapters"
+	"vuka/go-bridge-core/internal/identity"
 	"vuka/go-bridge-core/internal/ledger"
+	"vuka/go-bridge-core/internal/pilot"
+	"vuka/go-bridge-core/internal/providerexec"
+	"vuka/go-bridge-core/internal/providers"
 	"vuka/go-bridge-core/internal/reconciliation"
+	"vuka/go-bridge-core/internal/settlement"
+	"vuka/go-bridge-core/internal/support"
+	"vuka/go-bridge-core/internal/transactionworkflow"
 )
 
 // Server holds the HTTP handlers and their dependencies.
@@ -50,6 +66,14 @@ type Server struct {
 	reconciliationLagWarning  int64
 	reconciliationLagCritical int64
 	readOnly                  bool
+	localSyntheticExecution   bool
+	identity                  *identity.Service
+	providerCatalog           *providers.Catalog
+	settlement                *settlement.Service
+	pilot                     *pilot.Service
+	support                   *support.Service
+	providerExecution         *providerexec.Service
+	workflow                  *transactionworkflow.Service
 }
 
 func reconciliationActivityResource(chainID int64, contract string) string {
@@ -60,17 +84,101 @@ func reconciliationActivityResource(chainID int64, contract string) string {
 // corsOrigins is the allow-list of browser origins (e.g. "http://localhost:5173").
 // Empty disables origin checking (sets the header echo for any origin).
 func NewServer(ledgerSvc *ledger.Service, log *slog.Logger, corsOrigins []string) http.Handler {
-	s := &Server{ledger: ledgerSvc, log: log, mux: http.NewServeMux(), hub: NewHub()}
+	s := &Server{ledger: ledgerSvc, log: log, mux: http.NewServeMux(), providerCatalog: providers.NewDefaultCatalog(), providerExecution: defaultProviderExecution()}
+	if ledgerSvc != nil {
+		s.identity = identity.NewService(ledgerSvc.DB())
+		s.settlement = settlement.NewService(ledgerSvc.DB(), settlement.DefaultPolicy())
+		s.pilot = pilot.NewService(ledgerSvc.DB(), false, true)
+		s.support = support.NewService(ledgerSvc.DB(), false)
+	}
+	s.configureWorkflow()
 	return s.handler(corsOrigins)
 }
 
 func NewServerWithAuth(ledgerSvc *ledger.Service, log *slog.Logger, corsOrigins []string, auth *AuthStore) http.Handler {
-	s := &Server{ledger: ledgerSvc, log: log, mux: http.NewServeMux(), hub: NewHub(), auth: auth}
+	s := &Server{ledger: ledgerSvc, log: log, mux: http.NewServeMux(), hub: NewHub(), auth: auth, providerCatalog: providers.NewDefaultCatalog(), providerExecution: defaultProviderExecution()}
+	if ledgerSvc != nil {
+		s.identity = identity.NewService(ledgerSvc.DB())
+		s.settlement = settlement.NewService(ledgerSvc.DB(), settlement.DefaultPolicy())
+		s.pilot = pilot.NewService(ledgerSvc.DB(), false, true)
+		s.support = support.NewService(ledgerSvc.DB(), false)
+	}
+	s.configureWorkflow()
+	return s.handler(corsOrigins)
+}
+
+// NewServerWithProviderCatalog is used by sandbox harnesses and tests to
+// inject a catalog with explicit webhook validators. The production
+// constructor intentionally uses NewDefaultCatalog, whose webhook boundary
+// remains fail-closed until a secret manager is wired.
+func NewServerWithProviderCatalog(ledgerSvc *ledger.Service, log *slog.Logger, corsOrigins []string, auth *AuthStore, catalog *providers.Catalog) http.Handler {
+	s := &Server{ledger: ledgerSvc, log: log, mux: http.NewServeMux(), hub: NewHub(), auth: auth, providerCatalog: catalog, providerExecution: defaultProviderExecution()}
+	if ledgerSvc != nil {
+		s.identity = identity.NewService(ledgerSvc.DB())
+		s.settlement = settlement.NewService(ledgerSvc.DB(), settlement.DefaultPolicy())
+		s.pilot = pilot.NewService(ledgerSvc.DB(), false, true)
+		s.support = support.NewService(ledgerSvc.DB(), false)
+	}
+	s.configureWorkflow()
 	return s.handler(corsOrigins)
 }
 
 func NewServerWithReconciliation(ledgerSvc *ledger.Service, log *slog.Logger, corsOrigins []string, repo *reconciliation.Repository, poller *reconciliation.Poller, auth *AuthStore, lagWarning, lagCritical int64, readOnly bool) http.Handler {
-	s := &Server{ledger: ledgerSvc, log: log, mux: http.NewServeMux(), hub: NewHub(), reconciliation: repo, reconciliationPoller: poller, auth: auth, reconciliationLagWarning: lagWarning, reconciliationLagCritical: lagCritical, readOnly: readOnly}
+	s := &Server{ledger: ledgerSvc, log: log, mux: http.NewServeMux(), hub: NewHub(), reconciliation: repo, reconciliationPoller: poller, auth: auth, reconciliationLagWarning: lagWarning, reconciliationLagCritical: lagCritical, readOnly: readOnly, providerCatalog: providers.NewDefaultCatalog(), providerExecution: defaultProviderExecution()}
+	if ledgerSvc != nil {
+		s.identity = identity.NewService(ledgerSvc.DB())
+		s.settlement = settlement.NewService(ledgerSvc.DB(), settlement.DefaultPolicy())
+		s.support = support.NewService(ledgerSvc.DB(), readOnly)
+	}
+	s.configureWorkflow()
+	return s.handler(corsOrigins)
+}
+
+func NewServerWithReconciliationAndSettlement(ledgerSvc *ledger.Service, log *slog.Logger, corsOrigins []string, repo *reconciliation.Repository, poller *reconciliation.Poller, auth *AuthStore, lagWarning, lagCritical int64, readOnly bool, settlementSvc *settlement.Service) http.Handler {
+	return NewServerWithReconciliationAndSettlementAndPilotAndSupport(ledgerSvc, log, corsOrigins, repo, poller, auth, lagWarning, lagCritical, readOnly, settlementSvc, nil, nil)
+}
+
+func NewServerWithReconciliationAndSettlementAndPilot(ledgerSvc *ledger.Service, log *slog.Logger, corsOrigins []string, repo *reconciliation.Repository, poller *reconciliation.Poller, auth *AuthStore, lagWarning, lagCritical int64, readOnly bool, settlementSvc *settlement.Service, pilotSvc *pilot.Service) http.Handler {
+	return NewServerWithReconciliationAndSettlementAndPilotAndSupport(ledgerSvc, log, corsOrigins, repo, poller, auth, lagWarning, lagCritical, readOnly, settlementSvc, pilotSvc, nil)
+}
+
+// NewServerWithReconciliationAndSettlementAndPilotAndSupport wires the
+// explicitly bootstrapped local support service into the API server.
+func NewServerWithReconciliationAndSettlementAndPilotAndSupport(ledgerSvc *ledger.Service, log *slog.Logger, corsOrigins []string, repo *reconciliation.Repository, poller *reconciliation.Poller, auth *AuthStore, lagWarning, lagCritical int64, readOnly bool, settlementSvc *settlement.Service, pilotSvc *pilot.Service, supportSvc *support.Service) http.Handler {
+	return NewServerWithRuntimeOptions(ledgerSvc, log, corsOrigins, repo, poller, auth, lagWarning, lagCritical, readOnly, settlementSvc, pilotSvc, supportSvc, false)
+}
+
+// NewServerWithRuntimeOptions wires the API with explicit local runtime
+// capabilities. Synthetic execution is intentionally separate from provider
+// settlement and is only enabled by the development command.
+func NewServerWithRuntimeOptions(ledgerSvc *ledger.Service, log *slog.Logger, corsOrigins []string, repo *reconciliation.Repository, poller *reconciliation.Poller, auth *AuthStore, lagWarning, lagCritical int64, readOnly bool, settlementSvc *settlement.Service, pilotSvc *pilot.Service, supportSvc *support.Service, localSyntheticExecution bool) http.Handler {
+	return NewServerWithRuntimeOptionsAndProviderExecution(ledgerSvc, log, corsOrigins, repo, poller, auth, lagWarning, lagCritical, readOnly, settlementSvc, pilotSvc, supportSvc, localSyntheticExecution, nil)
+}
+
+// NewServerWithRuntimeOptionsAndProviderExecution wires the durable provider
+// execution boundary. A nil service uses a local simulated store for tests;
+// production passes a PostgreSQL-backed service from main.
+func NewServerWithRuntimeOptionsAndProviderExecution(ledgerSvc *ledger.Service, log *slog.Logger, corsOrigins []string, repo *reconciliation.Repository, poller *reconciliation.Poller, auth *AuthStore, lagWarning, lagCritical int64, readOnly bool, settlementSvc *settlement.Service, pilotSvc *pilot.Service, supportSvc *support.Service, localSyntheticExecution bool, executionSvc *providerexec.Service) http.Handler {
+	if executionSvc == nil {
+		registry := adapters.NewRegistry()
+		registry.Register(adapters.NewMTNAdapter(0, 0, "success", time.Second))
+		registry.Register(adapters.NewMpesaAdapter(0, 0, "success", time.Second))
+		executionSvc = providerexec.NewService(registry, providerexec.NewMemoryStore())
+	}
+	s := &Server{ledger: ledgerSvc, log: log, mux: http.NewServeMux(), hub: NewHub(), reconciliation: repo, reconciliationPoller: poller, auth: auth, reconciliationLagWarning: lagWarning, reconciliationLagCritical: lagCritical, readOnly: readOnly, localSyntheticExecution: localSyntheticExecution, providerCatalog: providers.NewDefaultCatalog(), settlement: settlementSvc, pilot: pilotSvc, support: supportSvc, providerExecution: executionSvc}
+	if ledgerSvc != nil {
+		s.identity = identity.NewService(ledgerSvc.DB())
+		if s.settlement == nil {
+			s.settlement = settlement.NewService(ledgerSvc.DB(), settlement.DefaultPolicy())
+		}
+		if s.pilot == nil {
+			s.pilot = pilot.NewService(ledgerSvc.DB(), readOnly, true)
+		}
+		if s.support == nil {
+			s.support = support.NewService(ledgerSvc.DB(), readOnly)
+		}
+	}
+	s.configureWorkflow()
 	return s.handler(corsOrigins)
 }
 
@@ -117,6 +225,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotImplemented, "authentication_disabled", "operator authentication is not configured")
 		return
 	}
+
 	if cookie, err := r.Cookie(sessionCookie); err == nil {
 		if operator, operatorErr := s.auth.operatorForSession(r.Context(), cookie.Value); operatorErr == nil {
 			if activityErr := s.auth.recordActivity(r.Context(), operator, "SIGN_OUT", "session", "Operator signed out"); activityErr != nil {
@@ -131,6 +240,62 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "signed_out"})
+}
+
+func (s *Server) handleTraderLogin(w http.ResponseWriter, r *http.Request) {
+	if s.auth == nil {
+		writeError(w, http.StatusNotImplemented, "authentication_disabled", "trader authentication is not configured")
+		return
+	}
+	var req struct {
+		Phone    string `json:"phone"`
+		Password string `json:"password"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	token, err := s.auth.traderLogin(r.Context(), req.Phone, req.Password)
+	if errors.Is(err, errInvalidCredentials) {
+		writeError(w, http.StatusUnauthorized, "invalid_credentials", "invalid phone or password")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "authentication_error", err.Error())
+		return
+	}
+	trader, err := s.auth.traderForSession(r.Context(), token)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "authentication_error", err.Error())
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: traderSessionCookie, Value: token, Path: "/", HttpOnly: true,
+		SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil, MaxAge: 12 * 60 * 60})
+	writeJSON(w, http.StatusOK, trader)
+}
+
+func (s *Server) handleTraderLogout(w http.ResponseWriter, r *http.Request) {
+	if s.auth == nil {
+		writeError(w, http.StatusNotImplemented, "authentication_disabled", "trader authentication is not configured")
+		return
+	}
+	if token, ok := traderToken(r); ok {
+		if err := s.auth.revokeTrader(r.Context(), token); err != nil {
+			writeError(w, http.StatusInternalServerError, "authentication_error", "unable to end session")
+			return
+		}
+	}
+	http.SetCookie(w, &http.Cookie{Name: traderSessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "signed_out"})
+}
+
+func (s *Server) handleCurrentTrader(w http.ResponseWriter, r *http.Request) {
+	trader, ok := traderFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication_required", "trader authentication is required")
+		return
+	}
+	writeJSON(w, http.StatusOK, trader)
 }
 
 func (s *Server) handler(corsOrigins []string) http.Handler {
@@ -156,6 +321,10 @@ func (s *Server) handler(corsOrigins []string) http.Handler {
 	s.mux.HandleFunc("POST /api/auth/login", s.handleLogin)
 	s.mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
 	s.mux.HandleFunc("GET /api/auth/me", s.handleCurrentOperator)
+	s.mux.HandleFunc("POST /api/trader/auth/login", s.handleTraderLogin)
+	s.mux.HandleFunc("POST /api/trader/auth/logout", s.handleTraderLogout)
+	s.mux.HandleFunc("GET /api/trader/auth/me", s.handleCurrentTrader)
+	s.mux.HandleFunc("GET /api/trader/me", s.handleCurrentTrader)
 	s.mux.HandleFunc("GET /api/activity", s.handleListActivity)
 	s.mux.HandleFunc("GET /api/activity/export", s.handleExportActivity)
 	s.mux.HandleFunc("GET /api/escrows", s.handleListEscrows)
@@ -170,12 +339,133 @@ func (s *Server) handler(corsOrigins []string) http.Handler {
 	s.mux.HandleFunc("POST /api/disputes/{id}/decision", s.handleAddDisputeDecision)
 	s.mux.HandleFunc("GET /api/disputes/{id}/decisions", s.handleListDisputeDecisions)
 	s.mux.HandleFunc("POST /api/dispute-decisions/{id}/approve", s.handleApproveDisputeDecision)
+	// Phase 3 identity/compliance workflow. These routes never call an
+	// external provider and never store document bytes.
+	s.mux.HandleFunc("GET /api/organizations", s.handleListOrganizations)
+	s.mux.HandleFunc("POST /api/organizations", s.handleCreateOrganization)
+	s.mux.HandleFunc("GET /api/organizations/{id}", s.handleGetOrganization)
+	s.mux.HandleFunc("GET /api/organizations/{id}/memberships", s.handleListMemberships)
+	s.mux.HandleFunc("POST /api/organizations/{id}/memberships", s.handleAddMembership)
+	s.mux.HandleFunc("PATCH /api/organizations/{id}/memberships/{membership_id}", s.handleUpdateMembership)
+	s.mux.HandleFunc("GET /api/organizations/{id}/verifications", s.handleListVerifications)
+	s.mux.HandleFunc("GET /api/organizations/{id}/risk-flags", s.handleListRiskFlags)
+	s.mux.HandleFunc("POST /api/organizations/{id}/risk-flags", s.handleAddRiskFlag)
+	s.mux.HandleFunc("POST /api/organizations/{id}/risk-flags/{flag_id}/resolve", s.handleResolveRiskFlag)
+	s.mux.HandleFunc("POST /api/verifications", s.handleCreateVerification)
+	s.mux.HandleFunc("GET /api/verifications", s.handleListAllVerifications)
+	s.mux.HandleFunc("POST /api/verifications/{id}/decision", s.handleDecideVerification)
+	s.mux.HandleFunc("GET /api/verifications/{id}/decisions", s.handleListVerificationDecisions)
+	s.mux.HandleFunc("GET /api/compliance/reviews", s.handleListReviews)
+	s.mux.HandleFunc("POST /api/compliance/reviews", s.handleCreateReview)
+	s.mux.HandleFunc("GET /api/compliance/reviews/{id}/notes", s.handleListReviewNotes)
+	s.mux.HandleFunc("POST /api/compliance/reviews/{id}/notes", s.handleAddReviewNote)
+	s.mux.HandleFunc("GET /api/compliance/reviews/{id}/decisions", s.handleListDecisions)
+	s.mux.HandleFunc("POST /api/compliance/reviews/{id}/decision", s.handleDecideReview)
+	s.mux.HandleFunc("GET /api/providers/status", s.handleProviderStatus)
+	s.mux.HandleFunc("GET /api/corridors", s.handleCorridorStatus)
+	s.mux.HandleFunc("GET /api/quotes", s.handleQuote)
+	s.mux.HandleFunc("GET /api/providers/webhooks/events", s.handleProviderWebhookEvents)
+	s.mux.HandleFunc("GET /api/providers/reconciliation", s.handleProviderReconciliation)
+	s.mux.HandleFunc("POST /api/provider-executions", s.handleProviderExecution)
+	s.mux.HandleFunc("GET /api/provider-executions/{id}", s.handleProviderExecutionStatus)
+	s.mux.HandleFunc("GET /api/provider-executions/transaction/{id}", s.handleProviderExecutionByTransaction)
+	// This endpoint is a local intake boundary. It only records authenticated
+	// provider evidence and never dispatches a payout or writes settlement.
+	s.mux.HandleFunc("POST /api/provider-webhooks/{provider}", s.handleProviderWebhook)
+	s.mux.HandleFunc("POST /api/transaction-workflows", s.handleCreateWorkflow)
+	s.mux.HandleFunc("GET /api/transaction-workflows/{id}", s.handleGetWorkflow)
+	s.mux.HandleFunc("GET /api/transaction-workflows/{id}/events", s.handleWorkflowEvents)
+	s.mux.HandleFunc("POST /api/transaction-workflows/{id}/retry", s.handleRetryWorkflow)
+	s.mux.HandleFunc("GET /api/operator/transaction-workflows/{id}", s.handleOperatorWorkflow)
+	s.mux.HandleFunc("POST /api/settlements", s.handleSubmitSettlement)
+	s.mux.HandleFunc("GET /api/settlements", s.handleListSettlements)
+	s.mux.HandleFunc("GET /api/settlements/{id}", s.handleGetSettlement)
+	s.mux.HandleFunc("GET /api/settlements/{id}/approvals", s.handleSettlementApprovals)
+	s.mux.HandleFunc("POST /api/settlements/{id}/preflight", s.handleSettlementPreflight)
+	s.mux.HandleFunc("POST /api/settlements/{id}/approve", s.handleApproveSettlement)
+	s.mux.HandleFunc("POST /api/settlements/{id}/execute", s.handleExecuteSettlement)
+	s.mux.HandleFunc("POST /api/settlements/{id}/cancel", s.handleCancelSettlement)
+	s.mux.HandleFunc("GET /api/settlements/{id}/reconciliation", s.handleSettlementReconciliation)
+	s.mux.HandleFunc("POST /api/settlements/{id}/reconciliation", s.handleRecordSettlementReconciliation)
+	s.mux.HandleFunc("GET /api/settlements/{id}/audit", s.handleSettlementAudit)
+	s.mux.HandleFunc("GET /api/pilots", s.handleListPilots)
+	s.mux.HandleFunc("POST /api/pilots", s.handleCreatePilot)
+	s.mux.HandleFunc("GET /api/pilots/{id}", s.handleGetPilot)
+	s.mux.HandleFunc("PATCH /api/pilots/{id}", s.handleUpdatePilot)
+	s.mux.HandleFunc("GET /api/pilots/{id}/participants", s.handlePilotParticipants)
+	s.mux.HandleFunc("POST /api/pilots/{id}/participants", s.handlePilotParticipants)
+	s.mux.HandleFunc("GET /api/pilots/{id}/approvals", s.handlePilotApprovals)
+	s.mux.HandleFunc("POST /api/pilots/{id}/approve", s.handleApprovePilot)
+	s.mux.HandleFunc("POST /api/pilots/{id}/pause", s.handlePausePilot)
+	s.mux.HandleFunc("POST /api/pilots/{id}/resume", s.handleResumePilot)
+	s.mux.HandleFunc("POST /api/pilots/{id}/cancel", s.handleCancelPilot)
+	s.mux.HandleFunc("POST /api/pilots/{id}/complete", s.handleCompletePilot)
+	s.mux.HandleFunc("GET /api/pilots/{id}/scenarios", s.handlePilotScenarios)
+	s.mux.HandleFunc("POST /api/pilots/{id}/scenarios", s.handlePilotScenarios)
+	s.mux.HandleFunc("GET /api/pilots/{id}/scenarios/{scenario_id}/runs", s.handlePilotRuns)
+	s.mux.HandleFunc("POST /api/pilots/{id}/scenarios/{scenario_id}/runs", s.handlePilotRuns)
+	s.mux.HandleFunc("GET /api/pilots/{id}/observations", s.handlePilotObservations)
+	s.mux.HandleFunc("POST /api/pilots/{id}/observations", s.handlePilotObservations)
+	s.mux.HandleFunc("GET /api/pilots/{id}/incidents", s.handlePilotIncidents)
+	s.mux.HandleFunc("POST /api/pilots/{id}/incidents", s.handlePilotIncidents)
+	s.mux.HandleFunc("GET /api/pilots/{id}/support-tickets", s.handlePilotIncidents)
+	s.mux.HandleFunc("POST /api/pilots/{id}/support-tickets", s.handlePilotIncidents)
+	s.mux.HandleFunc("GET /api/support/tickets", s.handleListSupportTickets)
+	s.mux.HandleFunc("POST /api/support/tickets", s.handleCreateSupportTicket)
+	s.mux.HandleFunc("GET /api/support/tickets/{id}", s.handleGetSupportTicket)
+	s.mux.HandleFunc("PATCH /api/support/tickets/{id}", s.handleUpdateSupportTicket)
+	s.mux.HandleFunc("GET /api/notifications", s.handleListNotifications)
+	s.mux.HandleFunc("POST /api/notifications/{id}/read", s.handleReadNotification)
+	s.mux.HandleFunc("GET /api/pilots/{id}/audit", s.handlePilotAudit)
 
 	protected := s.mux
 	if s.auth != nil {
 		protected = http.NewServeMux()
 		protected.Handle("/", s.mux)
+		// Trader-facing legacy endpoints are authenticated separately from
+		// operator governance. The ownership checks below remain defense in
+		// depth for requests carrying an upstream trader context.
+		for _, route := range []struct {
+			method string
+			path   string
+			h      http.Handler
+		}{
+			{"GET", "/api/users/{id}", http.HandlerFunc(s.handleGetUser)},
+			{"GET", "/api/lookup/user/{phone}", http.HandlerFunc(s.handleGetUserByPhone)},
+			{"GET", "/api/users/{id}/accounts", http.HandlerFunc(s.handleListAccounts)},
+			{"GET", "/api/users/{id}/transfers", http.HandlerFunc(s.handleListUserTransfers)},
+			{"POST", "/api/users/{id}/invoices", http.HandlerFunc(s.handleCreateInvoice)},
+			{"GET", "/api/users/{id}/invoices", http.HandlerFunc(s.handleListInvoices)},
+			{"GET", "/api/invoices/{id}", http.HandlerFunc(s.handleGetInvoice)},
+			{"GET", "/api/accounts/{id}", http.HandlerFunc(s.handleGetAccount)},
+			{"GET", "/api/accounts/{id}/balance", http.HandlerFunc(s.handleGetBalance)},
+			{"POST", "/api/accounts/{id}/fund", http.HandlerFunc(s.handleFundAccount)},
+			{"POST", "/api/transfers", http.HandlerFunc(s.handleCreateTransfer)},
+			{"POST", "/api/transfers/cross-border", http.HandlerFunc(s.handleCreateCrossBorderTransfer)},
+			{"GET", "/api/transfers/{id}", http.HandlerFunc(s.handleGetTransfer)},
+			{"GET", "/api/transfers/{id}/entries", http.HandlerFunc(s.handleListEntries)},
+			{"POST", "/api/transfers/{id}/reverse", http.HandlerFunc(s.handleReverseTransfer)},
+			{"POST", "/api/transaction-workflows", http.HandlerFunc(s.handleCreateWorkflow)},
+			{"GET", "/api/transaction-workflows/{id}", http.HandlerFunc(s.handleGetWorkflow)},
+			{"GET", "/api/transaction-workflows/{id}/events", http.HandlerFunc(s.handleWorkflowEvents)},
+			{"POST", "/api/transaction-workflows/{id}/retry", http.HandlerFunc(s.handleRetryWorkflow)},
+		} {
+			protected.Handle(route.method+" "+route.path, s.auth.traderRequire(route.h))
+		}
 		protected.HandleFunc("POST /api/auth/login", s.handleLogin)
+		protected.HandleFunc("POST /api/trader/auth/login", s.handleTraderLogin)
+		protected.Handle("POST /api/trader/auth/logout", s.auth.traderRequire(http.HandlerFunc(s.handleTraderLogout)))
+		protected.Handle("GET /api/trader/auth/me", s.auth.traderRequire(http.HandlerFunc(s.handleCurrentTrader)))
+		protected.Handle("GET /api/trader/me", s.auth.traderRequire(http.HandlerFunc(s.handleCurrentTrader)))
+		protected.Handle("GET /api/trader/recipients", s.auth.traderRequire(http.HandlerFunc(s.handleTraderRecipient)))
+		protected.Handle("GET /api/quotes", s.auth.traderRequire(http.HandlerFunc(s.handleQuote)))
+		protected.Handle("GET /api/corridors", s.auth.traderRequire(http.HandlerFunc(s.handleCorridorStatus)))
+		protected.Handle("GET /api/support/tickets", s.auth.traderRequire(http.HandlerFunc(s.handleListSupportTickets)))
+		protected.Handle("POST /api/support/tickets", s.auth.traderRequire(http.HandlerFunc(s.handleCreateSupportTicket)))
+		protected.Handle("GET /api/support/tickets/{id}", s.auth.traderRequire(http.HandlerFunc(s.handleGetSupportTicket)))
+		protected.Handle("PATCH /api/support/tickets/{id}", s.auth.traderRequire(http.HandlerFunc(s.handleUpdateSupportTicket)))
+		protected.Handle("GET /api/notifications", s.auth.traderRequire(http.HandlerFunc(s.handleListNotifications)))
+		protected.Handle("POST /api/notifications/{id}/read", s.auth.traderRequire(http.HandlerFunc(s.handleReadNotification)))
 		protected.Handle("POST /api/auth/logout", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleLogout)))
 		protected.Handle("GET /api/auth/me", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleCurrentOperator)))
 		protected.Handle("GET /api/activity", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleListActivity)))
@@ -193,6 +483,77 @@ func (s *Server) handler(corsOrigins []string) http.Handler {
 		protected.Handle("POST /api/disputes/{id}/decision", s.auth.requireRole("arbiter")(http.HandlerFunc(s.handleAddDisputeDecision)))
 		protected.Handle("GET /api/disputes/{id}/decisions", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleListDisputeDecisions)))
 		protected.Handle("POST /api/dispute-decisions/{id}/approve", s.auth.requireRole("operator")(http.HandlerFunc(s.handleApproveDisputeDecision)))
+		protected.Handle("GET /api/providers/status", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleProviderStatus)))
+		protected.Handle("GET /api/providers/webhooks/events", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleProviderWebhookEvents)))
+		protected.Handle("GET /api/providers/reconciliation", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleProviderReconciliation)))
+		protected.Handle("POST /api/provider-executions", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleProviderExecution)))
+		protected.Handle("GET /api/provider-executions/{id}", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleProviderExecutionStatus)))
+		protected.Handle("GET /api/provider-executions/transaction/{id}", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleProviderExecutionByTransaction)))
+		protected.Handle("GET /api/operator/transaction-workflows/{id}", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleOperatorWorkflow)))
+		protected.Handle("GET /api/settlements", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleListSettlements)))
+		protected.Handle("GET /api/settlements/{id}", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleGetSettlement)))
+		protected.Handle("GET /api/settlements/{id}/approvals", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleSettlementApprovals)))
+		protected.Handle("GET /api/settlements/{id}/reconciliation", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleSettlementReconciliation)))
+		protected.Handle("GET /api/settlements/{id}/audit", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleSettlementAudit)))
+		protected.Handle("POST /api/settlements", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleSubmitSettlement)))
+		protected.Handle("POST /api/settlements/{id}/preflight", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleSettlementPreflight)))
+		protected.Handle("POST /api/settlements/{id}/approve", s.auth.requireRole("arbiter")(http.HandlerFunc(s.handleApproveSettlement)))
+		protected.Handle("POST /api/settlements/{id}/execute", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleExecuteSettlement)))
+		protected.Handle("POST /api/settlements/{id}/cancel", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleCancelSettlement)))
+		protected.Handle("POST /api/settlements/{id}/reconciliation", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleRecordSettlementReconciliation)))
+		protected.Handle("GET /api/pilots", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleListPilots)))
+		protected.Handle("POST /api/pilots", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleCreatePilot)))
+		protected.Handle("GET /api/pilots/{id}", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleGetPilot)))
+		protected.Handle("PATCH /api/pilots/{id}", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleUpdatePilot)))
+		protected.Handle("GET /api/pilots/{id}/participants", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handlePilotParticipants)))
+		protected.Handle("POST /api/pilots/{id}/participants", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handlePilotParticipants)))
+		protected.Handle("GET /api/pilots/{id}/approvals", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handlePilotApprovals)))
+		protected.Handle("POST /api/pilots/{id}/approve", s.auth.requireRole("arbiter")(http.HandlerFunc(s.handleApprovePilot)))
+		protected.Handle("POST /api/pilots/{id}/pause", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handlePausePilot)))
+		protected.Handle("POST /api/pilots/{id}/resume", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleResumePilot)))
+		protected.Handle("POST /api/pilots/{id}/cancel", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleCancelPilot)))
+		protected.Handle("POST /api/pilots/{id}/complete", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleCompletePilot)))
+		protected.Handle("GET /api/pilots/{id}/scenarios", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handlePilotScenarios)))
+		protected.Handle("POST /api/pilots/{id}/scenarios", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handlePilotScenarios)))
+		protected.Handle("GET /api/pilots/{id}/scenarios/{scenario_id}/runs", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handlePilotRuns)))
+		protected.Handle("POST /api/pilots/{id}/scenarios/{scenario_id}/runs", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handlePilotRuns)))
+		protected.Handle("GET /api/pilots/{id}/observations", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handlePilotObservations)))
+		protected.Handle("POST /api/pilots/{id}/observations", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handlePilotObservations)))
+		protected.Handle("GET /api/pilots/{id}/incidents", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handlePilotIncidents)))
+		protected.Handle("POST /api/pilots/{id}/incidents", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handlePilotIncidents)))
+		protected.Handle("GET /api/pilots/{id}/support-tickets", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handlePilotIncidents)))
+		protected.Handle("POST /api/pilots/{id}/support-tickets", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handlePilotIncidents)))
+		protected.Handle("GET /api/pilots/{id}/audit", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handlePilotAudit)))
+		for _, route := range []struct {
+			method, path string
+			handler      http.Handler
+			roles        []string
+		}{
+			{"GET", "/api/organizations", http.HandlerFunc(s.handleListOrganizations), []string{"operator", "arbiter"}},
+			{"POST", "/api/organizations", http.HandlerFunc(s.handleCreateOrganization), []string{"operator", "arbiter"}},
+			{"GET", "/api/organizations/{id}", http.HandlerFunc(s.handleGetOrganization), []string{"operator", "arbiter"}},
+			{"GET", "/api/organizations/{id}/memberships", http.HandlerFunc(s.handleListMemberships), []string{"operator", "arbiter"}},
+			{"POST", "/api/organizations/{id}/memberships", http.HandlerFunc(s.handleAddMembership), []string{"operator", "arbiter"}},
+			{"PATCH", "/api/organizations/{id}/memberships/{membership_id}", http.HandlerFunc(s.handleUpdateMembership), []string{"operator", "arbiter"}},
+			{"GET", "/api/organizations/{id}/verifications", http.HandlerFunc(s.handleListVerifications), []string{"operator", "arbiter"}},
+			{"GET", "/api/organizations/{id}/risk-flags", http.HandlerFunc(s.handleListRiskFlags), []string{"operator", "arbiter"}},
+			{"POST", "/api/organizations/{id}/risk-flags", http.HandlerFunc(s.handleAddRiskFlag), []string{"operator", "arbiter"}},
+			{"POST", "/api/organizations/{id}/risk-flags/{flag_id}/resolve", http.HandlerFunc(s.handleResolveRiskFlag), []string{"operator", "arbiter"}},
+			{"POST", "/api/verifications", http.HandlerFunc(s.handleCreateVerification), []string{"operator", "arbiter"}},
+			{"GET", "/api/verifications", http.HandlerFunc(s.handleListAllVerifications), []string{"operator", "arbiter"}},
+			{"POST", "/api/verifications/{id}/decision", http.HandlerFunc(s.handleDecideVerification), []string{"operator", "arbiter"}},
+			{"GET", "/api/verifications/{id}/decisions", http.HandlerFunc(s.handleListVerificationDecisions), []string{"operator", "arbiter"}},
+			{"GET", "/api/compliance/reviews", http.HandlerFunc(s.handleListReviews), []string{"operator", "arbiter"}},
+			{"POST", "/api/compliance/reviews", http.HandlerFunc(s.handleCreateReview), []string{"operator", "arbiter"}},
+			{"GET", "/api/compliance/reviews/{id}/notes", http.HandlerFunc(s.handleListReviewNotes), []string{"operator", "arbiter"}},
+			{"POST", "/api/compliance/reviews/{id}/notes", http.HandlerFunc(s.handleAddReviewNote), []string{"operator", "arbiter"}},
+			{"GET", "/api/compliance/reviews/{id}/decisions", http.HandlerFunc(s.handleListDecisions), []string{"operator", "arbiter"}},
+			{"POST", "/api/compliance/reviews/{id}/decision", http.HandlerFunc(s.handleDecideReview), []string{"operator", "arbiter"}},
+		} {
+			var h http.Handler = route.handler
+			h = s.auth.requireRole(route.roles...)(h)
+			protected.Handle(route.method+" "+route.path, h)
+		}
 	}
 	return NewCORS(corsOrigins, s.withMiddleware(s.readOnlyGuard(protected)))
 }
@@ -209,6 +570,25 @@ func (s *Server) readOnlyGuard(next http.Handler) http.Handler {
 			strings.HasSuffix(r.URL.Path, "/reverse") ||
 			strings.HasSuffix(r.URL.Path, "/invoices")) {
 			writeError(w, http.StatusLocked, "read_only_mode", "state-changing ledger operations are disabled")
+			return
+		}
+		if r.Method != http.MethodGet && (strings.HasPrefix(r.URL.Path, "/api/organizations") ||
+			strings.HasPrefix(r.URL.Path, "/api/verifications") ||
+			strings.HasPrefix(r.URL.Path, "/api/compliance/")) {
+			writeError(w, http.StatusLocked, "read_only_mode", "state-changing identity operations are disabled")
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/settlements") && r.Method != http.MethodGet {
+			writeError(w, http.StatusLocked, "read_only_mode", "state-changing settlement operations are disabled")
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/pilots") && r.Method != http.MethodGet {
+			writeError(w, http.StatusLocked, "read_only_mode", "state-changing pilot operations are disabled")
+			return
+		}
+		if (strings.HasPrefix(r.URL.Path, "/api/support/") || strings.HasPrefix(r.URL.Path, "/api/notifications/")) &&
+			r.Method != http.MethodGet {
+			writeError(w, http.StatusLocked, "read_only_mode", "state-changing support operations are disabled")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -236,6 +616,125 @@ func (s *Server) handleCurrentOperator(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, operator)
+}
+
+func (s *Server) handleProviderStatus(w http.ResponseWriter, r *http.Request) {
+	if s.providerCatalog == nil {
+		writeError(w, http.StatusServiceUnavailable, "providers_unavailable", "provider control plane is not configured")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"providers": s.providerCatalog.Providers()})
+}
+
+func (s *Server) handleCorridorStatus(w http.ResponseWriter, r *http.Request) {
+	if s.providerCatalog == nil {
+		writeError(w, http.StatusServiceUnavailable, "providers_unavailable", "provider control plane is not configured")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"corridors": s.providerCatalog.Corridors()})
+}
+
+func (s *Server) handleQuote(w http.ResponseWriter, r *http.Request) {
+	if s.providerCatalog == nil {
+		writeError(w, http.StatusServiceUnavailable, "providers_unavailable", "provider control plane is not configured")
+		return
+	}
+	corridorID := strings.TrimSpace(r.URL.Query().Get("corridor_id"))
+	amountText := strings.TrimSpace(r.URL.Query().Get("amount_minor"))
+	if corridorID == "" || amountText == "" {
+		writeError(w, http.StatusBadRequest, "invalid_quote_request", "corridor_id and amount_minor are required")
+		return
+	}
+	amount, err := strconv.ParseInt(amountText, 10, 64)
+	if err != nil || amount <= 0 {
+		writeError(w, http.StatusBadRequest, "invalid_quote_request", "amount_minor must be a positive integer")
+		return
+	}
+	quote, err := s.providerCatalog.Quote(corridorID, amount, time.Now().UTC())
+	if err != nil {
+		switch {
+		case errors.Is(err, providers.ErrProviderDisabled):
+			writeError(w, http.StatusServiceUnavailable, "provider_disabled", err.Error())
+		case errors.Is(err, providers.ErrKillSwitchActive):
+			writeError(w, http.StatusLocked, "kill_switch_active", err.Error())
+		case errors.Is(err, providers.ErrLimitExceeded):
+			writeError(w, http.StatusUnprocessableEntity, "limit_exceeded", err.Error())
+		default:
+			writeError(w, http.StatusBadRequest, "invalid_quote_request", err.Error())
+		}
+		return
+	}
+	quote.ObservationOnly = !s.localSyntheticExecution
+	execution := "disabled"
+	if s.localSyntheticExecution {
+		execution = "local_synthetic"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"quote": quote, "execution": execution, "observation_only": quote.ObservationOnly})
+}
+
+func (s *Server) handleProviderWebhookEvents(w http.ResponseWriter, r *http.Request) {
+	if s.providerCatalog == nil {
+		writeError(w, http.StatusServiceUnavailable, "providers_unavailable", "provider control plane is not configured")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"events": s.providerCatalog.WebhookEvents()})
+}
+
+func (s *Server) handleProviderReconciliation(w http.ResponseWriter, r *http.Request) {
+	if s.providerCatalog == nil {
+		writeError(w, http.StatusServiceUnavailable, "providers_unavailable", "provider control plane is not configured")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"reconciliation": s.providerCatalog.Reconciliations()})
+}
+
+func (s *Server) handleProviderWebhook(w http.ResponseWriter, r *http.Request) {
+	if s.providerCatalog == nil {
+		writeError(w, http.StatusServiceUnavailable, "providers_unavailable", "provider control plane is not configured")
+		return
+	}
+	replayKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if replayKey == "" {
+		replayKey = strings.TrimSpace(r.Header.Get("X-Provider-Event-ID"))
+	}
+	if replayKey == "" {
+		writeError(w, http.StatusBadRequest, "missing_replay_key", "Idempotency-Key or X-Provider-Event-ID is required")
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_webhook", "unable to read webhook body")
+		return
+	}
+	event, err := s.providerCatalog.ReceiveWebhook(r.Context(), r.PathValue("provider"), replayKey, r.Header.Get("X-Provider-Signature"), body)
+	if err != nil {
+		status := http.StatusUnauthorized
+		code := "webhook_rejected"
+		if errors.Is(err, providers.ErrWebhookReplay) {
+			status, code = http.StatusConflict, "webhook_replay"
+		} else if errors.Is(err, providers.ErrProviderDisabled) {
+			status, code = http.StatusServiceUnavailable, "provider_disabled"
+		}
+		writeJSON(w, status, map[string]any{"error": code, "message": err.Error(), "event": event})
+		return
+	}
+	var evidence any
+	if s.providerExecution != nil {
+		if callback, decodeErr := providerexec.DecodeCallback(event.ProviderID, body, replayKey); decodeErr == nil {
+			stored, replay, ingestErr := s.providerExecution.IngestEvent(r.Context(), callback)
+			if ingestErr != nil {
+				writeError(w, http.StatusServiceUnavailable, "provider_evidence_unavailable", ingestErr.Error())
+				return
+			}
+			evidence = map[string]any{"event": stored, "replay": replay}
+			if s.workflow != nil && !replay {
+				if workflowErr := s.workflow.ApplyProviderEvent(r.Context(), callback); workflowErr != nil {
+					s.log.Warn("provider callback workflow update deferred", "err", workflowErr, "transaction_id", callback.TransactionID)
+				}
+			}
+		}
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"event": event, "provider_evidence": evidence, "settlement": "not_started"})
 }
 
 func (s *Server) handleListActivity(w http.ResponseWriter, r *http.Request) {
@@ -319,6 +818,12 @@ func (s *Server) handleExportActivity(w http.ResponseWriter, r *http.Request) {
 func (s *Server) withMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+		requestID := strings.TrimSpace(r.Header.Get("X-Request-ID"))
+		if requestID == "" {
+			requestID = fmt.Sprintf("vuka-%d", time.Now().UnixNano())
+		}
+		w.Header().Set("X-Request-ID", requestID)
+		w.Header().Set("X-API-Version", "1")
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		defer func() {
 			if rec := recover(); rec != nil {
@@ -330,6 +835,7 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 				"path", r.URL.Path,
 				"status", sw.status,
 				"duration_ms", time.Since(start).Milliseconds(),
+				"request_id", requestID,
 			)
 		}()
 		next.ServeHTTP(sw, r)
@@ -370,6 +876,12 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		s.mapServiceError(w, err)
 		return
 	}
+	if s.auth != nil && req.Password != "" {
+		if err := s.auth.EnsureTraderPassword(r.Context(), user.ID, req.Password); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_password", err.Error())
+			return
+		}
+	}
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"user":     user,
 		"accounts": accounts,
@@ -377,6 +889,9 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) {
+	if !s.requireTraderUser(w, r, r.PathValue("id")) {
+		return
+	}
 	user, err := s.ledger.GetUser(r.Context(), r.PathValue("id"))
 	if err != nil {
 		s.mapServiceError(w, err)
@@ -391,10 +906,43 @@ func (s *Server) handleGetUserByPhone(w http.ResponseWriter, r *http.Request) {
 		s.mapServiceError(w, err)
 		return
 	}
+	if traderID, ok := traderIDFromRequest(r); ok && traderID != user.ID {
+		writeError(w, http.StatusForbidden, "forbidden", "the authenticated trader cannot access another trader's record")
+		return
+	}
 	writeJSON(w, http.StatusOK, user)
 }
 
+func (s *Server) handleTraderRecipient(w http.ResponseWriter, r *http.Request) {
+	phone := strings.TrimSpace(r.URL.Query().Get("phone"))
+	if phone == "" {
+		writeError(w, http.StatusBadRequest, "invalid_recipient", "phone is required")
+		return
+	}
+	user, err := s.ledger.GetUserByPhone(r.Context(), phone)
+	if err != nil {
+		s.mapServiceError(w, err)
+		return
+	}
+	accounts, err := s.ledger.ListAccounts(r.Context(), user.ID)
+	if err != nil {
+		s.mapServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user": map[string]string{
+			"id":           user.ID,
+			"full_name":    user.FullName,
+			"phone_number": user.PhoneNumber,
+		},
+		"accounts": accounts,
+	})
+}
+
 func (s *Server) handleListAccounts(w http.ResponseWriter, r *http.Request) {
+	if !s.requireTraderUser(w, r, r.PathValue("id")) {
+		return
+	}
 	accounts, err := s.ledger.ListAccounts(r.Context(), r.PathValue("id"))
 	if err != nil {
 		s.mapServiceError(w, err)
@@ -404,6 +952,9 @@ func (s *Server) handleListAccounts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListUserTransfers(w http.ResponseWriter, r *http.Request) {
+	if !s.requireTraderUser(w, r, r.PathValue("id")) {
+		return
+	}
 	filter := ledger.TransferFilter{
 		UserID:    r.PathValue("id"),
 		AccountID: r.URL.Query().Get("account_id"),
@@ -421,6 +972,9 @@ func (s *Server) handleListUserTransfers(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handleCreateInvoice(w http.ResponseWriter, r *http.Request) {
+	if !s.requireTraderUser(w, r, r.PathValue("id")) {
+		return
+	}
 	var req ledger.CreateInvoiceRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
@@ -435,6 +989,9 @@ func (s *Server) handleCreateInvoice(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListInvoices(w http.ResponseWriter, r *http.Request) {
+	if !s.requireTraderUser(w, r, r.PathValue("id")) {
+		return
+	}
 	direction := r.URL.Query().Get("direction")
 	inv, err := s.ledger.ListInvoices(r.Context(), r.PathValue("id"), direction)
 	if err != nil {
@@ -448,6 +1005,10 @@ func (s *Server) handleListInvoices(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetInvoice(w http.ResponseWriter, r *http.Request) {
+	if traderID, ok := traderIDFromRequest(r); ok && !s.ownsInvoice(r.Context(), traderID, r.PathValue("id")) {
+		writeError(w, http.StatusForbidden, "forbidden", "the authenticated trader cannot access this invoice")
+		return
+	}
 	inv, err := s.ledger.GetInvoice(r.Context(), r.PathValue("id"))
 	if err != nil {
 		s.mapServiceError(w, err)
@@ -457,6 +1018,10 @@ func (s *Server) handleGetInvoice(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetAccount(w http.ResponseWriter, r *http.Request) {
+	if traderID, ok := traderIDFromRequest(r); ok && !s.ownsAccount(r.Context(), traderID, r.PathValue("id")) {
+		writeError(w, http.StatusForbidden, "forbidden", "the authenticated trader cannot access this account")
+		return
+	}
 	acc, err := s.ledger.GetAccount(r.Context(), r.PathValue("id"))
 	if err != nil {
 		s.mapServiceError(w, err)
@@ -466,6 +1031,10 @@ func (s *Server) handleGetAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetBalance(w http.ResponseWriter, r *http.Request) {
+	if traderID, ok := traderIDFromRequest(r); ok && !s.ownsAccount(r.Context(), traderID, r.PathValue("id")) {
+		writeError(w, http.StatusForbidden, "forbidden", "the authenticated trader cannot access this account")
+		return
+	}
 	balance, err := s.ledger.GetBalance(r.Context(), r.PathValue("id"))
 	if err != nil {
 		s.mapServiceError(w, err)
@@ -475,6 +1044,10 @@ func (s *Server) handleGetBalance(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleFundAccount(w http.ResponseWriter, r *http.Request) {
+	if traderID, ok := traderIDFromRequest(r); ok && !s.ownsAccount(r.Context(), traderID, r.PathValue("id")) {
+		writeError(w, http.StatusForbidden, "forbidden", "the authenticated trader cannot fund this account")
+		return
+	}
 	key := r.Header.Get("Idempotency-Key")
 	if key == "" {
 		writeError(w, http.StatusBadRequest, "missing_idempotency_key",
@@ -505,6 +1078,10 @@ func (s *Server) handleCreateTransfer(w http.ResponseWriter, r *http.Request) {
 	var req ledger.TransferRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	if traderID, ok := traderIDFromRequest(r); ok && !s.ownsAccount(r.Context(), traderID, req.SourceAccountID) {
+		writeError(w, http.StatusForbidden, "forbidden", "the authenticated trader cannot debit this account")
 		return
 	}
 
@@ -538,6 +1115,21 @@ func (s *Server) handleCreateCrossBorderTransfer(w http.ResponseWriter, r *http.
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
 		return
+	}
+	if traderID, ok := traderIDFromRequest(r); ok && !s.ownsAccount(r.Context(), traderID, req.SourceAccountID) {
+		writeError(w, http.StatusForbidden, "forbidden", "the authenticated trader cannot debit this account")
+		return
+	}
+	if req.QuoteID != "" && s.providerCatalog != nil {
+		amountMinor := int64(req.Amount * 100)
+		corridorID := req.CorridorID
+		if corridorID == "" {
+			corridorID = "rw-rwf-ke-kes"
+		}
+		if err := s.providerCatalog.ValidateQuote(corridorID, req.QuoteID, amountMinor, time.Now().UTC()); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_quote", err.Error())
+			return
+		}
 	}
 
 	t, replay, err := s.ledger.CrossBorderTransfer(r.Context(), key, req)
@@ -577,6 +1169,10 @@ func (s *Server) handleGetFx(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetTransfer(w http.ResponseWriter, r *http.Request) {
+	if traderID, ok := traderIDFromRequest(r); ok && !s.ownsTransfer(r.Context(), traderID, r.PathValue("id")) {
+		writeError(w, http.StatusForbidden, "forbidden", "the authenticated trader cannot access this transfer")
+		return
+	}
 	t, err := s.ledger.GetTransfer(r.Context(), r.PathValue("id"))
 	if err != nil {
 		s.mapServiceError(w, err)
@@ -586,6 +1182,10 @@ func (s *Server) handleGetTransfer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListEntries(w http.ResponseWriter, r *http.Request) {
+	if traderID, ok := traderIDFromRequest(r); ok && !s.ownsTransfer(r.Context(), traderID, r.PathValue("id")) {
+		writeError(w, http.StatusForbidden, "forbidden", "the authenticated trader cannot access these entries")
+		return
+	}
 	entries, err := s.ledger.ListLedgerEntries(r.Context(), r.PathValue("id"))
 	if err != nil {
 		s.mapServiceError(w, err)
@@ -595,6 +1195,10 @@ func (s *Server) handleListEntries(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleReverseTransfer(w http.ResponseWriter, r *http.Request) {
+	if traderID, ok := traderIDFromRequest(r); ok && !s.ownsTransfer(r.Context(), traderID, r.PathValue("id")) {
+		writeError(w, http.StatusForbidden, "forbidden", "the authenticated trader cannot reverse this transfer")
+		return
+	}
 	var req ledger.ReverseRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
@@ -1072,6 +1676,405 @@ func (s *Server) handleApproveDisputeDecision(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeJSON(w, http.StatusCreated, approval)
+}
+
+// phase3Error preserves validation/conflict/not-found semantics instead of
+// turning workflow errors into broad 500 responses.
+func (s *Server) phase3Error(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, identity.ErrNotFound):
+		writeError(w, http.StatusNotFound, "not_found", err.Error())
+	case errors.Is(err, identity.ErrConflict):
+		writeError(w, http.StatusConflict, "conflict", err.Error())
+	case errors.Is(err, identity.ErrSelfApproval):
+		writeError(w, http.StatusForbidden, "self_approval_forbidden", err.Error())
+	case errors.Is(err, identity.ErrInvalidTransition):
+		writeError(w, http.StatusConflict, "invalid_transition", err.Error())
+	case errors.Is(err, identity.ErrInvalid):
+		writeError(w, http.StatusUnprocessableEntity, "invalid_request", err.Error())
+	default:
+		s.log.Error("phase 3 service error", "err", err)
+		writeError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+	}
+}
+
+func (s *Server) phase3Ready(w http.ResponseWriter) bool {
+	if s.identity == nil {
+		writeError(w, http.StatusServiceUnavailable, "identity_unavailable", "identity service is not configured")
+		return false
+	}
+	return true
+}
+
+func (s *Server) handleListOrganizations(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	items, err := s.identity.ListOrganizations(r.Context(), r.URL.Query().Get("status"))
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"organizations": items})
+}
+
+func (s *Server) handleCreateOrganization(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	var req identity.CreateOrganizationRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	item, err := s.identity.CreateOrganization(r.Context(), req)
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	if actor, ok := operatorFromContext(r.Context()); ok {
+		if err := s.auth.recordActivity(r.Context(), actor, "ORGANIZATION_CREATED", item.ID, "Local organization profile created"); err != nil {
+			s.phase3Error(w, err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) handleGetOrganization(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	item, err := s.identity.GetOrganization(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) handleListMemberships(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	items, err := s.identity.ListMemberships(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"memberships": items})
+}
+
+func (s *Server) handleAddMembership(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	var req identity.CreateMembershipRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	item, err := s.identity.AddMembership(r.Context(), r.PathValue("id"), req)
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	if actor, ok := operatorFromContext(r.Context()); ok {
+		if err := s.auth.recordActivity(r.Context(), actor, "MEMBERSHIP_CREATED", item.OrganizationID, "Organization membership created"); err != nil {
+			s.phase3Error(w, err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) handleUpdateMembership(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	var req identity.UpdateMembershipRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	item, err := s.identity.UpdateMembership(r.Context(), r.PathValue("id"), r.PathValue("membership_id"), req)
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	if actor, ok := operatorFromContext(r.Context()); ok {
+		if err := s.auth.recordActivity(r.Context(), actor, "MEMBERSHIP_UPDATED", item.ID, "Organization membership status or role changed"); err != nil {
+			s.phase3Error(w, err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) handleListVerifications(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	items, err := s.identity.ListVerifications(r.Context(), r.PathValue("id"), "")
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"verifications": items})
+}
+
+func (s *Server) handleCreateVerification(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	actor, ok := operatorFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication_required", "operator authentication is required")
+		return
+	}
+	var req identity.CreateVerificationRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	item, err := s.identity.CreateVerification(r.Context(), req, actor.Email)
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	if err := s.auth.recordActivity(r.Context(), actor, "IDENTITY_VERIFICATION_SUBMITTED", item.ID, "Local verification metadata submitted"); err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) handleListAllVerifications(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	items, err := s.identity.ListVerifications(r.Context(), r.URL.Query().Get("organization_id"), r.URL.Query().Get("user_id"))
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"verifications": items})
+}
+
+func (s *Server) handleDecideVerification(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	actor, ok := operatorFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication_required", "operator authentication is required")
+		return
+	}
+	var req identity.DecideVerificationRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	item, err := s.identity.DecideVerification(r.Context(), r.PathValue("id"), actor.Email, req)
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	if err := s.auth.recordActivity(r.Context(), actor, "IDENTITY_VERIFICATION_DECIDED", item.ID, "Local verification decision recorded"); err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) handleListVerificationDecisions(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	items, err := s.identity.ListVerificationDecisions(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"decisions": items})
+}
+
+func (s *Server) handleListReviews(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	items, err := s.identity.ListReviews(r.Context(), r.URL.Query().Get("organization_id"), r.URL.Query().Get("status"))
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"reviews": items})
+}
+
+func (s *Server) handleCreateReview(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	actor, ok := operatorFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication_required", "operator authentication is required")
+		return
+	}
+	var req identity.CreateReviewRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	item, err := s.identity.CreateReview(r.Context(), req, actor.Email)
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	if err := s.auth.recordActivity(r.Context(), actor, "COMPLIANCE_REVIEW_CREATED", item.ID, "Compliance review opened"); err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) handleDecideReview(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	actor, ok := operatorFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication_required", "operator authentication is required")
+		return
+	}
+	var req identity.DecideReviewRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	review, decision, err := s.identity.DecideReview(r.Context(), r.PathValue("id"), actor.Email, req)
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	if err := s.auth.recordActivity(r.Context(), actor, "COMPLIANCE_DECISION_RECORDED", review.ID, decision.FromStatus+" -> "+decision.ToStatus); err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"review": review, "decision": decision})
+}
+
+func (s *Server) handleListRiskFlags(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	items, err := s.identity.ListRiskFlags(r.Context(), r.PathValue("id"), r.URL.Query().Get("status"))
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"risk_flags": items})
+}
+
+func (s *Server) handleAddRiskFlag(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	actor, ok := operatorFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication_required", "operator authentication is required")
+		return
+	}
+	var req identity.CreateRiskFlagRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	item, err := s.identity.AddRiskFlag(r.Context(), r.PathValue("id"), req, actor.Email)
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	if err := s.auth.recordActivity(r.Context(), actor, "RISK_FLAG_CREATED", item.ID, item.Code+" "+item.Severity); err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) handleResolveRiskFlag(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	actor, ok := operatorFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication_required", "operator authentication is required")
+		return
+	}
+	var req identity.ResolveRiskFlagRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	item, err := s.identity.ResolveRiskFlag(r.Context(), r.PathValue("id"), r.PathValue("flag_id"), actor.Email, req.Resolution)
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	if err := s.auth.recordActivity(r.Context(), actor, "RISK_FLAG_RESOLVED", item.ID, "Risk flag resolved"); err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) handleListReviewNotes(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	items, err := s.identity.ListReviewNotes(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"notes": items})
+}
+
+func (s *Server) handleAddReviewNote(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	actor, ok := operatorFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication_required", "operator authentication is required")
+		return
+	}
+	var req identity.CreateReviewNoteRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	item, err := s.identity.AddReviewNote(r.Context(), r.PathValue("id"), actor.Email, req.Note)
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	if err := s.auth.recordActivity(r.Context(), actor, "COMPLIANCE_REVIEW_NOTE_CREATED", item.ReviewID, "Compliance review note added"); err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) handleListDecisions(w http.ResponseWriter, r *http.Request) {
+	if !s.phase3Ready(w) {
+		return
+	}
+	items, err := s.identity.ListDecisions(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.phase3Error(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"decisions": items})
 }
 
 // ---------------------------------------------------------------------------
