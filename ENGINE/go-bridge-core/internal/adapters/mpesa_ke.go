@@ -50,6 +50,20 @@ func (m *MpesaAdapter) Name() string {
 	return m.NameKey
 }
 
+func (m *MpesaAdapter) ContractVersion() string { return ContractVersion }
+func (m *MpesaAdapter) Environment() string     { return "simulated" }
+func (m *MpesaAdapter) ValidateConfig() error {
+	if m.Delay < 0 || m.Timeout <= 0 || m.FailRate < 0 || m.FailRate > 1 {
+		return fmt.Errorf("mpesa-ke: invalid sandbox adapter configuration")
+	}
+	switch m.Mode {
+	case "", "success", "fail", "timeout":
+		return nil
+	default:
+		return fmt.Errorf("mpesa-ke: unsupported simulation mode %q", m.Mode)
+	}
+}
+
 // Payout implements TelecomAdapter. It simulates the Daraja B2C round-trip:
 // latency window -> decision (success | reject | timeout) -> external
 // reference. The generated reference is deterministic for a given reference
@@ -79,6 +93,32 @@ func (m *MpesaAdapter) Payout(ctx context.Context, req PayoutRequest) (*PayoutRe
 			Raw:         fmt.Sprintf(`{"status":"SUCCESS","external_ref":%q}`, ref),
 		}, nil
 	}
+}
+
+// Collection implements the normalized collection contract for the local
+// simulator. It intentionally uses the same deterministic outcome controls
+// as payout and never performs a network call.
+func (m *MpesaAdapter) Collection(ctx context.Context, req CollectionRequest) (*CollectionResult, error) {
+	if err := SleepCtx(ctx, m.Delay); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrCollectionTimeout, err)
+	}
+
+	switch m.outcome() {
+	case "timeout":
+		if err := SleepCtx(ctx, m.Timeout); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrCollectionTimeout, err)
+		}
+		return nil, fmt.Errorf("%w: M-Pesa did not respond within %s", ErrCollectionTimeout, m.Timeout)
+	case "fail":
+		return nil, fmt.Errorf("%w: M-Pesa rejected collection for %s", ErrCollectionFailed, req.Phone)
+	default:
+		ref := mpesaExternalRef(req.Reference, req.Amount)
+		return &CollectionResult{ExternalRef: ref, Raw: fmt.Sprintf(`{"status":"SUCCESS","external_ref":%q}`, ref)}, nil
+	}
+}
+
+func (m *MpesaAdapter) Collect(ctx context.Context, req CollectionRequest) (*CollectionResult, error) {
+	return m.Collection(ctx, req)
 }
 
 // outcome picks the simulated rail decision.
