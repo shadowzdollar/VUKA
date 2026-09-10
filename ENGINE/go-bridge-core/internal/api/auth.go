@@ -17,6 +17,7 @@ import (
 )
 
 const sessionCookie = "vuka_operator_session"
+const traderSessionCookie = "vuka_trader_session"
 
 var errInvalidCredentials = errors.New("invalid credentials")
 
@@ -30,6 +31,13 @@ type Operator struct {
 	Role  string `json:"role"`
 }
 
+type Trader struct {
+	ID          string `json:"id"`
+	FullName    string `json:"full_name"`
+	PhoneNumber string `json:"phone_number"`
+	KYCStatus   string `json:"kyc_status"`
+}
+
 type Activity struct {
 	ID        string `json:"id"`
 	Actor     string `json:"actor"`
@@ -41,10 +49,16 @@ type Activity struct {
 }
 
 type operatorContextKey struct{}
+type traderContextKey struct{}
 
 func operatorFromContext(ctx context.Context) (Operator, bool) {
 	operator, ok := ctx.Value(operatorContextKey{}).(Operator)
 	return operator, ok
+}
+
+func traderFromContext(ctx context.Context) (Trader, bool) {
+	trader, ok := ctx.Value(traderContextKey{}).(Trader)
+	return trader, ok
 }
 
 func NewAuthStore(pool *pgxpool.Pool) *AuthStore {
@@ -99,13 +113,167 @@ func (s *AuthStore) EnsureSchema(ctx context.Context) error {
 		BEFORE UPDATE OR DELETE ON operator_activity
 		FOR EACH ROW EXECUTE FUNCTION prevent_operator_activity_mutation();
 		`,
+		`
+		CREATE TABLE IF NOT EXISTS trader_credentials (
+			user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+			password_hash TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+		CREATE TABLE IF NOT EXISTS trader_sessions (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			token_hash VARCHAR(64) UNIQUE NOT NULL,
+			expires_at TIMESTAMPTZ NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+		CREATE INDEX IF NOT EXISTS idx_trader_sessions_expiry ON trader_sessions(expires_at);
+		CREATE TABLE IF NOT EXISTS transaction_authorizations (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			trader_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+			idempotency_key VARCHAR(255) NOT NULL UNIQUE,
+			source_account_id UUID NOT NULL,
+			destination_account_id UUID NOT NULL,
+			amount NUMERIC(20, 6) NOT NULL,
+			currency_from VARCHAR(3) NOT NULL,
+			currency_to VARCHAR(3) NOT NULL,
+			status VARCHAR(32) NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			expires_at TIMESTAMPTZ NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_transaction_authorizations_trader ON transaction_authorizations(trader_id, created_at DESC);
+		DROP TABLE IF EXISTS trader_transaction_credentials;
+		`,
 	}
+
 	for index, statement := range statements {
 		if _, err := s.pool.Exec(ctx, statement); err != nil {
 			return fmt.Errorf("auth: ensure schema statement %d: %w", index+1, err)
 		}
 	}
 	return nil
+}
+
+func (s *AuthStore) RecordTransactionAuthorization(ctx context.Context, traderID, key, sourceID, destinationID string, amount float64, from, to string) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO transaction_authorizations
+			(trader_id, idempotency_key, source_account_id, destination_account_id, amount, currency_from, currency_to, status, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'AUTHORIZED', now() + interval '10 minutes')
+		ON CONFLICT (idempotency_key) DO NOTHING`,
+		traderID, key, sourceID, destinationID, amount, from, to)
+	return err
+}
+
+func (s *AuthStore) EnsureTraderPassword(ctx context.Context, userID, password string) error {
+	if len(password) < 8 {
+		return errors.New("auth: trader password must be at least 8 characters")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("auth: hash trader password: %w", err)
+	}
+	_, err = s.pool.Exec(ctx, `
+				INSERT INTO trader_credentials (user_id, password_hash)
+				VALUES ($1, $2)
+				ON CONFLICT (user_id) DO UPDATE SET password_hash = $2, updated_at = now()`,
+		userID, string(hash))
+	return err
+}
+
+func (s *AuthStore) traderLogin(ctx context.Context, phone, password string) (string, error) {
+	var userID, passwordHash string
+	err := s.pool.QueryRow(ctx, `
+				SELECT u.id, c.password_hash
+				FROM users u JOIN trader_credentials c ON c.user_id = u.id
+				WHERE u.phone_number = $1`, strings.TrimSpace(phone)).Scan(&userID, &passwordHash)
+	if errors.Is(err, pgx.ErrNoRows) || bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password)) != nil {
+		return "", errInvalidCredentials
+	}
+	if err != nil {
+		return "", fmt.Errorf("auth: find trader: %w", err)
+	}
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("auth: generate trader session: %w", err)
+	}
+	token := base64.RawURLEncoding.EncodeToString(raw)
+	hash := sha256.Sum256([]byte(token))
+	_, err = s.pool.Exec(ctx, `INSERT INTO trader_sessions (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+		userID, fmt.Sprintf("%x", hash), time.Now().UTC().Add(12*time.Hour))
+	if err != nil {
+		return "", fmt.Errorf("auth: create trader session: %w", err)
+	}
+	return token, nil
+}
+
+func traderToken(r *http.Request) (string, bool) {
+	if cookie, err := r.Cookie(traderSessionCookie); err == nil && cookie.Value != "" {
+		return cookie.Value, true
+	}
+	const prefix = "Bearer "
+	if value := r.Header.Get("Authorization"); strings.HasPrefix(value, prefix) {
+		return strings.TrimSpace(strings.TrimPrefix(value, prefix)), true
+	}
+	return "", false
+}
+
+func (s *AuthStore) traderForSession(ctx context.Context, token string) (Trader, error) {
+	hash := sha256.Sum256([]byte(token))
+	var trader Trader
+	err := s.pool.QueryRow(ctx, `
+				SELECT u.id, u.full_name, u.phone_number, u.kyc_status
+				FROM users u JOIN trader_sessions ts ON ts.user_id = u.id
+				WHERE ts.token_hash = $1 AND ts.expires_at > now()`, fmt.Sprintf("%x", hash)).
+		Scan(&trader.ID, &trader.FullName, &trader.PhoneNumber, &trader.KYCStatus)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Trader{}, errInvalidCredentials
+	}
+	if err != nil {
+		return Trader{}, fmt.Errorf("auth: read trader session: %w", err)
+	}
+	return trader, nil
+}
+
+func (s *AuthStore) traderRequire(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token, ok := traderToken(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "authentication_required", "trader authentication is required")
+			return
+		}
+
+		trader, err := s.traderForSession(r.Context(), token)
+		if errors.Is(err, errInvalidCredentials) {
+			writeError(w, http.StatusUnauthorized, "authentication_required", "trader authentication is required")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "authentication_error", err.Error())
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), traderContextKey{}, trader)))
+	})
+}
+
+func (s *AuthStore) traderOrOperator(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if token, ok := traderToken(r); ok {
+			trader, err := s.traderForSession(r.Context(), token)
+			if err != nil {
+				writeError(w, http.StatusUnauthorized, "authentication_required", "trader authentication is required")
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), traderContextKey{}, trader)))
+			return
+		}
+		s.requireRole("operator", "arbiter")(next).ServeHTTP(w, r)
+	})
+}
+
+func (s *AuthStore) revokeTrader(ctx context.Context, token string) error {
+	hash := sha256.Sum256([]byte(token))
+	_, err := s.pool.Exec(ctx, `DELETE FROM trader_sessions WHERE token_hash = $1`, fmt.Sprintf("%x", hash))
+	return err
 }
 
 func (s *AuthStore) recordActivity(ctx context.Context, operator Operator, action, resource, details string) error {
@@ -199,7 +367,7 @@ func (s *AuthStore) EnsureOperator(ctx context.Context, email, password, role st
 	_, err = s.pool.Exec(ctx, `
 		INSERT INTO operators (email, password_hash, role)
 		VALUES ($1, $2, $3)
-		ON CONFLICT (email) DO UPDATE SET role = $3`,
+		ON CONFLICT (email) DO UPDATE SET password_hash = $2, role = $3`,
 		strings.ToLower(strings.TrimSpace(email)), string(hash), role)
 	if err != nil {
 		return fmt.Errorf("auth: create operator: %w", err)
