@@ -87,6 +87,20 @@ func TestRegistry_RegisterAndResolve(t *testing.T) {
 	}
 }
 
+func TestSandboxAdaptersExposeVersionedContract(t *testing.T) {
+	var mtn adapters.VersionedAdapter = adapters.NewMTNAdapter(0, 0, "success", time.Second)
+	if mtn.ContractVersion() != adapters.ContractVersion || mtn.Environment() != "simulated" {
+		t.Fatalf("unexpected MTN contract: version=%q environment=%q", mtn.ContractVersion(), mtn.Environment())
+	}
+	if err := mtn.ValidateConfig(); err != nil {
+		t.Fatalf("MTN ValidateConfig: %v", err)
+	}
+	var mpesa adapters.VersionedAdapter = adapters.NewMpesaAdapter(0, 0, "success", time.Second)
+	if err := mpesa.ValidateConfig(); err != nil {
+		t.Fatalf("M-Pesa ValidateConfig: %v", err)
+	}
+}
+
 func TestMpesaAdapter_Success(t *testing.T) {
 	a := adapters.NewMpesaAdapter(0, 0, "success", 5*time.Second)
 	res, err := a.Payout(context.Background(), adapters.PayoutRequest{
@@ -131,5 +145,18 @@ func TestMpesaAdapter_Timeout(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected timeout error")
+	}
+}
+
+func TestNormalizedCollectionContract(t *testing.T) {
+	var a adapters.TransactionAdapter = adapters.NewMTNAdapter(0, 0, "success", time.Second)
+	result, err := a.Collection(context.Background(), adapters.CollectionRequest{
+		Amount: 100, Currency: "RWF", Phone: "+250****0001", Reference: "collect-1",
+	})
+	if err != nil {
+		t.Fatalf("Collection: %v", err)
+	}
+	if result.ExternalRef == "" {
+		t.Fatal("expected collection external reference")
 	}
 }
