@@ -279,7 +279,62 @@ VUKA/
 
 ---
 
-## 13. Roadmap
+## 13. Backend completion status
+
+The local backend now includes the double-entry ledger, invoice and transfer
+flows, simulated corridor/provider controls, structured FX quotes, operator
+governance, compliance and pilot control planes, trader support tickets,
+notifications, request correlation IDs, and read-only enforcement across
+state-changing identity, ledger, settlement, pilot, and support operations.
+Quotes and support records remain local/observation-only; no external provider
+call or live settlement is enabled.
+
+The backend is **not production-complete**: trader-native authentication and
+session management, full organization ownership enforcement across every legacy
+ledger endpoint, provider certification, legal/privacy approval, independent
+security review, and live execution approvals remain explicit gates.
+
+## 14. Roadmap
+
+### Phase 3 — governance and acceptance (engineering baseline)
+
+Phase 3 identity/compliance is local-only and metadata-only. Its governance
+baseline, conservative retention posture, role controls, explainability
+requirements, and acceptance checklist are recorded in
+[`CONTRACTS/escrow/PHASE3_GOVERNANCE_ACCEPTANCE.md`](CONTRACTS/escrow/PHASE3_GOVERNANCE_ACCEPTANCE.md).
+All legal, regulatory, privacy, and security statements remain engineering
+defaults pending formal approval.
+
+### Phase 4 — provider/corridor foundation (sandbox only)
+
+The Go engine now exposes a versioned simulated-provider contract, RW/RWF to
+KE/KES corridor policy, fee/limit/FX metadata, ownership, kill switches,
+fail-closed credential validation, signed/idempotent webhook evidence, and
+read-only operator inspection surfaces. External provider calls remain
+disabled by default and webhooks never settle funds. See
+[`CONTRACTS/escrow/PHASE4_PROVIDER_CORRIDOR_EVIDENCE.md`](CONTRACTS/escrow/PHASE4_PROVIDER_CORRIDOR_EVIDENCE.md).
+
+Future work requiring separate approval includes production secret management,
+provider certification, liquidity operations, live settlement, and any
+blockchain release/refund automation.
+
+### Phase 5 — controlled settlement control plane (local dry-run only)
+
+**Status: implemented locally; global kill switch active; no funds move**
+
+Settlement commands, role-separated approvals, explainable preflight checks,
+idempotency/conflict handling, reconciliation observations, audit events, and
+protected operator APIs are now persisted in the Go engine. The execution
+boundary refuses live provider, ledger, and blockchain calls. Dry-run is
+simulation-only and read-only mode blocks settlement state changes. See
+[`CONTRACTS/escrow/PHASE5_CONTROLLED_SETTLEMENT_EVIDENCE.md`](CONTRACTS/escrow/PHASE5_CONTROLLED_SETTLEMENT_EVIDENCE.md).
+Independent security review, provider certification, credential rotation, and
+corridor approval records are deliberately still **PENDING**:
+[`CONTRACTS/escrow/PHASE5_INDEPENDENT_SECURITY_REVIEW.md`](CONTRACTS/escrow/PHASE5_INDEPENDENT_SECURITY_REVIEW.md),
+[`CONTRACTS/escrow/PHASE5_SECRET_ROTATION_APPROVAL.md`](CONTRACTS/escrow/PHASE5_SECRET_ROTATION_APPROVAL.md),
+[`CONTRACTS/escrow/PHASE5_CORRIDOR_APPROVAL.md`](CONTRACTS/escrow/PHASE5_CORRIDOR_APPROVAL.md),
+and
+[`CONTRACTS/escrow/PHASE5_GLOBAL_KILL_SWITCH_GOVERNANCE.md`](CONTRACTS/escrow/PHASE5_GLOBAL_KILL_SWITCH_GOVERNANCE.md).
 
 VUKA is a multi-year financial-infrastructure program. A phase is complete only
 when its code, data model, failure paths, permissions, tests, observability,
@@ -331,7 +386,13 @@ tests, reconciliation recovery, and testnet evidence package.
 
 ### Phase 3 — Identity, compliance, and trust data
 **Depends on:** Phase 1 and the escrow event model
+**Status: local-only workflow implemented; external/provider gates remain**
 
+- Organization, membership, verification, compliance review, risk flag, and
+  append-only decision-history data are available through the operator API.
+- Dashboard review queue and synthetic seed tooling are available locally.
+- No provider calls, document storage, settlement execution, or chain writes
+  are enabled by this phase.
 - Implement trader, business, counterparty, consent, and access models.
 - Build tiered KYC/AML case management with provider abstraction and retention
   controls.
@@ -372,18 +433,26 @@ tests, failure injection, reconciliation proof, and corridor operating manual.
 **Exit gate:** independent security review, key-management review, chaos/failure
 tests, capped-loss controls, incident drills, and explicit release approval.
 
-### Phase 6 — Rwanda–Kenya controlled pilot
+### Phase 6 — Rwanda–Kenya supervised pilot preparation
 **Depends on:** Phase 5
+**Status: implemented locally; synthetic participants only; observation-only**
 
-- Onboard a small, approved trader cohort and named operational partners.
-- Run real disputes, KYC reviews, provider failures, reconciliation incidents,
-  and support procedures under supervision.
-- Measure settlement reliability, dispute duration, false positives, liquidity,
-  score stability, customer harm, and operator workload.
-- Keep financial and compliance reporting exportable and auditable.
+- Pilot domain, allowlist, governance approvals, scenarios, observations,
+  incidents/support records, audit, idempotency and protected APIs are
+  implemented in the Go engine.
+- Participant onboarding requires a linked Phase 3 organization/user with
+  approved/verified KYC metadata, consent and terms metadata; no document bytes
+  are accepted.
+- Activation is blocked until multi-party approval, participant compliance,
+  named owners, and limits are present. Active pilots remain observation-only.
+- The global settlement kill switch remains active; no provider, ledger,
+  escrow, blockchain, credential, or live settlement action is possible.
+- Seed a local fixture with `go run ./cmd/seed-pilot`. Evidence and scenario
+  catalogue: [`CONTRACTS/escrow/PHASE6_SUPERVISED_PILOT_EVIDENCE.md`](CONTRACTS/escrow/PHASE6_SUPERVISED_PILOT_EVIDENCE.md).
 
 **Exit gate:** pilot risk review, incident closure, partner sign-off, service
-metrics, customer-protection evidence, and regulator/legal feedback.
+metrics, customer-protection evidence, regulator/legal feedback, and explicit
+approval to leave observation-only mode (not available in this build).
 
 ### Phase 7 — Multi-country corridor expansion
 **Depends on:** successful pilot evidence
@@ -412,7 +481,7 @@ metrics, customer-protection evidence, and regulator/legal feedback.
 
 ---
 
-## 14. Glossary
+## 15. Glossary
 
 | Term | Meaning |
 |---|---|
