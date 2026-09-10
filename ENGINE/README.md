@@ -191,6 +191,49 @@ vuka-engine/
 
 ## 7. Developer Onboarding & Local Setup
 
+### Phase 3/4 safety status
+
+Phase 3 identity and compliance controls are local-only, metadata-only, and
+engineering defaults pending formal legal/privacy/security approval. Phase 4
+provider integrations are sandbox/simulated only: the versioned MTN MoMo and
+M-Pesa adapters, corridor fee/limit/FX/ownership policy, kill switches,
+credential validation, webhook evidence, and read-only inspection APIs do not
+call external providers or settle funds. Webhooks are authenticated and
+idempotent but always remain `NOT_SETTLED`. Evidence and acceptance checklists:
+[`../CONTRACTS/escrow/PHASE3_GOVERNANCE_ACCEPTANCE.md`](../CONTRACTS/escrow/PHASE3_GOVERNANCE_ACCEPTANCE.md)
+and
+[`../CONTRACTS/escrow/PHASE4_PROVIDER_CORRIDOR_EVIDENCE.md`](../CONTRACTS/escrow/PHASE4_PROVIDER_CORRIDOR_EVIDENCE.md).
+Phase 5 controlled settlement is now a local, persisted, approval-gated
+dry-run control plane. Its global kill switch is active by default and live
+execution is refused; evidence is in
+[`../CONTRACTS/escrow/PHASE5_CONTROLLED_SETTLEMENT_EVIDENCE.md`](../CONTRACTS/escrow/PHASE5_CONTROLLED_SETTLEMENT_EVIDENCE.md).
+The local fixture command is `go run ./cmd/seed-settlement`; it creates a
+synthetic command only. Settlement policy knobs include
+`VUKA_SETTLEMENT_REQUIRED_APPROVALS`, `VUKA_SETTLEMENT_MAX_AMOUNT_MINOR`,
+`VUKA_SETTLEMENT_DAILY_LIMIT_MINOR`, and
+`VUKA_SETTLEMENT_GLOBAL_KILL_SWITCH`; live execution remains refused even if a
+future environment accidentally sets an execution flag.
+
+### Phase 6 supervised pilot preparation
+
+The local-only pilot control plane records synthetic pilot definitions,
+Phase 3-linked participant allowlists, consent/terms metadata, multi-party
+approvals, supervised scenario runs, observations, incidents/support records,
+and append-only audit history. Pilot activation is observation-only and
+requires governance checks; it cannot call providers, move ledger funds,
+interact with escrow/blockchain, or disable the global settlement kill switch.
+The bootstrap migration is
+`deploy/migrations/006_supervised_pilot.sql`, and the synthetic fixture command
+is `go run ./cmd/seed-pilot`. Evidence is in
+[`../CONTRACTS/escrow/PHASE6_SUPERVISED_PILOT_EVIDENCE.md`](../CONTRACTS/escrow/PHASE6_SUPERVISED_PILOT_EVIDENCE.md).
+
+Protected pilot routes include `GET/POST /api/pilots`, participant allowlists,
+`approve`, `pause`, `resume`, `complete`, `cancel`, scenario/run recording,
+observations, incidents/support tickets, approvals, and append-only audit
+inspection. Every mutation is blocked by read-only mode and every activation
+path preserves `observation_only=true`, `live_enabled=false`, and the active
+global settlement kill switch.
+
 ### Production Recovery
 
 Database backup and restore procedures, deployment recovery checks, and
@@ -248,6 +291,14 @@ The UI will be accessible at `http://localhost:5173`.
 │ • Invoice-Linked Claims │     │ • Real Rail Settlement  │     │ • Expanded Corridors    │
 └─────────────────────────┘     └─────────────────────────┘     └─────────────────────────┘
 ```
+
+### Phase 3 implementation note
+
+The local Phase 3 identity/compliance workflow is documented in
+[`../CONTRACTS/escrow/PHASE3_IDENTITY_COMPLIANCE_EVIDENCE.md`](../CONTRACTS/escrow/PHASE3_IDENTITY_COMPLIANCE_EVIDENCE.md).
+It is metadata-only and uses synthetic references. It does not integrate with
+an identity provider, store documents, broadcast blockchain transactions, or
+alter settlement execution.
 
 ---
 
