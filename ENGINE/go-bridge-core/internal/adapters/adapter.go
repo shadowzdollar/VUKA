@@ -23,6 +23,13 @@ var ErrPayoutFailed = errors.New("adapter: payout failed")
 // written) and the operator can retry with the same idempotency key.
 var ErrPayoutTimeout = errors.New("adapter: payout timed out")
 
+// ErrCollectionFailed is returned when a provider rejects a collection.
+var ErrCollectionFailed = errors.New("adapter: collection failed")
+
+// ErrCollectionTimeout is returned when a collection provider does not
+// answer within its configured response window.
+var ErrCollectionTimeout = errors.New("adapter: collection timed out")
+
 // PayoutRequest is the normalized payload sent to a telecom rail.
 type PayoutRequest struct {
 	// Amount is the payout amount in the rail's minor-unit-free decimal form.
@@ -50,6 +57,69 @@ type PayoutResult struct {
 	Raw string
 }
 
+type NormalizedPayoutRequest = PayoutRequest
+type NormalizedPayoutResult = PayoutResult
+
+// CollectionRequest is the normalized payload sent to a collection rail.
+// Providers may map this to a wallet debit, STK push, or bank collection.
+type CollectionRequest struct {
+	Amount        float64
+	Currency      string
+	Phone         string
+	Reference     string
+	InvoiceNumber string
+	Metadata      map[string]string
+}
+
+// CollectionResult is the normalized response from a collection rail.
+type CollectionResult struct {
+	ExternalRef string
+	Raw         string
+}
+
+type NormalizedCollectionRequest = CollectionRequest
+type NormalizedCollectionResult = CollectionResult
+
+// TransactionStatus is the provider-facing lifecycle state. It is kept
+// separate from ledger transaction status because provider callbacks can be
+// observed without mutating the ledger.
+type TransactionStatus string
+
+const (
+	TransactionStatusAccepted  TransactionStatus = "ACCEPTED"
+	TransactionStatusSucceeded TransactionStatus = "SUCCEEDED"
+	TransactionStatusFailed    TransactionStatus = "FAILED"
+	TransactionStatusTimeout   TransactionStatus = "TIMEOUT"
+	TransactionStatusPending   TransactionStatus = "PENDING"
+)
+
+type TransactionEventType string
+
+const (
+	TransactionEventAccepted  TransactionEventType = "accepted"
+	TransactionEventSucceeded TransactionEventType = "succeeded"
+	TransactionEventFailed    TransactionEventType = "failed"
+	TransactionEventTimeout   TransactionEventType = "timeout"
+)
+
+// TransactionEvent is the normalized callback/evidence envelope accepted
+// from a provider webhook.
+type TransactionEvent struct {
+	EventID          string
+	Provider         string
+	ReplayKey        string
+	EventType        TransactionEventType
+	TransactionID    string
+	RequestReference string
+	ExternalRef      string
+	Status           TransactionStatus
+	Raw              string
+	OccurredAt       time.Time
+}
+
+type ProviderTransactionStatus = TransactionStatus
+type ProviderTransactionEvent = TransactionEvent
+
 // TelecomAdapter is the contract every rail adapter must satisfy.
 type TelecomAdapter interface {
 	// Name returns the adapter's registry key, e.g. "mtn-rw".
@@ -60,6 +130,54 @@ type TelecomAdapter interface {
 	// rail does not answer in time. It MUST NOT panic on context
 	// cancellation; it should return ctx.Err() wrapped appropriately.
 	Payout(ctx context.Context, req PayoutRequest) (*PayoutResult, error)
+}
+
+// TransactionAdapter extends the original payout-only contract with
+// normalized collection support. Keeping TelecomAdapter unchanged preserves
+// source compatibility for existing adapters while new providers can adopt
+// this richer contract incrementally.
+type TransactionAdapter interface {
+	TelecomAdapter
+	Collection(context.Context, CollectionRequest) (*CollectionResult, error)
+}
+
+// CollectionAdapter is the verb-oriented spelling accepted by provider
+// implementations that prefer Collect over Collection.
+type CollectionAdapter interface {
+	TelecomAdapter
+	Collect(context.Context, CollectionRequest) (*CollectionResult, error)
+}
+
+// ProviderAdapter is the full contract expected by the provider execution
+// service. Real implementations can add HTTP/authentication internals while
+// exposing only this normalized boundary to the engine.
+type ProviderAdapter interface {
+	TransactionAdapter
+	ContractVersion() string
+	Environment() string
+	ValidateConfig() error
+}
+
+// CredentialedAdapter is an optional capability implemented by real
+// adapters. The execution service requires a managed credential reference
+// before invoking non-simulated adapters.
+type CredentialedAdapter interface {
+	TelecomAdapter
+	CredentialsConfigured() bool
+}
+
+// ContractVersion is the versioned provider boundary shared by sandbox
+// adapters. It is separate from TelecomAdapter so existing ledger adapters
+// remain source-compatible while provider controls evolve.
+const ContractVersion = "v1"
+
+// VersionedAdapter describes the provider integration foundation. Sandbox
+// implementations must never perform network calls.
+type VersionedAdapter interface {
+	TelecomAdapter
+	ContractVersion() string
+	Environment() string
+	ValidateConfig() error
 }
 
 // Registry resolves adapters by name. The ledger engine asks the registry
