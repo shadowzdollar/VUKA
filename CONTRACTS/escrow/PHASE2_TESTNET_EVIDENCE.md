@@ -30,6 +30,25 @@ behaviors include:
 - terminal-state immutability;
 - no double payout.
 
+## Independent security review
+
+An independent read-only security review was completed on 2026-09-10. The
+review covered access control, timeout handling, dispute and arbitration
+paths, token custody, release/refund behavior, reentrancy exposure, replay and
+double-payout resistance, and terminal-state invariants.
+
+Result: no high-confidence exploitable vulnerabilities were found under the
+standard ERC20 assumptions used by the project.
+
+The final local Foundry validation completed after the review:
+
+```text
+17 total tests passed
+0 failed
+0 skipped
+1 invariant suite passed
+```
+
 ## Reconciliation evidence
 
 The Go reconciliation package covers:
@@ -114,3 +133,16 @@ database restore and projection/schema checks. Application-level smoke checks
 such as `/healthz`, operator sign-in, audit recording, and read-only
 reconciliation confirmation remain required before this evidence package can
 be accepted for externally controlled testnet activity.
+
+Application smoke checks recorded on 2026-09-10:
+
+- `/healthz`: HTTP 200, `{"status":"ok"}`
+- Operator login: HTTP 200; authenticated operator
+  `shadowzdollar@gmail.com` with role `arbiter`
+- `/api/auth/me`: HTTP 200 with the expected operator identity and role
+- `/api/activity`: HTTP 200; sign-in and activity-view events present
+- Read-only ledger write attempt: HTTP 423 with `read_only_mode`
+- Activity records visible after the smoke check: 544
+
+These checks confirm database connectivity, authentication, audit activity
+recording, and enforcement of the local read-only safety boundary.
