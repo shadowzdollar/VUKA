@@ -18,8 +18,25 @@ func TestReadOnlyGuardBlocksLedgerWrites(t *testing.T) {
 		"/api/accounts/123/fund",
 		"/api/transfers/123/reverse",
 		"/api/users/123/invoices",
+		"/api/settlements",
+		"/api/settlements/123/approve",
+		"/api/settlements/123/execute",
+		"/api/settlements/123/cancel",
+		"/api/pilots",
+		"/api/pilots/123/participants",
+		"/api/pilots/123/approve",
+		"/api/pilots/123/resume",
+		"/api/pilots/123/complete",
+		"/api/pilots/123/observations",
+		"/api/support/tickets",
+		"/api/support/tickets/123",
+		"/api/notifications/123/read",
 	} {
-		req := httptest.NewRequest(http.MethodPost, path, nil)
+		method := http.MethodPost
+		if path == "/api/support/tickets/123" {
+			method = http.MethodPatch
+		}
+		req := httptest.NewRequest(method, path, nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 		if rec.Code != http.StatusLocked {
