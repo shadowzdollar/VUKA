@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { acknowledgeReconciliationAlert, addDisputeDecision, addDisputeReview, approveDisputeDecision, getActivity, getActivityExportUrl, getAlertHistory, getCurrentOperator, getDisputeDecisions, getDisputeReviews, getDisputeTimeline, getDisputeExportUrl, getDisputes, getEscrowEvents, getEscrows, getHealth, getReconciliationStatus, getReconciliationStatusExportUrl, login, logout, contract } from "./api";
-import type { Dispute, DisputeDecision, DisputeReview, DisputeTimelineEntry, Escrow, EscrowEvent, EscrowState, Operator, OperatorActivity, ReconciliationStatus } from "./types";
+import { acknowledgeReconciliationAlert, addDisputeDecision, addDisputeReview, approveDisputeDecision, approvePilot, cancelPilot, completePilot, decideComplianceReview, getActivity, getActivityExportUrl, getAlertHistory, getComplianceReviews, getCorridors, getCurrentOperator, getCurrentTrader, getDisputeDecisions, getDisputeReviews, getDisputeTimeline, getDisputeExportUrl, getDisputes, getEscrowEvents, getEscrows, getHealth, getOrganizations, getPilots, getProviderStatus, getProviderWebhookEvents, getSettlementCommands, getReconciliationStatus, getReconciliationStatusExportUrl, login, logout, pausePilot, registerTrader, resumePilot, traderLogin, contract } from "./api";
+import type { ComplianceReview, CorridorConfig, Dispute, DisputeDecision, DisputeReview, DisputeTimelineEntry, Escrow, EscrowEvent, EscrowState, Operator, OperatorActivity, Organization, Pilot, ProviderStatus, ProviderWebhookEvent, ReconciliationStatus, SettlementCommand, Trader } from "./types";
+import { TraderApp } from "./TraderApp";
 
 const refreshInterval = 15000;
+const controlRoomPages = ["overview", "escrows", "reconciliation", "providers", "settlements", "pilots", "activity", "compliance", "disputes"] as const;
+type ControlRoomPage = typeof controlRoomPages[number];
+
+function controlRoomPageFromHash(): ControlRoomPage {
+  const page = window.location.hash.replace(/^#/, "");
+  return controlRoomPages.includes(page as ControlRoomPage) ? page as ControlRoomPage : "overview";
+}
 
 function formatAmount(amount: string): string {
   return new Intl.NumberFormat("en-US").format(Number(amount) / 1_000_000);
@@ -37,6 +45,15 @@ export function App() {
   const [loggingIn, setLoggingIn] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [operator, setOperator] = useState<Operator | null>(null);
+  const [trader, setTrader] = useState<Trader | null>(null);
+  const [accessMode, setAccessMode] = useState<"operator" | "trader">("trader");
+  const [authView, setAuthView] = useState<"login" | "signup">("login");
+  const [signupStep, setSignupStep] = useState(1);
+  const [phone, setPhone] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [businessRegNumber, setBusinessRegNumber] = useState("");
+  const [signupCurrency, setSignupCurrency] = useState("RWF");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [activity, setActivity] = useState<OperatorActivity[]>([]);
   const [activityTotal, setActivityTotal] = useState(0);
   const [activityPage, setActivityPage] = useState(1);
@@ -60,20 +77,46 @@ export function App() {
   const [approvingDecision, setApprovingDecision] = useState<string | null>(null);
   const [alertAcknowledged, setAlertAcknowledged] = useState(false);
   const [alertAckError, setAlertAckError] = useState<string | null>(null);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [complianceReviews, setComplianceReviews] = useState<ComplianceReview[]>([]);
+  const [complianceError, setComplianceError] = useState<string | null>(null);
+  const [complianceAction, setComplianceAction] = useState<string | null>(null);
+  const [providerStatuses, setProviderStatuses] = useState<ProviderStatus[]>([]);
+  const [corridors, setCorridors] = useState<CorridorConfig[]>([]);
+  const [providerEvents, setProviderEvents] = useState<ProviderWebhookEvent[]>([]);
+  const [settlementCommands, setSettlementCommands] = useState<SettlementCommand[]>([]);
+  const [pilots, setPilots] = useState<Pilot[]>([]);
+  const [activePage, setActivePage] = useState<ControlRoomPage>(controlRoomPageFromHash);
 
   const pageSize = 10;
 
   const load = useCallback(async () => {
     try {
-      const currentOperator = await getCurrentOperator();
+      let currentOperator: Operator;
+      try {
+        currentOperator = await getCurrentOperator();
+      } catch (operatorError) {
+        const currentTrader = await getCurrentTrader();
+        setTrader(currentTrader);
+        setAuthRequired(false);
+        return;
+      }
+      setTrader(null);
       setDisputesLoading(currentOperator.role === "arbiter" || currentOperator.role === "operator");
-      const [escrowResponse, reconciliationStatus, health, disputeResponse, activityResponse, alertHistoryResponse] = await Promise.all([
+      const [escrowResponse, reconciliationStatus, health, disputeResponse, activityResponse, alertHistoryResponse, organizationResponse, reviewResponse, providerResponse, corridorResponse, providerEventResponse, settlementResponse, pilotResponse] = await Promise.all([
         getEscrows(),
         getReconciliationStatus(),
         getHealth(),
         currentOperator.role === "operator" || currentOperator.role === "arbiter" ? getDisputes() : Promise.resolve({ disputes: [] }),
         getActivity({ action: activityAction, search: activitySearch.trim(), from: activityFrom, to: activityTo, offset: (activityPage - 1) * 20 }),
-        getAlertHistory()
+        getAlertHistory(),
+        getOrganizations().catch(() => ({ organizations: [] })),
+        getComplianceReviews("pending").catch(() => ({ reviews: [] })),
+        getProviderStatus(),
+        getCorridors(),
+        getProviderWebhookEvents(),
+        getSettlementCommands().catch(() => ({ commands: [] })),
+        getPilots().catch(() => ({ pilots: [] }))
       ]);
       setEscrows(escrowResponse.escrows);
       setStatus(reconciliationStatus);
@@ -82,6 +125,14 @@ export function App() {
       setActivity(activityResponse.activities);
       setActivityTotal(activityResponse.total);
       setAlertHistory(alertHistoryResponse.activities);
+      setOrganizations(organizationResponse.organizations);
+      setComplianceReviews(reviewResponse.reviews);
+      setProviderStatuses(providerResponse.providers);
+      setCorridors(corridorResponse.corridors);
+      setProviderEvents(providerEventResponse.events);
+      setSettlementCommands(settlementResponse.commands);
+      setPilots(pilotResponse.pilots);
+      setComplianceError(null);
       setDisputes(disputeResponse.disputes);
       if (currentOperator.role === "arbiter" || currentOperator.role === "operator") {
         const reviewResponses = await Promise.all(
@@ -116,6 +167,13 @@ export function App() {
         setDisputes([]);
         setActivity([]);
         setAlertHistory([]);
+        setOrganizations([]);
+        setComplianceReviews([]);
+        setProviderStatuses([]);
+        setCorridors([]);
+        setProviderEvents([]);
+        setSettlementCommands([]);
+        setPilots([]);
         setDisputeReviews({});
         setDisputeDecisions({});
         setDisputeTimelines({});
@@ -124,6 +182,7 @@ export function App() {
       }
       setError(loadError instanceof Error ? loadError.message : "Unable to load operations data");
       setHealthy(false);
+      setComplianceError(loadError instanceof Error ? loadError.message : "Unable to load compliance workflow");
       if (operator?.role === "arbiter") {
         setDisputesError(loadError instanceof Error ? loadError.message : "Unable to load disputes");
       }
@@ -203,6 +262,14 @@ export function App() {
     setLoggingIn(true);
     setLoginError(null);
     try {
+      if (accessMode === "trader") {
+        const currentTrader = await traderLogin(phone, password);
+        setTrader(currentTrader);
+        setAuthRequired(false);
+        setPassword("");
+        return;
+      }
+
       await login(email, password);
       setPassword("");
       await load();
@@ -210,6 +277,78 @@ export function App() {
       setLoginError(loginLoadError instanceof Error ? loginLoadError.message : "Unable to sign in.");
     } finally {
       setLoggingIn(false);
+    }
+  }
+
+  async function handleSignup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (accessMode !== "trader") return;
+    if (password !== confirmPassword) {
+      setLoginError("Passwords do not match.");
+      return;
+    }
+
+    setLoggingIn(true);
+    setLoginError(null);
+    try {
+      await registerTrader({
+        full_name: fullName,
+        phone_number: phone,
+        business_reg_number: businessRegNumber || undefined,
+        password,
+        currency: signupCurrency
+      });
+      const currentTrader = await traderLogin(phone, password);
+      setTrader(currentTrader);
+      setAuthRequired(false);
+      setPassword("");
+      setConfirmPassword("");
+    } catch (signupError) {
+      setLoginError(signupError instanceof Error ? signupError.message : "Unable to create your account.");
+    } finally {
+      setLoggingIn(false);
+    }
+  }
+
+  function continueSignup() {
+    setLoginError(null);
+    if (signupStep === 1 && (!fullName.trim() || !phone.trim())) {
+      setLoginError("Enter your full name and phone number to continue.");
+      return;
+    }
+    if (signupStep === 2) {
+      setSignupStep(3);
+      return;
+    }
+    setSignupStep(2);
+  }
+
+  async function handleComplianceDecision(review: ComplianceReview, status: ComplianceReview["status"]) {
+    const rationale = window.prompt(`Rationale for ${status.replace("_", " ")} decision`)?.trim();
+    if (!rationale) return;
+    setComplianceAction(review.id);
+    setComplianceError(null);
+    try {
+      await decideComplianceReview(review.id, status, rationale);
+      const response = await getComplianceReviews("pending");
+      setComplianceReviews(response.reviews);
+    } catch (decisionError) {
+      setComplianceError(decisionError instanceof Error ? decisionError.message : "Unable to record compliance decision");
+    } finally {
+      setComplianceAction(null);
+    }
+  }
+
+  async function handlePilotAction(action: "approve" | "pause" | "resume" | "complete" | "cancel", item: Pilot) {
+    try {
+      if (action === "approve") await approvePilot(item.id);
+      if (action === "pause") await pausePilot(item.id);
+      if (action === "resume") await resumePilot(item.id);
+      if (action === "complete") await completePilot(item.id);
+      if (action === "cancel") await cancelPilot(item.id);
+      await load();
+    } catch (pilotError) {
+      setError(pilotError instanceof Error ? pilotError.message : "Unable to update pilot");
     }
   }
 
@@ -225,6 +364,7 @@ export function App() {
       setSelectedId(null);
       setSelectedEvents([]);
       setOperator(null);
+      setTrader(null);
       setDisputes([]);
       setActivity([]);
       setDisputeReviews({});
@@ -238,6 +378,12 @@ export function App() {
     const timer = window.setInterval(() => void load(), refreshInterval);
     return () => window.clearInterval(timer);
   }, [load]);
+
+  useEffect(() => {
+    const handleHashChange = () => setActivePage(controlRoomPageFromHash());
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
 
   const selected = useMemo(
     () => escrows.find((escrow) => escrow.escrow_id === selectedId) ?? null,
@@ -284,6 +430,8 @@ export function App() {
     return activity;
   }, [activity]);
   const activityPageCount = Math.max(1, Math.ceil(activityTotal / 20));
+  const isOverview = activePage === "overview";
+  const showPage = (page: Exclude<ControlRoomPage, "overview">) => isOverview || activePage === page;
 
   useEffect(() => {
     setPage(1);
@@ -303,30 +451,57 @@ export function App() {
   }, [pageCount]);
 
   return (
+    trader ? <TraderApp trader={trader} onSignOut={() => { setTrader(null); setAuthRequired(true); }} /> :
     authRequired ? <main className="login-shell">
-      <form className="login-card" onSubmit={handleLogin}>
-        <div className="login-brand">
-          <span className="login-brand-mark">V</span>
-          <div>
-            <strong>VUKA</strong>
-            <span>TRADE TRUST</span>
+      <div className="login-layout">
+        <form className="login-card" onSubmit={authView === "login" ? handleLogin : handleSignup}>
+          <div className="login-brand">
+            <span className="login-brand-mark">V</span>
+            <div>
+              <strong>VUKA</strong>
+              <span>TRADE TRUST</span>
+            </div>
           </div>
-        </div>
-        <div className="login-heading">
-          <p className="eyebrow">OPERATIONS CONSOLE</p>
-          <h1>Welcome back.</h1>
-          <p className="login-note">Sign in to securely monitor reconciled escrow activity and trade operations.</p>
-        </div>
-        <div className="login-security">
-          <span className="security-indicator" aria-hidden="true" />
-          <span>Protected operator access</span>
-        </div>
-        <label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="username" placeholder="you@company.com" /></label>
-        <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" placeholder="Enter your password" /></label>
-        {loginError && <p className="login-error" role="alert">{loginError}</p>}
-        <button className="login-submit" disabled={loggingIn}>{loggingIn ? "Authenticating…" : "Continue to console"}<span aria-hidden="true">→</span></button>
-        <p className="login-footer">Authorized personnel only · Sessions are encrypted and expire automatically.</p>
-      </form>
+          <div className="login-heading">
+            <div className="access-switcher" role="tablist" aria-label="Account access">
+              <button type="button" className={accessMode === "trader" ? "active" : ""} onClick={() => setAccessMode("trader")}>Trader</button>
+              <button type="button" className={accessMode === "operator" ? "active" : ""} onClick={() => { setAccessMode("operator"); setAuthView("login"); }}>Operations</button>
+            </div>
+            <p className="eyebrow">{authView === "login" ? "WELCOME BACK" : "CREATE YOUR ACCOUNT"}</p>
+            <h1>{authView === "login" ? "Move with confidence." : "Start trading with clarity."}</h1>
+            <p className="login-note">{accessMode === "trader" ? "Clear balances, protected approvals, and traceable trade settlement." : "Monitor reconciled escrow activity and supervised trade operations."}</p>
+          </div>
+          <div className="login-security">
+            <span className="security-indicator" aria-hidden="true" />
+            <span>Protected {accessMode === "trader" ? "trader" : "operator"} access</span>
+          </div>
+          {authView === "signup" && <div className="signup-progress" aria-label={`Registration step ${signupStep} of 3`}><span className={signupStep >= 1 ? "active" : ""}>1. Profile</span><span className={signupStep >= 2 ? "active" : ""}>2. Account</span><span className={signupStep >= 3 ? "active" : ""}>3. Security</span></div>}
+          {authView === "login" && <>{accessMode === "trader" ? <label>Phone number<input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required autoComplete="username" placeholder="+250 700 000 000" /></label> : <label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="username" placeholder="you@company.com" /></label>}<label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" placeholder="Enter your password" /></label></>}
+          {authView === "signup" && signupStep === 1 && <><label>Full name<input value={fullName} onChange={(event) => setFullName(event.target.value)} required placeholder="Your full name" autoComplete="name" /></label><label>Phone number<input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required autoComplete="tel" placeholder="+250 700 000 000" /></label></>}
+          {authView === "signup" && signupStep === 2 && <><label>Settlement currency<select value={signupCurrency} onChange={(event) => setSignupCurrency(event.target.value)}><option value="RWF">RWF — Rwanda</option><option value="KES">KES — Kenya</option></select></label><label>Business registration number <span className="optional-label">optional</span><input value={businessRegNumber} onChange={(event) => setBusinessRegNumber(event.target.value)} placeholder="Registration number" /></label></>}
+          {authView === "signup" && signupStep === 3 && <><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="new-password" placeholder="Create a password" /></label><label>Confirm password<input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required autoComplete="new-password" placeholder="Repeat your password" /></label><p className="field-note">Transaction authorization is requested from the telecom provider when you send money. VUKA does not store telecom PINs.</p></>}
+          {loginError && <p className="login-error" role="alert">{loginError}</p>}
+          {authView === "signup" && signupStep < 3 ? <button type="button" className="login-submit" onClick={continueSignup}>Continue <span aria-hidden="true">→</span></button> : <button className="login-submit" disabled={loggingIn || (authView === "signup" && accessMode !== "trader")}>{loggingIn ? "Working…" : authView === "login" ? (accessMode === "trader" ? "Enter workspace" : "Continue to console") : "Create trader account"}<span aria-hidden="true">→</span></button>}
+          {authView === "signup" && signupStep > 1 && <button type="button" className="auth-switch" onClick={() => { setSignupStep((currentStep) => currentStep - 1); setLoginError(null); }}>← Back</button>}
+          <button type="button" className="auth-switch" onClick={() => { setAuthView(authView === "login" ? "signup" : "login"); setSignupStep(1); setLoginError(null); }}>{authView === "login" ? "New to VUKA? Create a trader account" : "Already registered? Sign in"}</button>
+          <p className="login-footer">Authorized access only · Sessions expire automatically.</p>
+        </form>
+        <aside className="login-visual" aria-label="VUKA trade trust">
+          <div className="visual-grid" aria-hidden="true">
+            <span className="visual-line visual-line-one" />
+            <span className="visual-line visual-line-two" />
+            <span className="visual-node visual-node-one" />
+            <span className="visual-node visual-node-two" />
+            <span className="visual-node visual-node-three" />
+          </div>
+          <div className="visual-copy">
+            <p className="eyebrow">VUKA / CONTROLLED MOVEMENT</p>
+            <h2>Trade that leaves a clear record.</h2>
+            <p>From first approval to final settlement, every important step stays visible.</p>
+          </div>
+          <div className="visual-footer"><span>RWANDA</span><span>KENYA</span><span>TRACEABLE BY DESIGN</span></div>
+        </aside>
+      </div>
     </main> :
     <div className="app-shell">
       <aside className="sidebar">
@@ -338,11 +513,15 @@ export function App() {
           </div>
         </div>
         <nav aria-label="Primary navigation">
-          <a className="nav-item active" href="#overview">Overview</a>
-          <a className="nav-item" href="#escrows">Escrows</a>
-          <a className="nav-item" href="#reconciliation">Reconciliation</a>
-          <a className="nav-item" href="#activity">System audit</a>
-          {operator?.role === "arbiter" && <a className="nav-item" href="#disputes">Dispute review</a>}
+          <a className={`nav-item ${activePage === "overview" ? "active" : ""}`} href="#overview" aria-current={activePage === "overview" ? "page" : undefined}>Overview</a>
+          <a className={`nav-item ${activePage === "escrows" ? "active" : ""}`} href="#escrows" aria-current={activePage === "escrows" ? "page" : undefined}>Escrows</a>
+          <a className={`nav-item ${activePage === "reconciliation" ? "active" : ""}`} href="#reconciliation" aria-current={activePage === "reconciliation" ? "page" : undefined}>Reconciliation</a>
+          <a className={`nav-item ${activePage === "providers" ? "active" : ""}`} href="#providers" aria-current={activePage === "providers" ? "page" : undefined}>Providers &amp; corridors</a>
+          <a className={`nav-item ${activePage === "settlements" ? "active" : ""}`} href="#settlements" aria-current={activePage === "settlements" ? "page" : undefined}>Settlements</a>
+          <a className={`nav-item ${activePage === "pilots" ? "active" : ""}`} href="#pilots" aria-current={activePage === "pilots" ? "page" : undefined}>Supervised pilots</a>
+          <a className={`nav-item ${activePage === "activity" ? "active" : ""}`} href="#activity" aria-current={activePage === "activity" ? "page" : undefined}>System audit</a>
+          <a className={`nav-item ${activePage === "compliance" ? "active" : ""}`} href="#compliance" aria-current={activePage === "compliance" ? "page" : undefined}>Identity &amp; compliance</a>
+          {operator?.role === "arbiter" && <a className={`nav-item ${activePage === "disputes" ? "active" : ""}`} href="#disputes" aria-current={activePage === "disputes" ? "page" : undefined}>Dispute review</a>}
         </nav>
         <div className="sidebar-footer">
           <span className={`health-dot ${healthy ? "online" : ""}`} />
@@ -379,7 +558,7 @@ export function App() {
           </div>
         </div>}
 
-        <section id="overview" className="metric-grid" aria-label="Escrow overview">
+        {isOverview && <section id="overview" className="metric-grid" aria-label="Escrow overview">
           <article className="metric-card">
             <span className="metric-label">Total escrows</span>
             <strong>{escrows.length}</strong>
@@ -400,9 +579,9 @@ export function App() {
             <strong>{released}</strong>
             <span className="metric-note">Terminal supplier outcomes</span>
           </article>
-        </section>
+        </section>}
 
-        <section id="escrows" className="content-section">
+        {showPage("escrows") && <section id="escrows" className="content-section">
           <div className="section-heading">
             <div>
               <p className="eyebrow">ON-CHAIN STATE</p>
@@ -461,9 +640,9 @@ export function App() {
               <button className="row-button" disabled={page === pageCount} onClick={() => setPage((currentPage) => currentPage + 1)}>Next</button>
             </div>
           </div>}
-        </section>
+        </section>}
 
-        <section id="reconciliation" className="content-section bottom-grid">
+        {showPage("reconciliation") && <section id="reconciliation" className="content-section bottom-grid">
           <article className="panel">
             <div className="section-heading compact">
               <div><p className="eyebrow">SYNC TELEMETRY</p><h2>Reconciliation health</h2></div>
@@ -506,9 +685,79 @@ export function App() {
             <div className="network-meta"><span>Chain ID</span><strong>80002</strong></div>
             <div className="network-meta"><span>Mode</span><strong>Read-only</strong></div>
           </article>
-        </section>
+        </section>}
 
-        <section id="activity" className="content-section">
+        {showPage("providers") && <section id="providers" className="content-section">
+          <div className="section-heading">
+            <div><p className="eyebrow">PHASE 4 / SANDBOX ONLY</p><h2>Provider &amp; corridor controls</h2></div>
+            <span className="refresh-note">Read-only · no settlement execution</span>
+          </div>
+          <div className="bottom-grid">
+            <article className="panel">
+              <div className="section-heading compact"><div><p className="eyebrow">ADAPTER HEALTH</p><h3>Providers</h3></div><span className="refresh-note">{providerStatuses.length} configured</span></div>
+              {providerStatuses.length === 0 ? <div className="empty-state">No provider status is available.</div> : providerStatuses.map((provider) =>
+                <div className="activity-entry" key={provider.config.id}>
+                  <div><strong>{provider.config.display_name}</strong><span className="cell-sub">{provider.config.id} · contract {provider.config.contract_version} · {provider.config.environment}</span></div>
+                  <span className={`status status-${provider.healthy ? "approved" : "suspended"}`}>{provider.config.kill_switch ? "kill switch" : provider.healthy ? "healthy" : "disabled"}</span>
+                </div>)}
+            </article>
+            <article className="panel">
+              <div className="section-heading compact"><div><p className="eyebrow">CORRIDOR POLICY</p><h3>Limits &amp; FX</h3></div><span className="refresh-note">{corridors.length} corridors</span></div>
+              {corridors.length === 0 ? <div className="empty-state">No corridor configuration is available.</div> : corridors.map((corridor) =>
+                <div className="activity-entry" key={corridor.id}>
+                  <div><strong>{corridor.from_country}/{corridor.from_currency} → {corridor.to_country}/{corridor.to_currency}</strong><span className="cell-sub">{corridor.id} · {corridor.fees_bps} bps · FX {corridor.fx.rate} ({corridor.fx.source})</span></div>
+                  <span className={`status status-${corridor.enabled && !corridor.kill_switch ? "approved" : "suspended"}`}>{corridor.kill_switch ? "kill switch" : corridor.enabled ? "enabled" : "disabled"}</span>
+                </div>)}
+            </article>
+          </div>
+          <article className="panel">
+            <div className="section-heading compact"><div><p className="eyebrow">WEBHOOK EVIDENCE</p><h3>Observed provider events</h3></div><span className="refresh-note">Always NOT_SETTLED</span></div>
+            {providerEvents.length === 0 ? <div className="empty-state">No provider webhook events have been observed.</div> : providerEvents.slice(-10).reverse().map((event) =>
+              <div className="activity-entry" key={`${event.provider_id}-${event.replay_key}`}>
+                <div><strong>{event.event_type || "unknown event"}</strong><span className="cell-sub">{event.provider_id} · replay key {event.replay_key}</span></div>
+                <span className="status status-pending">{event.state} · {event.settlement_action}</span>
+              </div>)}
+          </article>
+        </section>}
+
+        {showPage("settlements") && <section id="settlements" className="content-section">
+          <div className="section-heading">
+            <div><p className="eyebrow">PHASE 5 / DRY-RUN ONLY</p><h2>Controlled settlement queue</h2></div>
+            <span className="refresh-note">Global kill switch active · no funds move</span>
+          </div>
+          <div className="panel activity-list">
+            {settlementCommands.length === 0 ? <div className="empty-state">No settlement commands have been submitted.</div> :
+              settlementCommands.slice(0, 12).map((command) => <div className="activity-entry" key={command.id}>
+                <div><strong>{command.action.toUpperCase()} · {command.amount_minor.toLocaleString()} {command.currency}</strong>
+                  <span className="cell-sub">{command.target} · {command.provider_id} · {command.corridor_id}</span>
+                  <span className="cell-sub">{command.reason}</span></div>
+                <span className="status status-pending">{command.status} · {command.approval_state}</span>
+              </div>)}
+          </div>
+        </section>}
+
+        {showPage("pilots") && <section id="pilots" className="content-section">
+          <div className="section-heading">
+            <div><p className="eyebrow">PHASE 6 / SUPERVISED PILOT</p><h2>Pilot preparation</h2></div>
+            <span className="refresh-note">Synthetic · observation-only · kill switch active</span>
+          </div>
+          <div className="panel activity-list">
+            {pilots.length === 0 ? <div className="empty-state">No local synthetic pilots have been prepared.</div> :
+              pilots.slice(0, 12).map((pilot) => <div className="activity-entry" key={pilot.id}>
+                <div><strong>{pilot.pilot_id}</strong><span className="cell-sub">{pilot.corridor_id} · {pilot.provider_id} · {pilot.environment}</span><span className="cell-sub">{pilot.scope} · max {pilot.max_participants} participants</span></div>
+                <div className="pagination-actions">
+                  <span className={`status status-${pilot.status}`}>{pilot.status}{pilot.observation_only ? " · observe" : ""}</span>
+                  {operator?.role === "arbiter" && ["draft", "planned"].includes(pilot.status) && <button className="row-button" onClick={() => void handlePilotAction("approve", pilot)}>Approve</button>}
+                  {["approved", "paused"].includes(pilot.status) && <button className="row-button" onClick={() => void handlePilotAction("resume", pilot)}>Resume</button>}
+                  {pilot.status === "active" && <button className="row-button" onClick={() => void handlePilotAction("pause", pilot)}>Pause</button>}
+                  {["active", "paused"].includes(pilot.status) && <button className="row-button" onClick={() => void handlePilotAction("complete", pilot)}>Complete</button>}
+                  {!["completed", "cancelled"].includes(pilot.status) && <button className="row-button" onClick={() => void handlePilotAction("cancel", pilot)}>Cancel</button>}
+                </div>
+              </div>)}
+          </div>
+        </section>}
+
+        {showPage("activity") && <section id="activity" className="content-section">
           <div className="section-heading">
             <div><p className="eyebrow">SYSTEM AUDIT</p><h2>Operator activity</h2></div>
             <div className="activity-heading-actions">
@@ -550,9 +799,37 @@ export function App() {
               </div>
             </div>}
           </div>
-        </section>
+        </section>}
 
-        {(operator?.role === "arbiter" || operator?.role === "operator") && <section id="disputes" className="content-section">
+        {showPage("compliance") && <section id="compliance" className="content-section">
+          <div className="section-heading">
+            <div><p className="eyebrow">PHASE 3 / LOCAL-ONLY</p><h2>Identity &amp; compliance review</h2></div>
+            <span className="refresh-note">{complianceReviews.length} pending reviews</span>
+          </div>
+          {complianceError && <div className="alert" role="alert">{complianceError}</div>}
+          <div className="bottom-grid">
+            <article className="panel">
+              <div className="section-heading compact"><div><p className="eyebrow">TRADER PROFILES</p><h3>Organizations</h3></div><span className="refresh-note">{organizations.length} profiles</span></div>
+              {organizations.length === 0 ? <div className="empty-state">No local organization profiles have been seeded.</div> :
+                organizations.map((organization) => <div className="activity-entry" key={organization.id}>
+                  <div><strong>{organization.trading_name || organization.legal_name}</strong><span className="cell-sub">{organization.country_code} · {organization.organization_type} · {organization.registration_number || "no registration number"}</span></div>
+                  <span className={`status status-${organization.verification_status}`}>{organization.verification_status.replace("_", " ")}</span>
+                </div>)}
+            </article>
+            <article className="panel">
+              <div className="section-heading compact"><div><p className="eyebrow">MANUAL REVIEW QUEUE</p><h3>Pending decisions</h3></div><span className="refresh-note">No provider calls</span></div>
+              {complianceReviews.length === 0 ? <div className="empty-state">No pending compliance reviews.</div> :
+                complianceReviews.map((review) => <div className="dispute-card" key={review.id}>
+                  <strong>{review.reason}</strong><span className="cell-sub">Opened by {review.opened_by} · {new Date(review.created_at).toLocaleString()}</span>
+                  <div className="pagination-actions">
+                    {(["approved", "needs_information", "rejected", "suspended"] as const).map((status) => <button className="row-button" key={status} disabled={complianceAction === review.id} onClick={() => void handleComplianceDecision(review, status)}>{status.replace("_", " ")}</button>)}
+                  </div>
+                </div>)}
+            </article>
+          </div>
+        </section>}
+
+        {(operator?.role === "arbiter" || operator?.role === "operator") && showPage("disputes") && <section id="disputes" className="content-section">
           <div className="section-heading">
             <div>
               <p className="eyebrow">{operator.role === "arbiter" ? "ARBITER WORKSPACE" : "OPERATOR APPROVAL QUEUE"}</p>
@@ -664,7 +941,7 @@ export function App() {
         </section>}
       </main>
 
-      {selected && <div className="drawer-backdrop" onClick={() => setSelectedId(null)}>
+      {selected && (isOverview || activePage === "escrows") && <div className="drawer-backdrop" onClick={() => setSelectedId(null)}>
         <aside className="drawer" onClick={(event) => event.stopPropagation()}>
           <button className="drawer-close" onClick={() => setSelectedId(null)} aria-label="Close details">×</button>
           <p className="eyebrow">ESCROW #{selected.escrow_id}</p>
