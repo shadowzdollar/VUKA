@@ -21,12 +21,97 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/jackc/pgx/v5"
 
 	"vuka/go-bridge-core/internal/adapters"
 	"vuka/go-bridge-core/internal/idempotency"
 )
+
+// PostCollectedCrossBorder is the isolated internal ledger handoff used by
+// the provider workflow. It deliberately does not dispatch a provider: the
+// caller must prove collection succeeded before invoking it. Payout remains a
+// separate provider step, so a payout failure is visible as a workflow review
+// item rather than being reported as a successful ledger transfer.
+func (s *Service) PostCollectedCrossBorder(ctx context.Context, key, sourceID, destinationID string, amount float64, from, to string, rate float64) (string, error) {
+	if s == nil || s.pool == nil || s.idem == nil {
+		return "", fmt.Errorf("ledger: internal handoff unavailable")
+	}
+	if key == "" || sourceID == "" || destinationID == "" || sourceID == destinationID ||
+		amount <= 0 || math.IsNaN(amount) || math.IsInf(amount, 0) || rate <= 0 ||
+		!validCurrency(from) || !validCurrency(to) || from == to {
+		return "", fmt.Errorf("%w: invalid collected cross-border handoff", ErrInvalidAmount)
+	}
+	if existing, ok, err := s.idem.Lookup(ctx, key); err != nil {
+		return "", err
+	} else if ok {
+		return existing, nil
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return "", fmt.Errorf("ledger: begin internal handoff: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	src, err := lockAccount(ctx, tx, sourceID)
+	if err != nil {
+		return "", err
+	}
+	dst, err := lockAccount(ctx, tx, destinationID)
+	if err != nil {
+		return "", err
+	}
+	if src.Type != AccountTypeBusiness || dst.Type != AccountTypeBusiness ||
+		src.Currency != from || dst.Currency != to {
+		return "", ErrCurrencyMismatch
+	}
+	balance, err := lockedBalance(ctx, tx, src.ID)
+	if err != nil {
+		return "", err
+	}
+	if balance < amount {
+		return "", ErrInsufficientFunds
+	}
+	settleFrom, err := lockSettlementAccount(ctx, tx, from)
+	if err != nil {
+		return "", err
+	}
+	settleTo, err := lockSettlementAccount(ctx, tx, to)
+	if err != nil {
+		return "", err
+	}
+	transferID, err := insertTransaction(ctx, tx, key, TransferRequest{
+		SourceAccountID: sourceID, DestinationAccountID: destinationID,
+		Amount: amount, Currency: from,
+	}, StatusProcessing, "", "", &rate)
+	if err != nil {
+		if isUniqueViolation(err) {
+			_ = tx.Rollback(ctx)
+			id, _, lookupErr := s.idem.Lookup(ctx, key)
+			return id, lookupErr
+		}
+		return "", err
+	}
+	if err := s.idem.Claim(ctx, tx, key, transferID); err != nil {
+		if errors.Is(err, idempotency.ErrKeyExists) {
+			_ = tx.Rollback(ctx)
+			id, _, lookupErr := s.idem.Lookup(ctx, key)
+			return id, lookupErr
+		}
+		return "", err
+	}
+	amountTo := round4(amount / rate)
+	if err := writeCrossBorderEntries(ctx, tx, transferID, sourceID, settleFrom.ID, settleTo.ID, destinationID, amount, amountTo); err != nil {
+		return "", err
+	}
+	if err := markStatus(ctx, tx, transferID, StatusSuccess, "", ""); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("ledger: commit internal handoff: %w", err)
+	}
+	return transferID, nil
+}
 
 // CrossBorderTransfer executes an idempotent cross-currency transfer. Key
 // semantics match Transfer: replays return the original transfer.
@@ -196,10 +281,10 @@ func writeCrossBorderEntries(ctx context.Context, tx pgx.Tx, transferID, sourceI
 		accountID string
 		amount    float64
 	}{
-		{sourceID, -amount},    // RWF: debit source BUSINESS
-		{settleFromID, amount}, // RWF: credit SETTLEMENT
+		{sourceID, -amount},     // RWF: debit source BUSINESS
+		{settleFromID, amount},  // RWF: credit SETTLEMENT
 		{settleToID, -amountTo}, // KES: debit SETTLEMENT
-		{destID, amountTo},     // KES: credit destination BUSINESS
+		{destID, amountTo},      // KES: credit destination BUSINESS
 	}
 	for _, e := range entries {
 		if _, err := tx.Exec(ctx, `
