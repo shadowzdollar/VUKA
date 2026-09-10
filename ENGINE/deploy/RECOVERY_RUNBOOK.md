@@ -80,11 +80,15 @@ After restore:
 1. Run database connectivity and `/healthz` checks.
 2. Confirm ledger and reconciliation schema bootstrap successfully.
 3. Confirm operator sign-in and audit activity recording.
-4. Confirm reconciliation remains read-only and no transaction execution is
-   enabled.
-5. Inspect escrow, dispute, timeline, and activity counts against the
+4. Confirm provider and controlled-settlement schema bootstrap successfully.
+5. Confirm supervised-pilot schema bootstrap successfully and pilot records
+   retain observation-only/live-disabled invariants.
+6. Confirm reconciliation, settlement, and pilot mutations remain
+   read-only/dry-run and no
+   transaction execution is enabled.
+7. Inspect escrow, dispute, settlement-command, pilot, timeline, and activity counts against the
    deployment record.
-6. Reopen traffic only after the smoke checks pass.
+7. Reopen traffic only after the smoke checks pass.
 
 ## Recovery drill cadence
 
