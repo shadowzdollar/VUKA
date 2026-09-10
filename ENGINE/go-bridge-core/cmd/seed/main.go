@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"vuka/go-bridge-core/internal/adapters"
+	"vuka/go-bridge-core/internal/api"
 	"vuka/go-bridge-core/internal/config"
 	"vuka/go-bridge-core/internal/idempotency"
 	"vuka/go-bridge-core/internal/ledger"
@@ -63,23 +64,52 @@ func main() {
 	reg.Register(adapters.NewMTNAdapter(0, 0, "success", 5*time.Second))
 	reg.Register(adapters.NewMpesaAdapter(0, 0, "success", 5*time.Second))
 	svc := ledger.NewService(pool, idempotency.NewStore(pool), reg)
+	authStore := api.NewAuthStore(pool)
+	if err := authStore.EnsureSchema(ctx); err != nil {
+		log.Error("ensure auth schema", "err", err)
+		os.Exit(1)
+	}
+	demoPassword := os.Getenv("VUKA_DEMO_TRADER_PASSWORD")
+	if demoPassword == "" {
+		demoPassword = "vuka-demo-2026"
+	}
 
 	for _, d := range demoTraders {
-		// Idempotent: if the phone already exists, just report it.
-		if existing, err := svc.GetUserByPhone(ctx, d.phone); err == nil {
-			log.Info("demo trader already exists", "name", d.name, "id", existing.ID)
-			continue
-		}
-		user, accounts, err := svc.CreateUser(ctx, ledger.CreateUserRequest{
-			FullName:          d.name,
-			PhoneNumber:       d.phone,
-			BusinessRegNumber: d.businessReg,
-		}, d.currency)
+		user, err := svc.GetUserByPhone(ctx, d.phone)
 		if err != nil {
-			log.Error("create", "name", d.name, "err", err)
+			user, _, err = svc.CreateUser(ctx, ledger.CreateUserRequest{
+				FullName:          d.name,
+				PhoneNumber:       d.phone,
+				BusinessRegNumber: d.businessReg,
+			}, d.currency)
+			if err != nil {
+				log.Error("create", "name", d.name, "err", err)
+				os.Exit(1)
+			}
+			log.Info("seeded demo trader", "name", d.name, "id", user.ID)
+		} else {
+			log.Info("demo trader already exists", "name", d.name, "id", user.ID)
+		}
+		if err := authStore.EnsureTraderPassword(ctx, user.ID, demoPassword); err != nil {
+			log.Error("ensure trader password", "name", d.name, "err", err)
 			os.Exit(1)
 		}
-		log.Info("seeded demo trader", "name", d.name, "id", user.ID, "accounts", len(accounts))
+		business, err := svc.GetAccountByUserAndType(ctx, user.ID, ledger.AccountTypeBusiness)
+		if err != nil {
+			log.Error("find business account", "name", d.name, "err", err)
+			os.Exit(1)
+		}
+		fundAmount := 250000.0
+		if d.currency == "KES" {
+			fundAmount = 25000
+		}
+		if _, err := svc.FundAccount(ctx, business.ID, "demo-funding-"+user.ID, ledger.FundRequest{
+			Amount: fundAmount, Currency: d.currency, Reference: "local-demo-fixture",
+		}); err != nil {
+			log.Error("fund demo trader", "name", d.name, "err", err)
+			os.Exit(1)
+		}
+		log.Info("demo trader ready", "name", d.name, "business_account", business.ID, "funded", fundAmount, "currency", d.currency)
 	}
 
 	if err := seedInvoices(ctx, svc, log); err != nil {
