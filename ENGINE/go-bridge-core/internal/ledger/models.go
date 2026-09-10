@@ -147,6 +147,9 @@ type CreateUserRequest struct {
 	FullName          string `json:"full_name"`
 	PhoneNumber       string `json:"phone_number"`
 	BusinessRegNumber string `json:"business_reg_number,omitempty"`
+	// Password is consumed by the API auth layer and is never persisted in
+	// the ledger users table or returned in a user response.
+	Password string `json:"password,omitempty"`
 }
 
 // TransferRequest is the payload for initiating an invoice-linked transfer.
@@ -175,35 +178,37 @@ type CrossBorderRequest struct {
 	CurrencyTo           string  `json:"currency_to"`
 	FxRate               float64 `json:"fx_rate,omitempty"` // 0 = use engine default
 	InvoiceNumber        string  `json:"invoice_number,omitempty"`
+	QuoteID              string  `json:"quote_id,omitempty"`
+	CorridorID           string  `json:"corridor_id,omitempty"`
 }
 
 // InvoiceItem is one line of an invoice document.
 type InvoiceItem struct {
-	ID          string  `json:"id"`
-	InvoiceID   string  `json:"invoice_id"`
-	Description string  `json:"description"`
-	Quantity    float64 `json:"quantity"`
-	UnitPrice   float64 `json:"unit_price"`
+	ID          string    `json:"id"`
+	InvoiceID   string    `json:"invoice_id"`
+	Description string    `json:"description"`
+	Quantity    float64   `json:"quantity"`
+	UnitPrice   float64   `json:"unit_price"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
 // Invoice is a persisted invoice document. Status is DERIVED from the ledger:
 // PAID when a SUCCESS transfer references number; DRAFT/ISSUED otherwise.
 type Invoice struct {
-	ID                 string    `json:"id"`
-	Number             string    `json:"number"`
-	IssuerUserID       string    `json:"issuer_user_id"`
-	CounterpartyUserID string    `json:"counterparty_user_id"`
-	Currency           string    `json:"currency"`
-	IssueDate          string    `json:"issue_date"`
-	DueDate            string    `json:"due_date"`
-	VATRate            float64   `json:"vat_rate"`
-	Terms              *string   `json:"terms,omitempty"`
-	Notes              *string   `json:"notes,omitempty"`
-	Status             string    `json:"status"` // PAID | ISSUED
+	ID                 string         `json:"id"`
+	Number             string         `json:"number"`
+	IssuerUserID       string         `json:"issuer_user_id"`
+	CounterpartyUserID string         `json:"counterparty_user_id"`
+	Currency           string         `json:"currency"`
+	IssueDate          string         `json:"issue_date"`
+	DueDate            string         `json:"due_date"`
+	VATRate            float64        `json:"vat_rate"`
+	Terms              *string        `json:"terms,omitempty"`
+	Notes              *string        `json:"notes,omitempty"`
+	Status             string         `json:"status"` // PAID | ISSUED
 	Items              []*InvoiceItem `json:"items"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
 }
 
 // InvoiceItemRequest is a line item payload for invoice creation.
@@ -236,6 +241,10 @@ type Service struct {
 	// not carry an explicit rate. Zero means "require an explicit rate".
 	defaultFxRate float64
 }
+
+// DB exposes the pool to adjacent local-only services that share the engine
+// schema. Callers must not mutate ledger tables through this handle.
+func (s *Service) DB() *pgxpool.Pool { return s.pool }
 
 // NewService wires a Service around the given pool, idempotency store and
 // adapter registry. Callers are responsible for closing the pool.
