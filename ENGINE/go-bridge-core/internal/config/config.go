@@ -15,6 +15,9 @@ import (
 type Config struct {
 	Environment string
 	ReadOnly    bool
+	// LocalSyntheticExecution enables the fully local simulated ledger rail for
+	// development demos. It never enables external providers or settlement.
+	LocalSyntheticExecution bool
 	// HTTPAddr is the listen address for the REST API, e.g. ":8080".
 	HTTPAddr string
 	// GRPCAddr is the listen address for the gRPC bridge consumed by the
@@ -50,6 +53,9 @@ type Config struct {
 	// Adapter settings ----------------------------------------------------
 	// AdapterName selects the telecom adapter from the registry, e.g. "mtn-rw".
 	AdapterName string
+	// ProviderCredentialRef is a managed reference only (never a credential
+	// value). It is ignored for simulated adapters.
+	ProviderCredentialRef string
 	// MTNSimDelay is the simulated network latency of the MTN adapter.
 	MTNSimDelay time.Duration
 	// MTNSimFailRate is the probability (0.0-1.0) that a simulated payout fails.
@@ -64,6 +70,9 @@ type Config struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	IdleTimeout  time.Duration
+	// RateLimitRequests is the maximum requests per client/IP window. Zero disables it.
+	RateLimitRequests int
+	RateLimitWindow   time.Duration
 
 	// Reconciliation is opt-in until the v2 chain service is operationally
 	// configured. All values are ignored when ReconciliationEnabled is false.
@@ -76,6 +85,15 @@ type Config struct {
 	ReconciliationMaxRange      int64
 	ReconciliationLagWarning    int64
 	ReconciliationLagCritical   int64
+
+	// Settlement remains a local dry-run boundary. The feature flag is
+	// intentionally observed only as policy metadata; the service still
+	// refuses live execution until a future audited implementation exists.
+	SettlementRequiredApprovals int
+	SettlementMaxAmountMinor    int64
+	SettlementDailyLimitMinor   int64
+	SettlementGlobalKillSwitch  bool
+	SettlementExecutionEnabled  bool
 }
 
 // Load reads configuration from the environment. Missing optional values fall
@@ -85,6 +103,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Environment:                 getEnv("VUKA_ENV", "development"),
 		ReadOnly:                    getBool("VUKA_READ_ONLY", false),
+		LocalSyntheticExecution:     getBool("VUKA_LOCAL_SYNTHETIC_EXECUTION_ENABLED", false),
 		HTTPAddr:                    getEnv("VUKA_HTTP_ADDR", ":8080"),
 		GRPCAddr:                    getEnv("VUKA_GRPC_ADDR", ":50051"),
 		DatabaseURL:                 os.Getenv("VUKA_DATABASE_URL"),
@@ -96,6 +115,7 @@ func Load() (*Config, error) {
 		OperatorRole:                getEnv("VUKA_OPERATOR_ROLE", "operator"),
 		ActivityRetentionDays:       getInt64("VUKA_ACTIVITY_RETENTION_DAYS", 0),
 		AdapterName:                 getEnv("VUKA_ADAPTER", "mtn-rw"),
+		ProviderCredentialRef:       os.Getenv("VUKA_PROVIDER_CREDENTIAL_REF"),
 		MTNSimDelay:                 getDuration("MTN_SIM_DELAY_MS", 150*time.Millisecond),
 		MTNSimFailRate:              getFloat("MTN_SIM_FAIL_RATE", 0.0),
 		MTNSimMode:                  getEnv("MTN_SIM_MODE", ""),
@@ -103,6 +123,8 @@ func Load() (*Config, error) {
 		ReadTimeout:                 getDuration("VUKA_READ_TIMEOUT_S", 10*time.Second),
 		WriteTimeout:                getDuration("VUKA_WRITE_TIMEOUT_S", 30*time.Second),
 		IdleTimeout:                 getDuration("VUKA_IDLE_TIMEOUT_S", 60*time.Second),
+		RateLimitRequests:           int(getInt64("VUKA_RATE_LIMIT_REQUESTS", 0)),
+		RateLimitWindow:             getDuration("VUKA_RATE_LIMIT_WINDOW_MS", 1000*time.Millisecond),
 		ReconciliationEnabled:       getBool("VUKA_RECONCILIATION_ENABLED", false),
 		ReconciliationRPCURL:        os.Getenv("VUKA_RECONCILIATION_RPC_URL"),
 		ReconciliationChainID:       getInt64("VUKA_RECONCILIATION_CHAIN_ID", 80002),
@@ -112,6 +134,11 @@ func Load() (*Config, error) {
 		ReconciliationMaxRange:      getInt64("VUKA_RECONCILIATION_MAX_RANGE", 9),
 		ReconciliationLagWarning:    getInt64("VUKA_RECONCILIATION_LAG_WARNING_BLOCKS", 50),
 		ReconciliationLagCritical:   getInt64("VUKA_RECONCILIATION_LAG_CRITICAL_BLOCKS", 500),
+		SettlementRequiredApprovals: int(getInt64("VUKA_SETTLEMENT_REQUIRED_APPROVALS", 2)),
+		SettlementMaxAmountMinor:    getInt64("VUKA_SETTLEMENT_MAX_AMOUNT_MINOR", 50000000),
+		SettlementDailyLimitMinor:   getInt64("VUKA_SETTLEMENT_DAILY_LIMIT_MINOR", 100000000),
+		SettlementGlobalKillSwitch:  getBool("VUKA_SETTLEMENT_GLOBAL_KILL_SWITCH", true),
+		SettlementExecutionEnabled:  getBool("VUKA_SETTLEMENT_EXECUTION_ENABLED", false),
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -157,6 +184,10 @@ func (c *Config) Validate() error {
 	if c.GRPCAddr == "" {
 		return fmt.Errorf("config: VUKA_GRPC_ADDR is required")
 	}
+	if c.ProviderCredentialRef != "" &&
+		(!strings.Contains(c.ProviderCredentialRef, "://") || strings.Contains(c.ProviderCredentialRef, "=")) {
+		return fmt.Errorf("config: VUKA_PROVIDER_CREDENTIAL_REF must be a managed reference, not a secret")
+	}
 	if (c.OperatorEmail == "") != (c.OperatorPassword == "") {
 		return fmt.Errorf("config: VUKA_OPERATOR_EMAIL and VUKA_OPERATOR_PASSWORD must be provided together")
 	}
@@ -176,6 +207,15 @@ func (c *Config) Validate() error {
 		if !c.ReadOnly {
 			return fmt.Errorf("config: VUKA_READ_ONLY must be true in production")
 		}
+		if c.LocalSyntheticExecution {
+			return fmt.Errorf("config: local synthetic execution is development-only")
+		}
+	}
+	if c.LocalSyntheticExecution && c.Environment != "development" {
+		return fmt.Errorf("config: local synthetic execution requires VUKA_ENV=development")
+	}
+	if c.LocalSyntheticExecution && c.ReadOnly {
+		return fmt.Errorf("config: local synthetic execution requires VUKA_READ_ONLY=false")
 	}
 	if c.OperatorRole != "operator" && c.OperatorRole != "arbiter" {
 		return fmt.Errorf("config: VUKA_OPERATOR_ROLE must be operator or arbiter")
@@ -185,6 +225,22 @@ func (c *Config) Validate() error {
 	}
 	if c.ActivityRetentionDays < 0 {
 		return fmt.Errorf("config: VUKA_ACTIVITY_RETENTION_DAYS must be >= 0, got %v", c.ActivityRetentionDays)
+	}
+	if c.RateLimitRequests < 0 || c.RateLimitWindow < 0 {
+		return fmt.Errorf("config: rate limit settings must be non-negative")
+	}
+	if c.RateLimitRequests > 0 && c.RateLimitWindow == 0 {
+		return fmt.Errorf("config: VUKA_RATE_LIMIT_WINDOW_MS must be positive when rate limiting is enabled")
+	}
+	if c.SettlementRequiredApprovals < 2 || c.SettlementMaxAmountMinor <= 0 ||
+		c.SettlementDailyLimitMinor < c.SettlementMaxAmountMinor {
+		return fmt.Errorf("config: invalid settlement approvals or limits")
+	}
+	if !c.SettlementGlobalKillSwitch {
+		return fmt.Errorf("config: settlement global kill switch must remain active until explicit multi-party governance approval")
+	}
+	if c.SettlementExecutionEnabled {
+		return fmt.Errorf("config: settlement live execution is not implemented and must remain disabled")
 	}
 	return nil
 }
