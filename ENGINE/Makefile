@@ -79,6 +79,14 @@ provision:
 		-c "CREATE DATABASE $(PG_TEST_DB);"
 	docker exec -i "$(PG_CONTAINER)" psql -U $(PG_USER) -d $(PG_TEST_DB) -v ON_ERROR_STOP=1 \
 		< $(MKFILE_DIR)deploy/init.sql
+	docker exec -i "$(PG_CONTAINER)" psql -U $(PG_USER) -d $(PG_TEST_DB) -v ON_ERROR_STOP=1 \
+		< $(MKFILE_DIR)deploy/migrations/003_identity_compliance.sql
+	docker exec -i "$(PG_CONTAINER)" psql -U $(PG_USER) -d $(PG_TEST_DB) -v ON_ERROR_STOP=1 \
+		< $(MKFILE_DIR)deploy/migrations/004_provider_integration.sql
+	docker exec -i "$(PG_CONTAINER)" psql -U $(PG_USER) -d $(PG_TEST_DB) -v ON_ERROR_STOP=1 \
+		< $(MKFILE_DIR)deploy/migrations/005_controlled_settlement.sql
+	docker exec -i "$(PG_CONTAINER)" psql -U $(PG_USER) -d $(PG_TEST_DB) -v ON_ERROR_STOP=1 \
+		< $(MKFILE_DIR)deploy/migrations/006_supervised_pilot.sql
 	@echo "Schema applied to $(PG_TEST_DB)."
 
 # Integration harness: bring PG up, wait until healthy, provision, then test.
@@ -149,9 +157,13 @@ restore-drill:
 		 SELECT to_regclass('public.escrows'); \
 		 SELECT to_regclass('public.chain_events'); \
 		 SELECT to_regclass('public.operator_activity'); \
+		 SELECT to_regclass('public.organizations'); \
+		 SELECT to_regclass('public.compliance_reviews'); \
 		 SELECT COUNT(*) FROM escrows; \
 		 SELECT COUNT(*) FROM chain_events; \
 		 SELECT COUNT(*) FROM operator_activity; \
+		 SELECT COUNT(*) FROM organizations; \
+		 SELECT COUNT(*) FROM compliance_reviews; \
 		 SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='escrows' AND column_name='timeout_at');"; \
 	echo "Restore drill completed; disposable database will be removed."
 
@@ -265,6 +277,20 @@ seed-dispute:
 		VUKA_SEED_OPERATOR_PASSWORD="$$VUKA_SEED_OPERATOR_PASSWORD" \
 		go run ./cmd/seed-dispute
 
+# Seed local-only synthetic identity/compliance metadata. This command never
+# accepts document bytes or calls an identity provider and refuses production.
+identity-seed:
+	@set -a; [ ! -f "$(MKFILE_DIR)deploy/.env" ] || . "$(MKFILE_DIR)deploy/.env"; set +a; \
+	cd $(MKFILE_DIR)go-bridge-core && go run ./cmd/seed-identity
+
+# Seed one local-only controlled settlement command. It never moves funds.
+settlement-seed:
+	cd $(MKFILE_DIR)go-bridge-core && go run ./cmd/seed-settlement
+
+# Seed one local-only supervised pilot and the standard scenario catalogue.
+pilot-seed:
+	cd $(MKFILE_DIR)go-bridge-core && go run ./cmd/seed-pilot
+
 # One-command live demo: engine (background) + dashboard (background).
 # Prereqs: dockerized PG up (make up), deps installed (make dashboard-install).
 demo: up
@@ -275,6 +301,7 @@ demo: up
 	cd $(MKFILE_DIR)go-bridge-core && VUKA_DATABASE_URL='$(DEMO_SEED_URL)' \
 		VUKA_HTTP_ADDR=':8080' VUKA_GRPC_ADDR=':50051' MTN_SIM_MODE=success \
 		MTN_SIM_DELAY_MS=5 VUKA_FX_RWF_KES=9.5 \
+		VUKA_READ_ONLY=false VUKA_LOCAL_SYNTHETIC_EXECUTION_ENABLED=true \
 		VUKA_CORS_ORIGINS='http://localhost:5173' \
 		go run ./cmd/ > /tmp/vuka-engine.log 2>&1 &
 	@echo "3. Starting dashboard on http://localhost:5173…"
@@ -283,4 +310,4 @@ demo: up
 	@echo "Engine log: /tmp/vuka-engine.log | Dashboard log: /tmp/vuka-dashboard.log"
 	@sleep 2 && curl -s http://localhost:8080/healthz && echo " (engine healthy)"
 
-.PHONY: dashboard-install dashboard-build dashboard-run demo demo-seed seed-dispute
+.PHONY: dashboard-install dashboard-build dashboard-run demo demo-seed seed-dispute identity-seed settlement-seed pilot-seed
