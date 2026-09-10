@@ -15,6 +15,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"vuka/go-bridge-core/internal/adapters"
+	"vuka/go-bridge-core/internal/identity"
+	"vuka/go-bridge-core/internal/pilot"
+	"vuka/go-bridge-core/internal/providers"
+	"vuka/go-bridge-core/internal/settlement"
 )
 
 var (
@@ -60,6 +64,33 @@ func TestPool(t *testing.T) *pgxpool.Pool {
 			t.Fatalf("testutil: connect to %s: %v", url, err)
 		}
 		poolURL = url
+		// Package test binaries initialize the shared database concurrently.
+		// Serialize DDL bootstrap so concurrent CREATE TABLE/INDEX statements
+		// cannot deadlock on PostgreSQL catalog locks.
+		schemaConn, err := poolPtr.Acquire(ctx)
+		if err != nil {
+			t.Fatalf("testutil: acquire schema connection: %v", err)
+		}
+		if _, err := schemaConn.Exec(ctx, `SELECT pg_advisory_lock($1)`, advisoryLockKey); err != nil {
+			schemaConn.Release()
+			t.Fatalf("testutil: schema advisory lock: %v", err)
+		}
+		defer func() {
+			_, _ = schemaConn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, advisoryLockKey)
+			schemaConn.Release()
+		}()
+		if err := identity.EnsureSchema(ctx, poolPtr); err != nil {
+			t.Fatalf("testutil: ensure identity schema: %v", err)
+		}
+		if err := providers.EnsureSchema(ctx, poolPtr); err != nil {
+			t.Fatalf("testutil: ensure provider schema: %v", err)
+		}
+		if err := settlement.NewService(poolPtr, settlement.DefaultPolicy()).EnsureSchema(ctx); err != nil {
+			t.Fatalf("testutil: ensure settlement schema: %v", err)
+		}
+		if err := pilot.NewService(poolPtr, false, true).EnsureSchema(ctx); err != nil {
+			t.Fatalf("testutil: ensure pilot schema: %v", err)
+		}
 	})
 
 	// Hold the advisory lock for the whole test on a dedicated connection,
@@ -85,7 +116,16 @@ func TestPool(t *testing.T) *pgxpool.Pool {
 	truncCtx, truncCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer truncCancel()
 	if _, err := poolPtr.Exec(truncCtx, `
-		TRUNCATE TABLE idempotency_keys, ledger_entries, transactions, accounts, users RESTART IDENTITY CASCADE`); err != nil {
+		TRUNCATE TABLE pilot_audit_events, pilot_incidents, pilot_observations, pilot_runs,
+			pilot_scenarios, pilot_approvals, pilot_participants, pilot_programs;
+		TRUNCATE TABLE settlement_audit_events, settlement_reconciliations, settlement_approvals, settlement_commands;
+		TRUNCATE TABLE provider_webhook_events, provider_reconciliation_status,
+			corridor_configs, provider_configs;
+		TRUNCATE TABLE identity_verification_decisions, compliance_decisions,
+			compliance_review_notes, compliance_risk_flags, compliance_reviews,
+			identity_verifications, organization_memberships, organizations,
+			idempotency_keys, ledger_entries, transactions, accounts, users
+			RESTART IDENTITY CASCADE`); err != nil {
 		t.Fatalf("testutil: truncate tables: %v", err)
 	}
 	return poolPtr
