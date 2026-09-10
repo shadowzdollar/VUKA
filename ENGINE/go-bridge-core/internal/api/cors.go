@@ -33,7 +33,7 @@ func NewCORS(origins []string, next http.Handler) http.Handler {
 			h.Set("Access-Control-Allow-Origin", origin)
 			h.Add("Vary", "Origin")
 			h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			h.Set("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key, Accept")
+			h.Set("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key, X-Client-ID, Accept")
 			h.Set("Access-Control-Max-Age", "600")
 		}
 
