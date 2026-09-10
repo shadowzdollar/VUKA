@@ -34,11 +34,11 @@ type MTNAdapter struct {
 // NewMTNAdapter builds an MTN adapter with the given knobs.
 func NewMTNAdapter(delay time.Duration, failRate float64, mode string, timeout time.Duration) *MTNAdapter {
 	return &MTNAdapter{
-		NameKey: "mtn-rw",
-		Delay:   delay,
+		NameKey:  "mtn-rw",
+		Delay:    delay,
 		FailRate: failRate,
-		Mode:    mode,
-		Timeout: timeout,
+		Mode:     mode,
+		Timeout:  timeout,
 	}
 }
 
@@ -48,6 +48,20 @@ func (m *MTNAdapter) Name() string {
 		return "mtn-rw"
 	}
 	return m.NameKey
+}
+
+func (m *MTNAdapter) ContractVersion() string { return ContractVersion }
+func (m *MTNAdapter) Environment() string     { return "simulated" }
+func (m *MTNAdapter) ValidateConfig() error {
+	if m.Delay < 0 || m.Timeout <= 0 || m.FailRate < 0 || m.FailRate > 1 {
+		return fmt.Errorf("mtn-rw: invalid sandbox adapter configuration")
+	}
+	switch m.Mode {
+	case "", "success", "fail", "timeout":
+		return nil
+	default:
+		return fmt.Errorf("mtn-rw: unsupported simulation mode %q", m.Mode)
+	}
 }
 
 // Payout implements TelecomAdapter. It simulates the full rail round-trip:
@@ -79,6 +93,32 @@ func (m *MTNAdapter) Payout(ctx context.Context, req PayoutRequest) (*PayoutResu
 			Raw:         fmt.Sprintf(`{"status":"SUCCESS","external_ref":%q}`, ref),
 		}, nil
 	}
+}
+
+// Collection implements the normalized collection contract for the local
+// simulator. It is deliberately side-effect free outside the execution
+// evidence store.
+func (m *MTNAdapter) Collection(ctx context.Context, req CollectionRequest) (*CollectionResult, error) {
+	if err := SleepCtx(ctx, m.Delay); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrCollectionTimeout, err)
+	}
+
+	switch m.outcome() {
+	case "timeout":
+		if err := SleepCtx(ctx, m.Timeout); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrCollectionTimeout, err)
+		}
+		return nil, fmt.Errorf("%w: MTN MoMo did not respond within %s", ErrCollectionTimeout, m.Timeout)
+	case "fail":
+		return nil, fmt.Errorf("%w: MTN MoMo rejected collection for %s", ErrCollectionFailed, req.Phone)
+	default:
+		ref := mtnExternalRef(req.Reference, req.Amount)
+		return &CollectionResult{ExternalRef: ref, Raw: fmt.Sprintf(`{"status":"SUCCESS","external_ref":%q}`, ref)}, nil
+	}
+}
+
+func (m *MTNAdapter) Collect(ctx context.Context, req CollectionRequest) (*CollectionResult, error) {
+	return m.Collection(ctx, req)
 }
 
 // outcome picks the simulated rail decision.
