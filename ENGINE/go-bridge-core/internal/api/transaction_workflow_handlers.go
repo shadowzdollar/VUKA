@@ -110,9 +110,37 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "authorization_required", "authenticated trader and Idempotency-Key are required")
 		return
 	}
-	if strings.TrimSpace(input.ProviderAuthorizationRef) == "" {
+	if !s.ownsAccount(r.Context(), input.TraderID, input.SourceAccountID) {
+		writeError(w, http.StatusForbidden, "forbidden", "the authenticated trader cannot debit this account")
+		return
+	}
+	if s.ledger == nil {
+		writeError(w, http.StatusServiceUnavailable, "ledger_unavailable", "the ledger is unavailable")
+		return
+	}
+	balance, err := s.ledger.GetBalance(r.Context(), input.SourceAccountID)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "source_account_unavailable", "unable to verify the source account balance")
+		return
+	}
+	if balance.Amount < input.Amount {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+			"error": map[string]any{
+				"code":    "insufficient_funds",
+				"message": "the source account does not have enough available balance for this transaction",
+			},
+			"available": balance.Amount,
+			"required":  input.Amount,
+			"currency":  balance.Currency,
+		})
+		return
+	}
+	if strings.TrimSpace(input.ProviderAuthorizationRef) == "" && !s.localSyntheticExecution {
 		writeError(w, http.StatusConflict, "provider_authorization_required", "complete the telecom provider authorization challenge before submitting the transaction")
 		return
+	}
+	if s.localSyntheticExecution && strings.TrimSpace(input.ProviderAuthorizationRef) == "" {
+		input.ProviderAuthorizationRef = "local-synthetic://" + key
 	}
 	if err := s.auth.RecordTransactionAuthorization(r.Context(), input.TraderID, key, input.SourceAccountID, input.DestinationAccountID, input.Amount, input.CurrencyFrom, input.CurrencyTo); err != nil {
 		writeError(w, http.StatusInternalServerError, "transaction_authorization_record_failed", "unable to record transaction authorization")
