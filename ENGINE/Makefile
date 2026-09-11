@@ -249,12 +249,15 @@ dashboard-run:
 # ---------------------------------------------------------------------------
 
 # Seed the demo traders into the running engine (idempotent via by-phone).
-# Reads TEST_DATABASE_URL; falls back to the compose PG like `make test`.
-DEMO_SEED_URL ?= $(TEST_DATABASE_URL)
+# The live demo always uses the normal vuka database, never vuka_test.
 demo-seed:
-	@echo "Seeding demo traders into $(DEMO_SEED_URL)…"
-	cd $(MKFILE_DIR)go-bridge-core && VUKA_DATABASE_URL='$(DEMO_SEED_URL)' \
-		go run ./cmd/seed
+	@set -a; [ ! -f "$(MKFILE_DIR)deploy/.env" ] || . "$(MKFILE_DIR)deploy/.env"; set +a; \
+	if [ -z "$$VUKA_DATABASE_URL" ]; then \
+		test -n "$$POSTGRES_PASSWORD" || { echo "ERROR: set VUKA_DATABASE_URL or POSTGRES_PASSWORD in deploy/.env."; exit 1; }; \
+		VUKA_DATABASE_URL="postgres://vuka:$$POSTGRES_PASSWORD@localhost:5433/vuka?sslmode=disable"; \
+	fi; \
+	echo "Seeding demo traders into the local vuka database…"; \
+	cd "$(MKFILE_DIR)go-bridge-core" && VUKA_DATABASE_URL="$$VUKA_DATABASE_URL" go run ./cmd/seed
 
 # Seed a synthetic dispute and separate arbiter/operator accounts for local
 # workflow testing. All four credential variables are required and local-only.
@@ -298,7 +301,12 @@ demo: up
 	@echo "1. Seeding demo traders…"
 	$(MAKE) demo-seed
 	@echo "2. Starting Go engine on :8080 (gRPC :50051)…"
-	cd $(MKFILE_DIR)go-bridge-core && VUKA_DATABASE_URL='$(DEMO_SEED_URL)' \
+	@set -a; [ ! -f "$(MKFILE_DIR)deploy/.env" ] || . "$(MKFILE_DIR)deploy/.env"; set +a; \
+	if [ -z "$$VUKA_DATABASE_URL" ]; then \
+		test -n "$$POSTGRES_PASSWORD" || { echo "ERROR: set VUKA_DATABASE_URL or POSTGRES_PASSWORD in deploy/.env."; exit 1; }; \
+		VUKA_DATABASE_URL="postgres://vuka:$$POSTGRES_PASSWORD@localhost:5433/vuka?sslmode=disable"; \
+	fi; \
+	cd "$(MKFILE_DIR)go-bridge-core" && VUKA_DATABASE_URL="$$VUKA_DATABASE_URL" \
 		VUKA_HTTP_ADDR=':8080' VUKA_GRPC_ADDR=':50051' MTN_SIM_MODE=success \
 		MTN_SIM_DELAY_MS=5 VUKA_FX_RWF_KES=9.5 \
 		VUKA_READ_ONLY=false VUKA_LOCAL_SYNTHETIC_EXECUTION_ENABLED=true \
