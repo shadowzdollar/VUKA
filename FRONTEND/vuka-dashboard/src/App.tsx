@@ -5,12 +5,20 @@ import type { ComplianceReview, CorridorConfig, Dispute, DisputeDecision, Disput
 import { TraderApp } from "./TraderApp";
 
 const refreshInterval = 15000;
+const googleAuthUrl = import.meta.env.VITE_GOOGLE_AUTH_URL ?? "";
 const controlRoomPages = ["overview", "escrows", "reconciliation", "providers", "settlements", "pilots", "activity", "compliance", "disputes"] as const;
 type ControlRoomPage = typeof controlRoomPages[number];
+const landingPages = ["home", "platform", "controls", "corridors", "about", "company", "security", "careers", "contact"] as const;
+type LandingPage = typeof landingPages[number];
 
 function controlRoomPageFromHash(): ControlRoomPage {
   const page = window.location.hash.replace(/^#/, "");
   return controlRoomPages.includes(page as ControlRoomPage) ? page as ControlRoomPage : "overview";
+}
+
+function landingPageFromHash(): LandingPage {
+  const page = window.location.hash.replace(/^#landing-/, "");
+  return landingPages.includes(page as LandingPage) ? page as LandingPage : "home";
 }
 
 function formatAmount(amount: string): string {
@@ -39,6 +47,10 @@ export function App() {
   const [page, setPage] = useState(1);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
+  const [showLanding, setShowLanding] = useState(true);
+  const [landingPage, setLandingPage] = useState<LandingPage>(landingPageFromHash);
+  const [landingActivityIndex, setLandingActivityIndex] = useState(0);
+  const [landingMarketIndex, setLandingMarketIndex] = useState(0);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -159,6 +171,7 @@ export function App() {
     } catch (loadError) {
       if (loadError instanceof Error && loadError.name === "AuthenticationRequired") {
         setAuthRequired(true);
+        setShowLanding(true);
         setEscrows([]);
         setStatus(null);
         setSelectedId(null);
@@ -266,12 +279,14 @@ export function App() {
         const currentTrader = await traderLogin(phone, password);
         setTrader(currentTrader);
         setAuthRequired(false);
+        setShowLanding(false);
         setPassword("");
         return;
       }
 
       await login(email, password);
       setPassword("");
+      setShowLanding(false);
       await load();
     } catch (loginLoadError) {
       setLoginError(loginLoadError instanceof Error ? loginLoadError.message : "Unable to sign in.");
@@ -301,6 +316,7 @@ export function App() {
       const currentTrader = await traderLogin(phone, password);
       setTrader(currentTrader);
       setAuthRequired(false);
+      setShowLanding(false);
       setPassword("");
       setConfirmPassword("");
     } catch (signupError) {
@@ -321,6 +337,18 @@ export function App() {
       return;
     }
     setSignupStep(2);
+  }
+
+  function continueWithGoogle() {
+    if (accessMode !== "trader") {
+      setLoginError("Google access is available for trader accounts. Operations access uses the managed operator credentials.");
+      return;
+    }
+    if (!googleAuthUrl) {
+      setLoginError("Google sign-in is not configured for this environment. Set VITE_GOOGLE_AUTH_URL to the VUKA OAuth start endpoint.");
+      return;
+    }
+    window.location.assign(`${googleAuthUrl}${googleAuthUrl.includes("?") ? "&" : "?"}intent=${authView}`);
   }
 
   async function handleComplianceDecision(review: ComplianceReview, status: ComplianceReview["status"]) {
@@ -359,6 +387,7 @@ export function App() {
     } finally {
       setLoggingOut(false);
       setAuthRequired(true);
+      setShowLanding(true);
       setEscrows([]);
       setStatus(null);
       setSelectedId(null);
@@ -384,6 +413,24 @@ export function App() {
     window.addEventListener("hashchange", handleHashChange);
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
+
+  useEffect(() => {
+    const handleLandingHashChange = () => setLandingPage(landingPageFromHash());
+    window.addEventListener("hashchange", handleLandingHashChange);
+    return () => window.removeEventListener("hashchange", handleLandingHashChange);
+  }, []);
+
+  useEffect(() => {
+    if (!showLanding || landingPage !== "home") return;
+    const timer = window.setInterval(() => setLandingActivityIndex((current) => (current + 1) % 4), 3200);
+    return () => window.clearInterval(timer);
+  }, [landingPage, showLanding]);
+
+  useEffect(() => {
+    if (!showLanding || landingPage !== "home") return;
+    const timer = window.setInterval(() => setLandingMarketIndex((current) => (current + 1) % 4), 4200);
+    return () => window.clearInterval(timer);
+  }, [landingPage, showLanding]);
 
   const selected = useMemo(
     () => escrows.find((escrow) => escrow.escrow_id === selectedId) ?? null,
@@ -451,7 +498,97 @@ export function App() {
   }, [pageCount]);
 
   return (
-    trader ? <TraderApp trader={trader} onSignOut={() => { setTrader(null); setAuthRequired(true); }} /> :
+    trader ? <TraderApp trader={trader} onSignOut={() => { setTrader(null); setAuthRequired(true); setShowLanding(true); }} /> :
+    showLanding && !operator ? <main className="landing-shell" data-landing-page={landingPage}>
+      <header className="landing-nav"><a className="landing-brand" href="#landing-home"><span className="brand-mark">V</span><span><strong>VUKA</strong><small>TRADE TRUST</small></span></a><nav className="landing-links" aria-label="Landing page navigation"><a href="#landing-platform">Platform</a><a href="#landing-controls">Controls</a><a href="#landing-corridors">Corridors</a><a href="#landing-company">Company</a><a href="#landing-security">Security</a></nav><div className="landing-nav-actions"><button className="landing-login-link" onClick={() => { setShowLanding(false); setAuthRequired(true); setAuthView("login"); setAccessMode("trader"); }}>Sign in <span>→</span></button><button className="landing-nav-cta" onClick={() => { setShowLanding(false); setAuthRequired(true); setAuthView("signup"); setAccessMode("trader"); setSignupStep(1); }}>Open an account</button></div></header>
+      {landingPage !== "home" && <section className={`landing-brand-page landing-brand-${landingPage}`}>
+        {landingPage === "platform" && <><p className="eyebrow">VUKA PLATFORM / THE OPERATING LAYER</p><h1>One system for the work before, during, and after money moves.</h1><p className="brand-page-lede">VUKA connects business identity, balances, trade context, quotes, provider authorization, ledger records, and operational response into a single accountable flow.</p><div className="brand-page-stat-row"><span><strong>01</strong>Trader workspace</span><span><strong>02</strong>Operations control</span><span><strong>03</strong>Provider boundary</span><span><strong>04</strong>Evidence record</span></div><div className="brand-page-grid"><article><span>TRADER EXPERIENCE</span><h2>Prepare with context.</h2><p>Accounts, currencies, recipients, invoices, quotes, limits, and transfer history stay together so a trader can understand what is being prepared before authorizing it.</p></article><article><span>OPERATIONS EXPERIENCE</span><h2>Supervise the exceptions.</h2><p>Authorized teams see workflow states, provider callbacks, reconciliation signals, reviews, alerts, and the evidence needed to make an accountable decision.</p></article><article><span>INTEGRATION EXPERIENCE</span><h2>Connect without hiding risk.</h2><p>Provider adapters, credential references, idempotency, retry rules, and terminal-state protection keep external execution behind an explicit boundary.</p></article></div><div className="brand-page-split"><div><p className="eyebrow">HOW IT CONNECTS</p><h2>From commercial intent to explainable outcome.</h2></div><div><p>Every movement carries the commercial reason, corridor rules, quoted value, authorization evidence, execution state, and reconciliation result. That gives the trader a usable product and gives the business a record it can defend.</p><p>VUKA is not another isolated transfer screen. It is the operating context around the transfer.</p></div></div></>}
+        {landingPage === "controls" && <><p className="eyebrow">VUKA CONTROLS / DECISION ARCHITECTURE</p><h1>Make every important decision visible before money is released.</h1><p className="brand-page-lede">Confidence is not created by a badge. It is created by separating preparation, authorization, execution, review, and reconciliation into observable stages.</p><div className="brand-page-timeline"><div><strong>01</strong><span>Identity and ownership</span><p>Establish who is acting, which account is theirs, and whether the requested movement is permitted.</p></div><div><strong>02</strong><span>Quote and corridor</span><p>Bind amount, currencies, fees, rate, limits, expiry, and the configured route before commitment.</p></div><div><strong>03</strong><span>Provider authorization</span><p>Keep telecom PINs, USSD, app challenges, and provider credentials with the responsible provider.</p></div><div><strong>04</strong><span>Ledger and outcome</span><p>Persist state transitions, references, callbacks, failures, review decisions, and the final explainable record.</p></div></div><div className="brand-page-grid"><article><span>FAIL CLOSED</span><h2>Unknown is not success.</h2><p>Unverifiable provider evidence, expired quotes, insufficient funds, ownership failures, and ambiguous callbacks stop the workflow or send it to review.</p></article><article><span>REPEATABLE</span><h2>Safe to retry.</h2><p>Idempotency keys and durable workflow states prevent duplicate collection, payout, or ledger posting when systems are retried.</p></article><article><span>ACCOUNTABLE</span><h2>Every action has a record.</h2><p>Operator decisions, reconciliation events, notifications, and provider responses remain connected to the movement they describe.</p></article></div><div className="brand-page-note"><strong>Local demonstrations stay honest</strong><p>Where a real provider is not connected, VUKA labels synthetic execution clearly. A demo reference is never presented as live telecom movement.</p></div></>}
+        {landingPage === "corridors" && <><p className="eyebrow">VUKA CORRIDORS / AFRICAN NETWORK</p><h1>Focused routes, designed to expand responsibly.</h1><p className="brand-page-lede">A corridor is more than two countries. It is a governed operating environment with local currency, provider rails, compliance expectations, limits, callbacks, settlement behavior, and people responsible for exceptions.</p><div className="brand-page-route"><div><span>ORIGIN</span><strong>RWANDA</strong><small>RWF / MTN MoMo</small></div><b>→</b><div><span>DESTINATION</span><strong>KENYA</strong><small>KES / M-Pesa</small></div></div><div className="brand-page-corridor-table"><div><span>ROUTE PROGRAM</span><strong>Rwanda ↔ Kenya</strong><b>CONTROLLED</b><small>Initial operating model for quote, authorization, collection, payout, and reconciliation.</small></div><div><span>EXPANSION MODEL</span><strong>East · West · Central · North · Southern Africa</strong><b>PLANNED</b><small>New routes activate only after provider, policy, credential, and operational readiness checks.</small></div><div><span>PARTNER MODEL</span><strong>Telecoms, banks, commerce platforms</strong><b>GATED</b><small>Each connection is isolated behind contracts, adapter boundaries, managed references, and callback evidence.</small></div></div><div className="brand-page-note"><strong>Activation principle</strong><p>A route is not live because a button exists. It becomes live only after credentials, contracts, testing, compliance review, reconciliation controls, and operational approval are ready.</p></div></>}
+        {landingPage === "about" && <><p className="eyebrow">ABOUT VUKA / WHY WE EXIST</p><h1>Trust should be part of the system, not a promise after the receipt.</h1><p className="brand-page-lede">African businesses are already trading across borders. The missing layer is not ambition—it is a clearer way to prepare, move, supervise, and explain the money connected to that trade.</p><div className="brand-page-statement"><strong>We do not hide the hard parts.</strong><p>Provider dependencies, compliance states, authorization challenges, failures, reviews, and reconciliation are first-class product surfaces—not footnotes.</p></div><div className="brand-page-grid"><article><span>FOR TRADERS</span><h2>Clarity before commitment.</h2><p>A workspace that makes the amount, route, recipient, quote, authorization step, and current state understandable.</p></article><article><span>FOR OPERATORS</span><h2>Evidence when it matters.</h2><p>A control room for exceptions, provider state, settlement, reconciliation, disputes, and accountable intervention.</p></article><article><span>FOR PROVIDERS</span><h2>A disciplined integration layer.</h2><p>Clear contracts and managed boundaries that respect provider-owned authorization and operational responsibility.</p></article></div><div className="brand-page-split"><div><p className="eyebrow">OUR PRINCIPLES</p><h2>Build for the real operating environment.</h2></div><div><p><strong>Regional by design.</strong> African currencies, providers, regulations, businesses, and relationships shape the product from the start.</p><p><strong>Honest by default.</strong> We distinguish preparation from execution and synthetic records from live provider movement.</p><p><strong>Useful under pressure.</strong> The product must help people understand what happened and what to do next.</p></div></div></>}
+        {landingPage === "company" && <><p className="eyebrow">THE COMPANY / VUKA</p><h1>Building the trust layer for African trade.</h1><p className="brand-page-lede">VUKA brings the people, records, and decisions around cross-border money into one understandable operating system for businesses across Africa.</p><div className="brand-page-stat-row"><span><strong>MISSION</strong>Make commerce easier to trust</span><span><strong>REGION</strong>Africa first</span><span><strong>METHOD</strong>Evidence-led infrastructure</span><span><strong>STANDARD</strong>Responsible activation</span></div><div className="brand-page-grid"><article><span>OUR MISSION</span><h2>Move African commerce forward.</h2><p>Give businesses a more dependable way to prepare and coordinate cross-border value as they buy, sell, hire, supply, and grow.</p></article><article><span>OUR STANDARD</span><h2>Never overstate the state.</h2><p>We prefer an honest pending, blocked, or review state with a reason over a polished interface that implies money moved when it did not.</p></article><article><span>OUR FOOTPRINT</span><h2>Grow through local trust.</h2><p>We expand corridor by corridor with providers, operators, and businesses who understand the context on the ground.</p></article></div><div className="brand-page-split"><div><p className="eyebrow">WHAT WE ARE BUILDING</p><h2>A company for the infrastructure between intent and outcome.</h2></div><div><p>That means product, engineering, compliance, partnerships, and operations working from the same record—not separate teams passing screenshots across a process.</p><p>VUKA is being built deliberately: ambitious about the opportunity, precise about what is ready, and accountable for what is not.</p></div></div></>}
+        {landingPage === "security" && <><p className="eyebrow">SECURITY & TRUST / PROTECTION BY DESIGN</p><h1>Protection is designed into every handoff.</h1><p className="brand-page-lede">VUKA treats access, authorization, ledger integrity, provider boundaries, and operational review as connected parts of one security posture.</p><div className="brand-page-timeline"><div><strong>01</strong><span>Identity</span><p>Sessions and account ownership establish who is allowed to act and which resources they control.</p></div><div><strong>02</strong><span>Authorization</span><p>Telecom PINs stay with the provider; VUKA records only the verifiable authorization reference.</p></div><div><strong>03</strong><span>Ledger</span><p>Double-entry records, ownership checks, and idempotent workflows keep movement explainable.</p></div><div><strong>04</strong><span>Review</span><p>Exceptions, reconciliation, audit trails, and operator decisions keep people in control.</p></div></div><div className="brand-page-grid"><article><span>DATA BOUNDARIES</span><h2>Collect what the workflow needs.</h2><p>Account, quote, and workflow records are connected for traceability. Sensitive provider secrets and telecom PINs remain outside VUKA's custody.</p></article><article><span>OPERATIONAL RESILIENCE</span><h2>Expect failure honestly.</h2><p>Timeouts, retries, callbacks, duplicate requests, and provider outages are modeled as states to handle—not hidden behind a green screen.</p></article><article><span>GOVERNANCE</span><h2>Keep activation deliberate.</h2><p>Production corridors remain gated by credentials, contracts, testing, compliance review, and reconciliation readiness.</p></article></div><div className="brand-page-note"><strong>Security status</strong><p>VUKA is provider-ready. Production activation remains gated by the controls required for the specific corridor and provider relationship.</p></div></>}
+        {landingPage === "careers" && <><p className="eyebrow">CAREERS AT VUKA / BUILD WITH PURPOSE</p><h1>Work on infrastructure people can believe in.</h1><p className="brand-page-lede">We are building a deeply African, globally minded company at the intersection of commerce, financial infrastructure, operations, and trust.</p><div className="brand-page-grid"><article><span>PRODUCT & DESIGN</span><h2>Make complexity legible.</h2><p>Design calm experiences for traders and operators who need to make consequential decisions with confidence.</p></article><article><span>ENGINEERING</span><h2>Build systems that tell the truth.</h2><p>Work on ledgers, APIs, provider boundaries, workflow state, observability, and durable infrastructure.</p></article><article><span>OPERATIONS & PARTNERSHIPS</span><h2>Make activation responsible.</h2><p>Shape corridor programs, provider relationships, compliance practices, and the response to exceptions.</p></article></div><div className="brand-page-split"><div><p className="eyebrow">HOW WE WORK</p><h2>Ambitious about impact. Careful with claims.</h2></div><div><p>We write things down, show our work, and make the state of a system visible. We value regional context, respectful disagreement, strong ownership, and the patience to solve the underlying problem.</p><p>Open roles will be published here as teams and corridor programs are ready. If this mission fits your craft, introduce yourself through our contact page.</p></div></div></>}
+        {landingPage === "contact" && <><p className="eyebrow">CONTACT VUKA / START A CONVERSATION</p><h1>Tell us what you need to move.</h1><p className="brand-page-lede">Whether you are a trader, provider, corridor partner, or future teammate, tell us what you are building and where the operating friction lives.</p><div className="brand-page-contact-grid"><a href="mailto:hello@vuka.africa"><span>GENERAL ENQUIRIES</span><strong>hello@vuka.africa</strong><small>Company, product, platform, and media questions.</small></a><a href="mailto:partnerships@vuka.africa"><span>PARTNERSHIPS</span><strong>partnerships@vuka.africa</strong><small>Provider, bank, commerce, and corridor conversations.</small></a><a href="mailto:careers@vuka.africa"><span>CAREERS</span><strong>careers@vuka.africa</strong><small>Introduce your craft and the problems you want to solve.</small></a></div><div className="brand-page-split"><div><p className="eyebrow">WHAT TO INCLUDE</p><h2>Give us enough context to respond well.</h2></div><div><p>Tell us who you are, which countries or provider rails are involved, what movement you are trying to coordinate, and where the current process breaks down.</p><p>For account support, use the signed-in workspace so your request stays connected to the relevant account and transaction record.</p></div></div><div className="brand-page-note"><strong>We are building responsibly</strong><p>We will not represent a corridor, provider integration, or production capability as available until the required operational controls are ready.</p></div></>}
+      </section>}
+      {landingPage === "home" && <><section className="landing-hero">
+        <div className="landing-copy"><p className="eyebrow">VUKA / TRADE OPERATING SYSTEM</p><h1>The infrastructure for trade you can trust.</h1><p className="landing-lede">A controlled workspace for African businesses to prepare cross-border payments, connect them to trade context, and keep every approval and outcome visible.</p><div className="landing-actions"><button className="login-submit landing-primary" onClick={() => { setShowLanding(false); setAuthRequired(true); setAuthView("signup"); setAccessMode("trader"); setSignupStep(1); }}>Create trader account <span>→</span></button><button className="landing-secondary" onClick={() => { setShowLanding(false); setAuthRequired(true); setAuthView("login"); setAccessMode("trader"); }}>Sign in to VUKA</button></div><div className="landing-proof"><span><strong>01</strong> Ledger-linked records</span><span><strong>02</strong> Explicit authorization</span><span><strong>03</strong> Provider-ready execution</span></div></div>
+        <div className="landing-visual" aria-label="VUKA transaction signal table">
+          <div className="signal-header"><span>VUKA / AFRICAN TRADE GRID</span><b>SIMULATION MODE</b></div>
+          <div className="signal-summary"><strong>54</strong><span>markets connected through<br />one accountable movement layer</span></div>
+          <div className="global-map" aria-hidden="true">
+            <svg viewBox="0 0 800 330" role="presentation">
+              <path d="m242 45 49-18 53 17 18 43-18 32 12 44-27 62-23 77-40 37-38-45-8-61-25-48 20-52-8-36Z" />
+              <path d="m366 71 21-20 31 8 13 25-24 14-29-7Z" />
+              <path d="m215 46-32-15-29 14 8 20 31 7Z" />
+            </svg>
+            <span className="global-node global-node-africa">🇷🇼</span><span className="global-node global-node-west">🇳🇬</span><span className="global-node global-node-north">🇪🇬</span><span className="global-node global-node-south">🇿🇦</span><span className="global-node global-node-central">🇨🇩</span>
+            <i className="global-arc global-arc-one" /><i className="global-arc global-arc-two" /><i className="global-arc global-arc-three" />
+          </div>
+          <div className="signal-table">
+            <div className="signal-table-head"><span>ROUTE</span><span>STAGE</span><span>CONFIDENCE</span></div>
+            <div className="signal-row signal-row-active"><span>🇷🇼 <b>RWA</b> → 🇰🇪 <b>KEN</b></span><strong>TRADE QUOTE</strong><i>98%</i></div>
+            <div className="signal-row"><span>🇳🇬 <b>NGA</b> → 🇬🇭 <b>GHA</b></span><strong>POLICY CHECK</strong><i>84%</i></div>
+            <div className="signal-row"><span>🇪🇬 <b>EGY</b> → 🇿🇦 <b>ZAF</b></span><strong>LEDGER POSTED</strong><i>100%</i></div>
+            <div className="signal-row"><span>🇨🇩 <b>COD</b> → 🇹🇿 <b>TZA</b></span><strong>RECONCILED</strong><i>100%</i></div>
+          </div>
+          <div className="signal-rail"><span>TRADE INTENT</span><i /><span>POLICY</span><i /><span>COMMERCE</span><i /><span>SETTLEMENT</span><i /><span>OUTCOME</span></div>
+          <div className="signal-orbit signal-orbit-one" /><div className="signal-orbit signal-orbit-two" /><span className="signal-cursor" />
+          <div className="signal-caption"><span>AFRICA · POLICY + COMMERCE + EVIDENCE</span><strong>Trade<br />in motion.</strong></div>
+        </div>
+      </section>
+      <section className="landing-markets">
+        <div className="landing-markets-heading"><p className="eyebrow">AFRICAN MARKET PULSE</p><span>SELECT A REGION TO INSPECT THE OPERATING SIGNAL</span></div>
+        <div className="landing-market-grid">
+          {[
+            ["🌍", "East Africa", "RWF · KES · UGX", "12", "Trade corridors"],
+            ["🌍", "West Africa", "NGN · GHS · XOF", "18", "Commerce routes"],
+            ["🌍", "Central Africa", "CDF · XAF · STN", "09", "Policy routes"],
+            ["🌍", "North & Southern Africa", "EGP · ZAR · MAD", "15", "Settlement routes"]
+          ].map(([flag, region, currencies, count, label], index) => <button type="button" className={`landing-market-card ${landingMarketIndex === index ? "is-selected" : ""}`} onClick={() => setLandingMarketIndex(index)} key={region}><span className="market-card-top"><b>{flag}</b><i>{index === landingMarketIndex ? "INSPECTING" : "AVAILABLE"}</i></span><strong>{region}</strong><small>{currencies}</small><span className="market-card-value"><b>{count}</b><em>{label}</em></span><span className="market-card-line"><i /></span></button>)}
+        </div>
+        <div className="landing-market-detail"><span><b>SELECTED REGION</b> {["East Africa", "West Africa", "Central Africa", "North & Southern Africa"][landingMarketIndex]}</span><strong>{["Identity → quote → settlement", "Commerce → collection → payout", "Policy → authorization → outcome", "FX → provider rail → reconciliation"][landingMarketIndex]}</strong><small>Synthetic African operating view · controls remain provider and policy gated</small></div>
+      </section>
+      <section className="landing-live">
+        <div className="landing-live-intro"><p className="eyebrow">THE TRADE LEDGER SCANNER</p><h2>Follow the decision, not just the destination.</h2><p>A payment becomes trustworthy when its intent, policy, commerce context, and settlement evidence can be read as one continuous record.</p><span className="landing-live-disclaimer">DEMO ACTIVITY · SYNTHETIC RECORDS · NO LIVE MONEY MOVEMENT</span><div className="ledger-counter"><strong>04</strong><span>evidence layers<br />attached to this view</span></div></div>
+        <div className="ledger-scanner">
+          <div className="ledger-scanner-top"><span>RECORD THREAD / 000184</span><b><i /> SCANNING</b></div>
+          <div className="ledger-thread">
+            {[
+              ["01", "INTENT", "Business invoice", "Kigali · Rwanda", "08:41:02"],
+              ["02", "POLICY", "Corridor permitted", "Rwanda → Kenya", "08:41:18"],
+              ["03", "COMMERCE", "Quote and recipient bound", "KES · M-Pesa rail", "08:42:04"],
+              ["04", "SETTLEMENT", "Ledger handoff ready", "Evidence attached", "08:42:16"]
+            ].map(([number, stage, event, context, time], index) => <div className={`ledger-thread-row ${landingActivityIndex === index ? "is-current" : ""}`} key={stage}><span className="ledger-thread-marker">{number}<i /></span><div><strong>{stage}</strong><b>{event}</b><small>{context}</small></div><time>{time}</time><span className="ledger-thread-action">OPEN <b>↗</b></span></div>)}
+          </div>
+          <div className="ledger-scanner-foot"><span>CHAIN OF RESPONSIBILITY</span><i /><b>INTENT</b><i /><b>POLICY</b><i /><b>OUTCOME</b></div>
+        </div>
+      </section>
+      <section className="landing-passport">
+        <div className="passport-heading"><p className="eyebrow">THE PAYMENT PASSPORT</p><h2>Every movement carries its own evidence.</h2><p>VUKA does not reduce a cross-border payment to a green checkmark. It builds a readable record from the first intention to the final outcome.</p><span className="passport-index">RECORD / 000184 · SYNTHETIC EXAMPLE</span></div>
+        <div className="passport-workbench" aria-label="Illustration of a VUKA transaction passport">
+          <div className="passport-paper passport-paper-back"><span>VUKA / EVIDENCE</span><strong>RWF → KES</strong><small>Corridor brief</small><i>01 / 04</i></div>
+          <div className="passport-paper passport-paper-main"><div className="passport-paper-head"><span>TRANSACTION PASSPORT</span><b>VUKA</b></div><div className="passport-route"><span>KIGALI</span><strong>→</strong><span>NAIROBI</span></div><div className="passport-amount"><small>COMMITTED VALUE</small><strong>184,000 <em>RWF</em></strong><span>Recipient receives 31,500 KES</span></div><div className="passport-lines"><span><b>IDENTITY</b><i>VERIFIED</i></span><span><b>QUOTE</b><i>BOUND</i></span><span><b>AUTHORIZATION</b><i>PROVIDER-OWNED</i></span><span><b>LEDGER</b><i>TRACEABLE</i></span></div><div className="passport-signature"><span>RECORD INTEGRITY</span><strong>99.98%</strong><i /></div></div>
+          <div className="passport-stamp">CONTROLLED<br />MOVEMENT</div>
+          <div className="passport-pin passport-pin-one"><i />IDENTITY</div>
+          <div className="passport-pin passport-pin-two"><i />QUOTE</div>
+          <div className="passport-pin passport-pin-three"><i />LEDGER</div>
+          <div className="passport-ruler"><span>01</span><i /><span>02</span><i /><span>03</span><i /><span>04</span></div>
+        </div>
+      </section>
+      <section className="landing-devices">
+        <div className="landing-device-copy"><p className="eyebrow">ONE SYSTEM, EVERY SCREEN</p><h2>Built for the person sending money and the team protecting it.</h2><p>The trader sees a calm, focused workflow. The operations team sees the evidence behind it. Both views are connected to the same controlled record.</p><div className="device-notes"><span><strong>01</strong><b>Trader mobile</b><small>Prepare, review, authorize.</small></span><span><strong>02</strong><b>Operations console</b><small>Observe, reconcile, respond.</small></span></div></div>
+        <div className="device-stage">
+          <div className="device-console"><div className="device-console-bar"><span>VUKA / OPERATIONS</span><b>LIVE VIEW</b></div><img src="/vuka-operations-console.png" alt="VUKA operations console showing escrow and reconciliation records" /></div>
+          <div className="device-phone" aria-label="VUKA trader mobile preview"><div className="device-phone-speaker" /><div className="device-phone-screen"><div className="phone-status"><span>9:41</span><span>VUKA</span></div><div className="phone-header"><span>Good morning</span><b>•••</b></div><div className="phone-balance"><small>AVAILABLE BALANCE</small><strong>RWF 184,000</strong><span>Business account · Kigali</span></div><div className="phone-route"><span>RWANDA</span><b>→</b><span>KENYA</span></div><div className="phone-quote"><small>TRANSFER QUOTE</small><strong>KES 31,500</strong><span>Rate locked · 14:32 remaining</span><i /></div><button className="phone-button">Review transfer <span>→</span></button><div className="phone-nav"><span>Overview</span><span className="active">Send</span><span>Activity</span></div></div></div>
+        </div>
+      </section>
+      <section id="platform" className="landing-section landing-platform"><div className="landing-section-heading"><p className="eyebrow">ONE CONTROLLED SYSTEM</p><h2>Everything important about a payment, in one place.</h2><p>VUKA connects the trader experience to the operational record behind it—without hiding the steps that make movement safe.</p></div><div className="platform-grid"><article className="platform-feature platform-feature-large"><span className="feature-index">01 / WORKSPACE</span><h3>See the whole position.</h3><p>Balances, invoices, quotes, transfer history, notifications, and support records are organized around the business—not scattered across channels.</p><div className="feature-lines"><span>BUSINESS BALANCE <strong>AVAILABLE</strong></span><span>QUOTE STATUS <strong>BOUND</strong></span><span>TRANSFER STATE <strong>TRACEABLE</strong></span></div></article><article className="platform-feature"><span className="feature-index">02 / LEDGER</span><h3>Records that reconcile.</h3><p>Double-entry accounting, idempotency, ownership checks, and durable workflow events keep the financial record explainable.</p></article><article className="platform-feature"><span className="feature-index">03 / CONTEXT</span><h3>Payments with a reason.</h3><p>Quotes, corridors, recipients, invoices, currencies, and settlement states travel together through the payment lifecycle.</p></article></div></section>
+      <section id="controls" className="landing-section landing-controls"><div className="landing-control-art"><div className="control-card control-card-main"><span>TRANSACTION CONTROL</span><strong>Review before release.</strong><i>Details</i><i>Quote</i><i>Provider authorization</i><i>Final confirmation</i></div><div className="control-card control-card-small"><span>STATUS</span><strong>VISIBLE</strong><em>Every transition recorded</em></div></div><div className="landing-section-heading"><p className="eyebrow">DESIGNED FOR CONFIDENCE</p><h2>Security is a sequence, not a checkbox.</h2><p>Every transaction moves through deliberate checkpoints. Telecom PINs remain with the provider. VUKA does not pretend a local screen is a real authorization rail.</p><div className="landing-control-list"><div><strong>01</strong><span>Authenticate the trader</span></div><div><strong>02</strong><span>Validate ownership and limits</span></div><div><strong>03</strong><span>Bind a live quote</span></div><div><strong>04</strong><span>Record provider evidence</span></div></div></div></section>
+      <section id="corridors" className="landing-section landing-corridors"><div className="landing-section-heading"><p className="eyebrow">BUILT TO CONNECT</p><h2>Start with focused corridors. Expand with control.</h2><p>VUKA is designed around provider adapters, managed credential references, reconciliation, and operational approval—not hardcoded demos.</p></div><div className="corridor-board"><div className="corridor-row corridor-header"><span>ROUTE</span><span>RAIL MODEL</span><span>EXECUTION</span><span>STATE</span></div><div className="corridor-row"><strong>Rwanda → Kenya</strong><span>MTN MoMo / M-Pesa</span><span>Provider adapter</span><b>READY FOR ACTIVATION</b></div><div className="corridor-row"><strong>Kenya → Rwanda</strong><span>M-Pesa / MTN MoMo</span><span>Provider adapter</span><b>CONTROLLED</b></div><div className="corridor-row"><strong>Future corridors</strong><span>Managed integrations</span><span>Credential-gated</span><b>PLANNED</b></div></div></section>
+      <section id="about" className="landing-final"><p className="eyebrow">A BETTER STANDARD FOR MOVEMENT</p><h2>Make every payment easier to understand.</h2><p>VUKA is for businesses that need more than a transfer receipt. It is a trust layer for the work before, during, and after money moves.</p><button className="login-submit landing-final-cta" onClick={() => { setShowLanding(false); setAuthRequired(true); setAuthView("signup"); setAccessMode("trader"); setSignupStep(1); }}>Build your record with VUKA <span>→</span></button></section></>}
+      <footer className="landing-footer"><div className="landing-footer-brand"><span className="brand-mark">V</span><span><strong>VUKA</strong><small>TRADE TRUST</small></span></div><div className="landing-footer-column"><strong>PLATFORM</strong><a href="#landing-platform">Workspace</a><a href="#landing-controls">Transaction controls</a><a href="#landing-corridors">Provider corridors</a></div><div className="landing-footer-column"><strong>COMPANY</strong><a href="#landing-about">About VUKA</a><a href="#landing-company">Our company</a><a href="#landing-careers">Careers</a></div><div className="landing-footer-column"><strong>TRUST</strong><a href="#landing-security">Security & trust</a><a href="#landing-controls">Operational controls</a><a href="#landing-contact">Contact us</a></div><div className="landing-footer-column"><strong>ACCESS</strong><button onClick={() => { setShowLanding(false); setAuthRequired(true); setAuthView("login"); setAccessMode("trader"); }}>Trader sign in</button><button onClick={() => { setShowLanding(false); setAuthRequired(true); setAuthView("signup"); setAccessMode("trader"); setSignupStep(1); }}>Create account</button></div><div className="landing-footer-bottom"><span>CONTROLLED MOVEMENT FOR AFRICAN BUSINESS</span><span>© 2026 VUKA</span></div></footer>
+    </main> :
     authRequired ? <main className="login-shell">
       <div className="login-layout">
         <form className="login-card" onSubmit={authView === "login" ? handleLogin : handleSignup}>
@@ -474,8 +611,14 @@ export function App() {
           <div className="login-security">
             <span className="security-indicator" aria-hidden="true" />
             <span>Protected {accessMode === "trader" ? "trader" : "operator"} access</span>
+            <b>SESSION GATED</b>
+          </div>
+          <div className="auth-context">
+            <div><span className="auth-context-index">01</span><strong>{authView === "login" ? "Return to your workspace" : "Establish your business identity"}</strong><small>{authView === "login" ? "Resume from a protected session." : "Create the record behind your future movement."}</small></div>
+            <span className="auth-context-state">{accessMode === "trader" ? "TRADER" : "OPERATIONS"}</span>
           </div>
           {authView === "signup" && <div className="signup-progress" aria-label={`Registration step ${signupStep} of 3`}><span className={signupStep >= 1 ? "active" : ""}>1. Profile</span><span className={signupStep >= 2 ? "active" : ""}>2. Account</span><span className={signupStep >= 3 ? "active" : ""}>3. Security</span></div>}
+          {accessMode === "trader" && <><button type="button" className="google-auth-button" onClick={continueWithGoogle}><span className="google-glyph" aria-hidden="true">G</span><span>{authView === "login" ? "Continue with Google" : "Sign up with Google"}</span><span aria-hidden="true">↗</span></button><div className="auth-divider"><span>OR USE YOUR VUKA ACCOUNT</span></div></>}
           {authView === "login" && <>{accessMode === "trader" ? <label>Phone number<input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required autoComplete="username" placeholder="+250 700 000 000" /></label> : <label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="username" placeholder="you@company.com" /></label>}<label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" placeholder="Enter your password" /></label></>}
           {authView === "signup" && signupStep === 1 && <><label>Full name<input value={fullName} onChange={(event) => setFullName(event.target.value)} required placeholder="Your full name" autoComplete="name" /></label><label>Phone number<input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required autoComplete="tel" placeholder="+250 700 000 000" /></label></>}
           {authView === "signup" && signupStep === 2 && <><label>Settlement currency<select value={signupCurrency} onChange={(event) => setSignupCurrency(event.target.value)}><option value="RWF">RWF — Rwanda</option><option value="KES">KES — Kenya</option></select></label><label>Business registration number <span className="optional-label">optional</span><input value={businessRegNumber} onChange={(event) => setBusinessRegNumber(event.target.value)} placeholder="Registration number" /></label></>}
@@ -495,10 +638,12 @@ export function App() {
             <span className="visual-node visual-node-three" />
           </div>
           <div className="visual-copy">
-            <p className="eyebrow">VUKA / CONTROLLED MOVEMENT</p>
-            <h2>Trade that leaves a clear record.</h2>
-            <p>From first approval to final settlement, every important step stays visible.</p>
+            <p className="eyebrow">VUKA / AFRICAN TRADE NETWORK</p>
+            <h2>Enter the system behind trusted movement.</h2>
+            <p>One workspace for business identity, trade context, provider authorization, and the records that explain what happened.</p>
+            <div className="visual-proof"><span><b>01</b><strong>IDENTITY</strong><small>Known actor</small></span><span><b>02</b><strong>AUTHORIZATION</strong><small>Provider-owned</small></span><span><b>03</b><strong>OUTCOME</strong><small>Traceable record</small></span></div>
           </div>
+          <div className="visual-activity" aria-hidden="true"><div><span>TRANSACTION PASSPORT</span><b>RWF → KES</b><i>READY FOR REVIEW</i></div><div><span>LEDGER EVIDENCE</span><b>CHAIN INTACT</b><i>04 LAYERS ATTACHED</i></div><div><span>PROVIDER RAIL</span><b>CONTROLLED</b><i>AUTHORIZATION GATED</i></div></div>
           <div className="visual-footer"><span>RWANDA</span><span>KENYA</span><span>TRACEABLE BY DESIGN</span></div>
         </aside>
       </div>
