@@ -34,6 +34,55 @@ contract MockToken {
     }
 }
 
+contract NonReturningToken {
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+
+    function mint(address to, uint256 amount) external {
+        balanceOf[to] += amount;
+    }
+
+    function approve(address spender, uint256 amount) external {
+        allowance[msg.sender][spender] = amount;
+    }
+
+    function transferFrom(address from, address to, uint256 amount) external {
+        require(allowance[from][msg.sender] >= amount, "allowance");
+        require(balanceOf[from] >= amount, "balance");
+        allowance[from][msg.sender] -= amount;
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
+    }
+
+    function transfer(address to, uint256 amount) external {
+        require(balanceOf[msg.sender] >= amount, "balance");
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
+    }
+}
+
+contract FalseReturningToken {
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+
+    function mint(address to, uint256 amount) external {
+        balanceOf[to] += amount;
+    }
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        return true;
+    }
+
+    function transferFrom(address, address, uint256) external pure returns (bool) {
+        return false;
+    }
+
+    function transfer(address, uint256) external pure returns (bool) {
+        return false;
+    }
+}
+
 contract VukaEscrowTest is Test {
     MockToken private token;
     VukaEscrow private escrow;
@@ -229,6 +278,44 @@ contract VukaEscrowTest is Test {
         vm.expectRevert(VukaEscrow.InvalidState.selector);
         vm.prank(supplier);
         escrow.confirmCompletion(id);
+    }
+
+    function testSupportsNonReturningSettlementToken() public {
+        NonReturningToken nonStandardToken = new NonReturningToken();
+        VukaEscrow nonStandardEscrow =
+            new VukaEscrow(address(nonStandardToken), arbiter, address(0));
+        nonStandardToken.mint(buyer, AMOUNT);
+        vm.prank(buyer);
+        nonStandardToken.approve(address(nonStandardEscrow), type(uint256).max);
+
+        vm.prank(buyer);
+        uint256 id = nonStandardEscrow.createEscrow(supplier, AMOUNT, "INV-NONSTANDARD", 7 days);
+        vm.prank(buyer);
+        nonStandardEscrow.lockFunds(id);
+        assertEq(nonStandardToken.balanceOf(address(nonStandardEscrow)), AMOUNT);
+
+        vm.prank(buyer);
+        nonStandardEscrow.confirmCompletion(id);
+        vm.prank(supplier);
+        nonStandardEscrow.confirmCompletion(id);
+
+        assertEq(uint256(nonStandardEscrow.getEscrow(id).state), uint256(VukaEscrow.State.RELEASED));
+        assertEq(nonStandardToken.balanceOf(supplier), AMOUNT);
+    }
+
+    function testRejectsFalseReturningSettlementToken() public {
+        FalseReturningToken falseToken = new FalseReturningToken();
+        VukaEscrow falseEscrow = new VukaEscrow(address(falseToken), arbiter, address(0));
+        falseToken.mint(buyer, AMOUNT);
+        vm.prank(buyer);
+        falseToken.approve(address(falseEscrow), type(uint256).max);
+
+        vm.prank(buyer);
+        uint256 id = falseEscrow.createEscrow(supplier, AMOUNT, "INV-FALSE", 7 days);
+
+        vm.expectRevert(VukaEscrow.TransferFailed.selector);
+        vm.prank(buyer);
+        falseEscrow.lockFunds(id);
     }
 
     function testFuzzCreateAndLock(uint128 amount, uint64 timeoutSeconds) public {
