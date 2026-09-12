@@ -95,11 +95,7 @@ contract VukaForwarderTest is Test {
 
     function testGaslessCreateAndLockEscrow() public {
         bytes memory createData = abi.encodeWithSelector(
-            VukaEscrow.createEscrow.selector,
-            supplier,
-            AMOUNT,
-            "INV-GASLESS-001",
-            7 days
+            VukaEscrow.createEscrow.selector, supplier, AMOUNT, "INV-GASLESS-001", 7 days
         );
 
         VukaForwarder.ForwardRequest memory req = VukaForwarder.ForwardRequest({
@@ -147,11 +143,7 @@ contract VukaForwarderTest is Test {
 
     function testReplayAttackPrevention() public {
         bytes memory createData = abi.encodeWithSelector(
-            VukaEscrow.createEscrow.selector,
-            supplier,
-            AMOUNT,
-            "INV-REPLAY",
-            7 days
+            VukaEscrow.createEscrow.selector, supplier, AMOUNT, "INV-REPLAY", 7 days
         );
 
         VukaForwarder.ForwardRequest memory req = VukaForwarder.ForwardRequest({
