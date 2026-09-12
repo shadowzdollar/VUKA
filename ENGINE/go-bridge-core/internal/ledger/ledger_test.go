@@ -55,6 +55,41 @@ func fund(t *testing.T, s *ledger.Service, accountID string, amount float64) {
 	}
 }
 
+func assertLedgerInvariant(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	rows, err := pool.Query(context.Background(), `
+		SELECT t.id, t.status, COUNT(le.id), COALESCE(SUM(le.amount), 0)
+		FROM transactions t
+		LEFT JOIN ledger_entries le ON le.transaction_id = t.id
+		GROUP BY t.id, t.status
+		ORDER BY t.id`)
+	if err != nil {
+		t.Fatalf("ledger invariant query: %v", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id, status string
+		var entries int
+		var sum float64
+		if err := rows.Scan(&id, &status, &entries, &sum); err != nil {
+			t.Fatalf("ledger invariant scan: %v", err)
+		}
+		if sum != 0 {
+			t.Fatalf("transaction %s entries net to %.4f, want 0", id, sum)
+		}
+		if status == string(ledger.StatusSuccess) && entries == 0 {
+			t.Fatalf("successful transaction %s has no ledger entries", id)
+		}
+		if entries == 1 {
+			t.Fatalf("transaction %s has a single-sided ledger entry", id)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("ledger invariant rows: %v", err)
+	}
+}
+
 func TestCreateUser_CreatesPersonalAndBusinessAccounts(t *testing.T) {
 	s, _ := newService(t)
 	u, _, err := s.CreateUser(context.Background(), ledger.CreateUserRequest{
@@ -115,7 +150,7 @@ func TestCreateUser_DuplicatePhoneRejected(t *testing.T) {
 }
 
 func TestFundAccount_CreditsBalance(t *testing.T) {
-	s, _ := newService(t)
+	s, pool := newService(t)
 	_, _, business := createTrader(t, s, "Fund Test", "+250700000003")
 	fund(t, s, business.ID, 100000)
 
@@ -126,10 +161,11 @@ func TestFundAccount_CreditsBalance(t *testing.T) {
 	if b.Amount != 100000 {
 		t.Errorf("balance=%.2f, want 100000", b.Amount)
 	}
+	assertLedgerInvariant(t, pool)
 }
 
 func TestTransfer_Success_WritesBalancedDoubleEntry(t *testing.T) {
-	s, _ := newService(t)
+	s, pool := newService(t)
 	_, _, srcBusiness := createTrader(t, s, "Sender", "+250700000004")
 	_, dstPersonal, dstBusiness := createTrader(t, s, "Recipient", "+250700000005")
 
@@ -189,10 +225,11 @@ func TestTransfer_Success_WritesBalancedDoubleEntry(t *testing.T) {
 	if sum != 0 {
 		t.Errorf("double-entry does not net to zero: sum=%v", sum)
 	}
+	assertLedgerInvariant(t, pool)
 }
 
 func TestTransfer_InsufficientFunds(t *testing.T) {
-	s, _ := newService(t)
+	s, pool := newService(t)
 	_, _, src := createTrader(t, s, "Poor", "+250700000006")
 	_, _, dst := createTrader(t, s, "Rich", "+250700000007")
 	fund(t, s, src.ID, 100)
@@ -213,6 +250,7 @@ func TestTransfer_InsufficientFunds(t *testing.T) {
 	if b, _ := s.GetBalance(context.Background(), src.ID); b.Amount != 100 {
 		t.Errorf("source unchanged? balance=%.2f, want 100", b.Amount)
 	}
+	assertLedgerInvariant(t, pool)
 }
 
 func mustUser(t *testing.T, s *ledger.Service, acc *ledger.Account) string {
@@ -225,7 +263,7 @@ func mustUser(t *testing.T, s *ledger.Service, acc *ledger.Account) string {
 }
 
 func TestTransfer_IdempotencyReplay_ReturnsOriginalNoDup(t *testing.T) {
-	s, _ := newService(t)
+	s, pool := newService(t)
 	_, _, src := createTrader(t, s, "Idem", "+250700000008")
 	_, _, dst := createTrader(t, s, "Dst", "+250700000009")
 	fund(t, s, src.ID, 5000)
@@ -266,6 +304,7 @@ func TestTransfer_IdempotencyReplay_ReturnsOriginalNoDup(t *testing.T) {
 	if dstBal.Amount != 1000 {
 		t.Errorf("dst credited twice? balance=%.2f, want 1000", dstBal.Amount)
 	}
+	assertLedgerInvariant(t, pool)
 }
 
 func TestTransfer_CurrencyMismatch(t *testing.T) {
@@ -326,7 +365,7 @@ func TestTransfer_UnknownAdapter(t *testing.T) {
 }
 
 func TestReverseTransfer(t *testing.T) {
-	s, _ := newService(t)
+	s, pool := newService(t)
 	_, _, src := createTrader(t, s, "RevSrc", "+250700000016")
 	_, _, dst := createTrader(t, s, "RevDst", "+250700000017")
 	fund(t, s, src.ID, 5000)
@@ -372,6 +411,7 @@ func TestReverseTransfer(t *testing.T) {
 	if sum != 0 {
 		t.Errorf("entries net %v, want 0", sum)
 	}
+	assertLedgerInvariant(t, pool)
 }
 
 func TestReverseTransfer_NonSuccessRejected(t *testing.T) {
@@ -404,13 +444,13 @@ func TestReverseTransfer_NonSuccessRejected(t *testing.T) {
 // deterministic latency. This forces concurrent transfers to queue on the
 // source-account row lock (SELECT ... FOR UPDATE) instead of each goroutine
 // reading a stale balance, which is exactly the race the lock must prevent.
-func newDelayedService(t *testing.T) *ledger.Service {
+func newDelayedService(t *testing.T) (*ledger.Service, *pgxpool.Pool) {
 	t.Helper()
 	pool := testutil.TestPool(t)
 	reg := adapters.NewRegistry()
 	reg.Register(adapters.NewMTNAdapter(25*time.Millisecond, 0, "success", 5*time.Second))
 	idem := idempotency.NewStore(pool)
-	return ledger.NewService(pool, idem, reg)
+	return ledger.NewService(pool, idem, reg), pool
 }
 
 // TestTransfer_Concurrent_ExactFunding launches many goroutines transferring
@@ -418,7 +458,7 @@ func newDelayedService(t *testing.T) *ledger.Service {
 // the source-row lock, every transfer must succeed and the derived balance
 // must end exactly at zero — never negative at any point.
 func TestTransfer_Concurrent_ExactFunding(t *testing.T) {
-	s := newDelayedService(t)
+	s, pool := newDelayedService(t)
 	_, _, src := createTrader(t, s, "ConcSrc", "+250****0030")
 	const workers = 8
 	const amount = 1000.0
@@ -460,6 +500,7 @@ func TestTransfer_Concurrent_ExactFunding(t *testing.T) {
 	if srcBal.Amount != 0 {
 		t.Errorf("source balance after %d concurrent transfers = %.2f, want 0", workers, srcBal.Amount)
 	}
+	assertLedgerInvariant(t, pool)
 }
 
 // TestTransfer_Concurrent_NoOverdraft funds the source for only N-1 of the N
@@ -467,7 +508,7 @@ func TestTransfer_Concurrent_ExactFunding(t *testing.T) {
 // and the balance must never drift negative — the strongest proof that the
 // FOR UPDATE lock serializes balance reads against concurrent debits.
 func TestTransfer_Concurrent_NoOverdraft(t *testing.T) {
-	s := newDelayedService(t)
+	s, pool := newDelayedService(t)
 	_, _, src := createTrader(t, s, "ConcSrc2", "+250****0041")
 	const workers = 8
 	const amount = 1000.0
@@ -523,4 +564,5 @@ func TestTransfer_Concurrent_NoOverdraft(t *testing.T) {
 	if srcBal.Amount != 0 {
 		t.Errorf("source balance = %.2f, want 0 (must never go negative)", srcBal.Amount)
 	}
+	assertLedgerInvariant(t, pool)
 }
