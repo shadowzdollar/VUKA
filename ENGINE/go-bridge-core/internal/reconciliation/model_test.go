@@ -54,6 +54,99 @@ func TestApplyRejectsInvalidOrder(t *testing.T) {
 	}
 }
 
+func TestApplyRejectsMismatchedEscrowIdentity(t *testing.T) {
+	created := event(EventEscrowCreated)
+	created.Buyer, created.Supplier, created.Amount, created.TimeoutAt = "0xbuyer", "0xsupplier", "1", 1
+	var item Escrow
+	if err := Apply(&item, created); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*ChainEvent)
+	}{
+		{
+			name: "chain",
+			mutate: func(e *ChainEvent) {
+				e.ChainID++
+			},
+		},
+		{
+			name: "contract",
+			mutate: func(e *ChainEvent) {
+				e.ContractAddress = "0xother"
+			},
+		},
+		{
+			name: "escrow",
+			mutate: func(e *ChainEvent) {
+				e.EscrowID++
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			next := event(EventFundsLocked)
+			tt.mutate(&next)
+			if err := Apply(&item, next); !errors.Is(err, ErrInvalidEvent) {
+				t.Fatalf("error = %v, want invalid event", err)
+			}
+			if item.State != StateCreated {
+				t.Fatalf("state changed to %q after rejected event", item.State)
+			}
+		})
+	}
+}
+
+func TestApplyRejectsIncompleteCreateEvent(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*ChainEvent)
+	}{
+		{
+			name: "missing buyer",
+			mutate: func(e *ChainEvent) {
+				e.Buyer = ""
+			},
+		},
+		{
+			name: "missing supplier",
+			mutate: func(e *ChainEvent) {
+				e.Supplier = ""
+			},
+		},
+		{
+			name: "missing amount",
+			mutate: func(e *ChainEvent) {
+				e.Amount = ""
+			},
+		},
+		{
+			name: "missing timeout",
+			mutate: func(e *ChainEvent) {
+				e.TimeoutAt = 0
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			created := event(EventEscrowCreated)
+			created.Buyer, created.Supplier, created.Amount, created.TimeoutAt = "0xbuyer", "0xsupplier", "1", 1
+			tt.mutate(&created)
+			var item Escrow
+			if err := Apply(&item, created); !errors.Is(err, ErrInvalidEvent) {
+				t.Fatalf("error = %v, want invalid event", err)
+			}
+			if item.State != "" {
+				t.Fatalf("state = %q, want empty after rejected create", item.State)
+			}
+		})
+	}
+}
+
 func TestApplyRejectsTerminalStateTransitions(t *testing.T) {
 	created := event(EventEscrowCreated)
 	created.Buyer, created.Supplier, created.Amount, created.TimeoutAt = "0xbuyer", "0xsupplier", "1", 1
