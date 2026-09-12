@@ -44,7 +44,7 @@ contract VukaEscrowTest is Test {
 
     function setUp() public {
         token = new MockToken();
-        escrow = new VukaEscrow(address(token), arbiter);
+        escrow = new VukaEscrow(address(token), arbiter, address(0));
         token.mint(buyer, AMOUNT * 3);
         vm.prank(buyer);
         token.approve(address(escrow), type(uint256).max);
@@ -298,7 +298,7 @@ contract VukaEscrowInvariantTest is Test {
 
     function setUp() public {
         token = new MockToken();
-        escrow = new VukaEscrow(address(token), arbiter);
+        escrow = new VukaEscrow(address(token), arbiter, address(0));
         token.mint(buyer, AMOUNT);
         vm.prank(buyer);
         token.approve(address(escrow), type(uint256).max);

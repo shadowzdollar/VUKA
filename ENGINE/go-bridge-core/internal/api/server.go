@@ -84,7 +84,7 @@ func reconciliationActivityResource(chainID int64, contract string) string {
 // corsOrigins is the allow-list of browser origins (e.g. "http://localhost:5173").
 // Empty disables origin checking (sets the header echo for any origin).
 func NewServer(ledgerSvc *ledger.Service, log *slog.Logger, corsOrigins []string) http.Handler {
-	s := &Server{ledger: ledgerSvc, log: log, mux: http.NewServeMux(), providerCatalog: providers.NewDefaultCatalog(), providerExecution: defaultProviderExecution()}
+	s := &Server{ledger: ledgerSvc, log: log, mux: http.NewServeMux(), hub: NewHub(), providerCatalog: providers.NewDefaultCatalog(), providerExecution: defaultProviderExecution()}
 	if ledgerSvc != nil {
 		s.identity = identity.NewService(ledgerSvc.DB())
 		s.settlement = settlement.NewService(ledgerSvc.DB(), settlement.DefaultPolicy())

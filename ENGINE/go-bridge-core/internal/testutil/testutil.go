@@ -15,10 +15,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"vuka/go-bridge-core/internal/adapters"
+	"vuka/go-bridge-core/internal/idempotency"
 	"vuka/go-bridge-core/internal/identity"
+	"vuka/go-bridge-core/internal/ledger"
 	"vuka/go-bridge-core/internal/pilot"
+	"vuka/go-bridge-core/internal/providerexec"
 	"vuka/go-bridge-core/internal/providers"
+	"vuka/go-bridge-core/internal/reconciliation"
 	"vuka/go-bridge-core/internal/settlement"
+	"vuka/go-bridge-core/internal/support"
+	"vuka/go-bridge-core/internal/transactionworkflow"
 )
 
 var (
@@ -79,17 +85,105 @@ func TestPool(t *testing.T) *pgxpool.Pool {
 			_, _ = schemaConn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, advisoryLockKey)
 			schemaConn.Release()
 		}()
+
+		idem := idempotency.NewStore(poolPtr)
+		reg := adapters.NewRegistry()
+		ledgerSvc := ledger.NewService(poolPtr, idem, reg)
+		if err := ledgerSvc.EnsureSchema(ctx); err != nil {
+			t.Fatalf("testutil: ensure ledger schema: %v", err)
+		}
+		authDDL := `
+			CREATE TABLE IF NOT EXISTS operators (
+				id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+				email VARCHAR(255) UNIQUE NOT NULL,
+				password_hash TEXT NOT NULL,
+				role VARCHAR(32) NOT NULL DEFAULT 'operator',
+				created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+			);
+			CREATE TABLE IF NOT EXISTS operator_sessions (
+				id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+				operator_id UUID NOT NULL REFERENCES operators(id) ON DELETE CASCADE,
+				token_hash VARCHAR(64) UNIQUE NOT NULL,
+				expires_at TIMESTAMPTZ NOT NULL,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+			);
+			CREATE INDEX IF NOT EXISTS idx_operator_sessions_expiry ON operator_sessions(expires_at);
+			CREATE TABLE IF NOT EXISTS operator_activity (
+				id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+				actor_email VARCHAR(255) NOT NULL,
+				role VARCHAR(32) NOT NULL,
+				action VARCHAR(64) NOT NULL,
+				resource VARCHAR(255),
+				details TEXT,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+			);
+			CREATE INDEX IF NOT EXISTS idx_operator_activity_created_at ON operator_activity(created_at DESC);
+			CREATE OR REPLACE FUNCTION prevent_operator_activity_mutation()
+			RETURNS trigger AS $$
+			BEGIN
+				RAISE EXCEPTION 'operator activity is append-only';
+			END;
+			$$ LANGUAGE plpgsql;
+			DROP TRIGGER IF EXISTS operator_activity_append_only ON operator_activity;
+			CREATE TRIGGER operator_activity_append_only
+			BEFORE UPDATE OR DELETE ON operator_activity
+			FOR EACH ROW EXECUTE FUNCTION prevent_operator_activity_mutation();
+
+			CREATE TABLE IF NOT EXISTS trader_credentials (
+				user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+				password_hash TEXT NOT NULL,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+			);
+			CREATE TABLE IF NOT EXISTS trader_sessions (
+				id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+				user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+				token_hash VARCHAR(64) UNIQUE NOT NULL,
+				expires_at TIMESTAMPTZ NOT NULL,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+			);
+			CREATE INDEX IF NOT EXISTS idx_trader_sessions_expiry ON trader_sessions(expires_at);
+			CREATE TABLE IF NOT EXISTS transaction_authorizations (
+				id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+				trader_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+				idempotency_key VARCHAR(255) NOT NULL UNIQUE,
+				source_account_id UUID NOT NULL,
+				destination_account_id UUID NOT NULL,
+				amount NUMERIC(20, 6) NOT NULL,
+				currency_from VARCHAR(3) NOT NULL,
+				currency_to VARCHAR(3) NOT NULL,
+				status VARCHAR(32) NOT NULL,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+				expires_at TIMESTAMPTZ NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_transaction_authorizations_trader ON transaction_authorizations(trader_id, created_at DESC);
+		`
+		if _, err := poolPtr.Exec(ctx, authDDL); err != nil {
+			t.Fatalf("testutil: ensure auth schema: %v", err)
+		}
 		if err := identity.EnsureSchema(ctx, poolPtr); err != nil {
 			t.Fatalf("testutil: ensure identity schema: %v", err)
 		}
 		if err := providers.EnsureSchema(ctx, poolPtr); err != nil {
 			t.Fatalf("testutil: ensure provider schema: %v", err)
 		}
+		if err := providerexec.EnsureSchema(ctx, poolPtr); err != nil {
+			t.Fatalf("testutil: ensure provider execution schema: %v", err)
+		}
+		if err := transactionworkflow.EnsureSchema(ctx, poolPtr); err != nil {
+			t.Fatalf("testutil: ensure transaction workflow schema: %v", err)
+		}
 		if err := settlement.NewService(poolPtr, settlement.DefaultPolicy()).EnsureSchema(ctx); err != nil {
 			t.Fatalf("testutil: ensure settlement schema: %v", err)
 		}
 		if err := pilot.NewService(poolPtr, false, true).EnsureSchema(ctx); err != nil {
 			t.Fatalf("testutil: ensure pilot schema: %v", err)
+		}
+		if err := support.NewService(poolPtr, false).EnsureSchema(ctx); err != nil {
+			t.Fatalf("testutil: ensure support schema: %v", err)
+		}
+		if err := reconciliation.EnsureSchema(ctx, poolPtr); err != nil {
+			t.Fatalf("testutil: ensure reconciliation schema: %v", err)
 		}
 	})
 
