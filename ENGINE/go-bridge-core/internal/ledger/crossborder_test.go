@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"vuka/go-bridge-core/internal/adapters"
 	"vuka/go-bridge-core/internal/idempotency"
 	"vuka/go-bridge-core/internal/ledger"
@@ -14,7 +16,7 @@ import (
 
 // newCorridorService returns a Service with the corridor registry (MTN + M-Pesa),
 // a default FX rate, and RWF/KES SETTLEMENT accounts seeded.
-func newCorridorService(t *testing.T) *ledger.Service {
+func newCorridorService(t *testing.T) (*ledger.Service, *pgxpool.Pool) {
 	t.Helper()
 	pool := testutil.TestPool(t)
 	idem := idempotency.NewStore(pool)
@@ -23,7 +25,7 @@ func newCorridorService(t *testing.T) *ledger.Service {
 	if err := svc.EnsureSettlementAccounts(context.Background(), "RWF", "KES"); err != nil {
 		t.Fatalf("EnsureSettlementAccounts: %v", err)
 	}
-	return svc
+	return svc, pool
 }
 
 // createCorridorTrader creates a trader whose BUSINESS wallet is in the given
@@ -72,7 +74,7 @@ func collectBalances(t *testing.T, s *ledger.Service, ids ...string) map[string]
 }
 
 func TestCrossBorderTransfer_LegsBalanceAndFxConvert(t *testing.T) {
-	s := newCorridorService(t)
+	s, pool := newCorridorService(t)
 	rwf := createCorridorTrader(t, s, "RW Importer", "+250****0061", "RWF")
 	kes := createCorridorTrader(t, s, "KE Supplier", "+254****0062", "KES")
 	fundCorridor(t, s, rwf.ID, 190000) // RWF
@@ -135,10 +137,11 @@ func TestCrossBorderTransfer_LegsBalanceAndFxConvert(t *testing.T) {
 	if kesEntries != 2 {
 		t.Errorf("expected 2 KES-denominated entries, got %d", kesEntries)
 	}
+	assertLedgerInvariant(t, pool)
 }
 
 func TestCrossBorderTransfer_Replay_ReturnsOriginal_NoDup(t *testing.T) {
-	s := newCorridorService(t)
+	s, pool := newCorridorService(t)
 	rwf := createCorridorTrader(t, s, "RW2", "+250****0063", "RWF")
 	kes := createCorridorTrader(t, s, "KE2", "+254****0064", "KES")
 	fundCorridor(t, s, rwf.ID, 100000)
@@ -184,10 +187,11 @@ func TestCrossBorderTransfer_Replay_ReturnsOriginal_NoDup(t *testing.T) {
 	if len(entries) != 4 {
 		t.Errorf("expected 4 entries, got %d", len(entries))
 	}
+	assertLedgerInvariant(t, pool)
 }
 
 func TestCrossBorderTransfer_InsufficientFunds(t *testing.T) {
-	s := newCorridorService(t)
+	s, pool := newCorridorService(t)
 	rwf := createCorridorTrader(t, s, "RW3", "+250****0065", "RWF")
 	kes := createCorridorTrader(t, s, "KE3", "+254****0066", "KES")
 	fundCorridor(t, s, rwf.ID, 100)
@@ -203,10 +207,11 @@ func TestCrossBorderTransfer_InsufficientFunds(t *testing.T) {
 	if !errors.Is(err, ledger.ErrInsufficientFunds) {
 		t.Fatalf("expected ErrInsufficientFunds, got %v", err)
 	}
+	assertLedgerInvariant(t, pool)
 }
 
 func TestCrossBorderTransfer_RejectsWrongSourceType(t *testing.T) {
-	s := newCorridorService(t)
+	s, pool := newCorridorService(t)
 	_, accounts, _ := s.CreateUser(context.Background(), ledger.CreateUserRequest{
 		FullName: "Pers", PhoneNumber: "+250****0067",
 	}, "RWF")
@@ -225,10 +230,11 @@ func TestCrossBorderTransfer_RejectsWrongSourceType(t *testing.T) {
 	if !errors.Is(err, ledger.ErrInvalidAccountType) {
 		t.Fatalf("expected ErrInvalidAccountType, got %v", err)
 	}
+	assertLedgerInvariant(t, pool)
 }
 
 func TestCrossBorderTransfer_MissingFxRate_Defaults(t *testing.T) {
-	s := newCorridorService(t)
+	s, pool := newCorridorService(t)
 	rwf := createCorridorTrader(t, s, "RW4", "+250****0069", "RWF")
 	kes := createCorridorTrader(t, s, "KE5", "+254****0070", "KES")
 	fundCorridor(t, s, rwf.ID, 95000)
@@ -247,10 +253,11 @@ func TestCrossBorderTransfer_MissingFxRate_Defaults(t *testing.T) {
 	if tf.FxRate == nil || *tf.FxRate != 9.5 {
 		t.Errorf("expected default fx_rate 9.5, got %v", tf.FxRate)
 	}
+	assertLedgerInvariant(t, pool)
 }
 
 func TestCrossBorderTransfer_Reversal_RestoresBalances(t *testing.T) {
-	s := newCorridorService(t)
+	s, pool := newCorridorService(t)
 	rwf := createCorridorTrader(t, s, "RW5", "+250****0071", "RWF")
 	kes := createCorridorTrader(t, s, "KE6", "+254****0072", "KES")
 	fundCorridor(t, s, rwf.ID, 95000)
@@ -282,6 +289,7 @@ func TestCrossBorderTransfer_Reversal_RestoresBalances(t *testing.T) {
 	if len(entries) != 8 { // 4 original + 4 contra
 		t.Errorf("expected 8 entries after cross-border reversal, got %d", len(entries))
 	}
+	assertLedgerInvariant(t, pool)
 }
 
 func TestCrossBorderTransfer_RequiresSettlementAccounts(t *testing.T) {
@@ -309,4 +317,5 @@ func TestCrossBorderTransfer_RequiresSettlementAccounts(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when settlement accounts / mpesa rail missing")
 	}
+	assertLedgerInvariant(t, pool)
 }
