@@ -14,7 +14,12 @@ contract VukaEscrowFactory {
     error Unauthorized();
     error InvalidAddress();
 
-    event EscrowDeployed(address indexed escrowAddress, address indexed token, address indexed arbiter, address forwarder);
+    event EscrowDeployed(
+        address indexed escrowAddress,
+        address indexed token,
+        address indexed arbiter,
+        address forwarder
+    );
     event OwnerTransferred(address indexed previousOwner, address indexed newOwner);
 
     modifier onlyOwner() {
@@ -27,7 +32,11 @@ contract VukaEscrowFactory {
         trustedForwarder = _forwarder;
     }
 
-    function createEscrowContract(address token, address arbiter) external onlyOwner returns (address escrowAddress) {
+    function createEscrowContract(address token, address arbiter)
+        external
+        onlyOwner
+        returns (address escrowAddress)
+    {
         if (token == address(0) || arbiter == address(0)) revert InvalidAddress();
 
         VukaEscrow newEscrow = new VukaEscrow(token, arbiter, trustedForwarder);
