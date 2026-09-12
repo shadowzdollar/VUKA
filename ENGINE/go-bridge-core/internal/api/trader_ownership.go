@@ -26,6 +26,17 @@ func (s *Server) ownsTransfer(ctx context.Context, traderID, transferID string) 
 	return err == nil && exists
 }
 
+func (s *Server) ownsTransferSource(ctx context.Context, traderID, transferID string) bool {
+	var exists bool
+	err := s.ledger.DB().QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM transactions t
+			JOIN accounts a ON a.id=t.source_account_id
+			WHERE t.id=$1 AND a.user_id=$2
+		)`, strings.TrimSpace(transferID), strings.TrimSpace(traderID)).Scan(&exists)
+	return err == nil && exists
+}
+
 func (s *Server) ownsInvoice(ctx context.Context, traderID, invoiceID string) bool {
 	var exists bool
 	err := s.ledger.DB().QueryRow(ctx, `
