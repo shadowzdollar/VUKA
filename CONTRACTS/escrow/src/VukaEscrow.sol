@@ -5,8 +5,8 @@ pragma solidity ^0.8.24;
 /// @notice Holds an ERC-20 settlement asset until confirmation, timeout, or
 ///         arbitration decides the supplier's outcome. Supports EIP-2771 meta-transactions for gasless UX.
 interface IERC20 {
-    function transferFrom(address from, address to, uint256 amount) external returns (bool);
-    function transfer(address to, uint256 amount) external returns (bool);
+    function transferFrom(address from, address to, uint256 amount) external;
+    function transfer(address to, uint256 amount) external;
 }
 
 contract VukaEscrow {
@@ -123,7 +123,9 @@ contract VukaEscrow {
             invoiceRef: invoiceRef
         });
 
-        emit EscrowCreated(escrowId, sender, supplier, amount, block.timestamp + timeoutSeconds, invoiceRef);
+        emit EscrowCreated(
+            escrowId, sender, supplier, amount, block.timestamp + timeoutSeconds, invoiceRef
+        );
     }
 
     function lockFunds(uint256 escrowId) external whenNotPaused {
@@ -134,9 +136,7 @@ contract VukaEscrow {
         }
 
         escrow.state = State.LOCKED;
-        if (!settlementToken.transferFrom(sender, address(this), escrow.amount)) {
-            revert TransferFailed();
-        }
+        _safeTransferFrom(sender, address(this), escrow.amount);
         emit FundsLocked(escrowId);
     }
 
@@ -200,14 +200,26 @@ contract VukaEscrow {
 
     function _release(uint256 escrowId, Escrow storage escrow) private {
         escrow.state = State.RELEASED;
-        if (!settlementToken.transfer(escrow.supplier, escrow.amount)) revert TransferFailed();
+        _safeTransfer(escrow.supplier, escrow.amount);
         emit EscrowReleased(escrowId, escrow.supplier);
     }
 
     function _refund(uint256 escrowId, Escrow storage escrow) private {
         escrow.state = State.REFUNDED;
-        if (!settlementToken.transfer(escrow.buyer, escrow.amount)) revert TransferFailed();
+        _safeTransfer(escrow.buyer, escrow.amount);
         emit EscrowRefunded(escrowId, escrow.buyer);
+    }
+
+    function _safeTransfer(address to, uint256 amount) private {
+        (bool ok, bytes memory data) = address(settlementToken)
+            .call(abi.encodeWithSelector(IERC20.transfer.selector, to, amount));
+        if (!ok || (data.length != 0 && !abi.decode(data, (bool)))) revert TransferFailed();
+    }
+
+    function _safeTransferFrom(address from, address to, uint256 amount) private {
+        (bool ok, bytes memory data) = address(settlementToken)
+            .call(abi.encodeWithSelector(IERC20.transferFrom.selector, from, to, amount));
+        if (!ok || (data.length != 0 && !abi.decode(data, (bool)))) revert TransferFailed();
     }
 
     function _escrow(uint256 escrowId) private view returns (Escrow storage escrow) {
