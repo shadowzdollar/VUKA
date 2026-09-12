@@ -14,8 +14,9 @@ contract VukaForwarder {
         uint256 deadline;
     }
 
-    bytes32 private constant TYPEHASH =
-        keccak256("ForwardRequest(address from,address to,uint256 value,uint256 gas,uint256 nonce,bytes data,uint256 deadline)");
+    bytes32 private constant TYPEHASH = keccak256(
+        "ForwardRequest(address from,address to,uint256 value,uint256 gas,uint256 nonce,bytes data,uint256 deadline)"
+    );
 
     bytes32 public immutable DOMAIN_SEPARATOR;
 
@@ -25,12 +26,16 @@ contract VukaForwarder {
     error DeadlineExpired();
     error ExecutionFailed(bytes reason);
 
-    event TransactionForwarded(address indexed from, address indexed to, uint256 nonce, bool success);
+    event TransactionForwarded(
+        address indexed from, address indexed to, uint256 nonce, bool success
+    );
 
     constructor() {
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
-                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+                ),
                 keccak256(bytes("VukaForwarder")),
                 keccak256(bytes("1")),
                 block.chainid,
@@ -43,7 +48,11 @@ contract VukaForwarder {
         return _nonces[from];
     }
 
-    function verify(ForwardRequest calldata req, bytes calldata signature) public view returns (bool) {
+    function verify(ForwardRequest calldata req, bytes calldata signature)
+        public
+        view
+        returns (bool)
+    {
         if (block.timestamp > req.deadline) return false;
         if (req.nonce != _nonces[req.from]) return false;
 
@@ -83,7 +92,7 @@ contract VukaForwarder {
         // Append the user's address (20 bytes) to calldata for EIP-2771 context extraction
         bytes memory callData = abi.encodePacked(req.data, req.from);
 
-        (success, returnData) = req.to.call{gas: req.gas, value: req.value}(callData);
+        (success, returnData) = req.to.call{ gas: req.gas, value: req.value }(callData);
         if (!success) {
             emit TransactionForwarded(req.from, req.to, req.nonce, false);
             revert ExecutionFailed(returnData);
