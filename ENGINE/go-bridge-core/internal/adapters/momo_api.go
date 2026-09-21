@@ -39,21 +39,21 @@ type momoTokenResponse struct {
 }
 
 type momoRequestToPay struct {
-	Amount       string          `json:"amount"`
-	Currency     string          `json:"currency"`
-	ExternalID   string          `json:"externalId"`
-	Payer        momoParty       `json:"payer"`
-	PayerMessage string          `json:"payerMessage"`
-	PayeeNote    string          `json:"payeeNote"`
+	Amount       string    `json:"amount"`
+	Currency     string    `json:"currency"`
+	ExternalID   string    `json:"externalId"`
+	Payer        momoParty `json:"payer"`
+	PayerMessage string    `json:"payerMessage"`
+	PayeeNote    string    `json:"payeeNote"`
 }
 
 type momoTransfer struct {
-	Amount       string          `json:"amount"`
-	Currency     string          `json:"currency"`
-	ExternalID   string          `json:"externalId"`
-	Payee        momoParty       `json:"payee"`
-	PayerMessage string          `json:"payerMessage"`
-	PayeeNote    string          `json:"payeeNote"`
+	Amount       string    `json:"amount"`
+	Currency     string    `json:"currency"`
+	ExternalID   string    `json:"externalId"`
+	Payee        momoParty `json:"payee"`
+	PayerMessage string    `json:"payerMessage"`
+	PayeeNote    string    `json:"payeeNote"`
 }
 
 type momoParty struct {
@@ -158,8 +158,8 @@ func (a *MoMoAPIAdapter) Collection(ctx context.Context, req CollectionRequest) 
 
 	phone := strings.TrimPrefix(req.Phone, "+")
 	payload := momoRequestToPay{
-		Amount:   fmt.Sprintf("%.0f", req.Amount),
-		Currency: req.Currency,
+		Amount:     fmt.Sprintf("%.0f", req.Amount),
+		Currency:   req.Currency,
 		ExternalID: req.Reference,
 		Payer: momoParty{
 			PartyIdType: "MSISDN",
@@ -216,8 +216,8 @@ func (a *MoMoAPIAdapter) Payout(ctx context.Context, req PayoutRequest) (*Payout
 
 	phone := strings.TrimPrefix(req.Phone, "+")
 	payload := momoTransfer{
-		Amount:   fmt.Sprintf("%.0f", req.Amount),
-		Currency: req.Currency,
+		Amount:     fmt.Sprintf("%.0f", req.Amount),
+		Currency:   req.Currency,
 		ExternalID: req.Reference,
 		Payee: momoParty{
 			PartyIdType: "MSISDN",
