@@ -235,10 +235,7 @@ func (s *Service) CrossBorderTransfer(ctx context.Context, key string, req Cross
 	// 7. Dispatch the KES leg to the Kenya rail. The rail is charged the
 	// converted amount via the destination account id as the wallet address
 	// (mirroring Transfer's simulated dispatch).
-	adapter := s.registry.Get("mpesa-ke")
-	if adapter == nil {
-		adapter = s.registry.Get(s.adapterName())
-	}
+	adapter := s.railForCurrency(req.CurrencyTo)
 	if adapter == nil {
 		return nil, false, ErrAdapterUnavailable
 	}
