@@ -1,260 +1,749 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { Shell, PageHeader, Panel, Metric, Chip } from "@/components/vuka/shell";
-import { Input } from "@/components/ui/input";
+import { useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
-import { traders as seed, usd, type Trader } from "@/lib/vuka-data";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { QueryBoundary } from "@/components/vuka/query-state";
+import { Chip, Metric, PageHeader, Panel, Shell } from "@/components/vuka/shell";
+import { describeError } from "@/lib/api/client";
+import { compliance } from "@/lib/api/endpoints";
+import type { Organization } from "@/lib/api/types";
+import { shortId, when } from "@/lib/format";
 
 export const Route = createFileRoute("/compliance")({
   head: () => ({
     meta: [
-      { title: "Compliance & Tiered KYC Gateway — VUKA" },
+      { title: "Compliance & KYC — VUKA" },
       {
         name: "description",
         content:
-          "Tier 0 to Tier 2 verification, sanctions screening, risk flags and explainable compliance decision logs for cross-border traders.",
-      },
-      { property: "og:title", content: "Compliance & Tiered KYC Gateway — VUKA" },
-      {
-        property: "og:description",
-        content: "Proportionate KYC tiers tied to cross-border trade volume thresholds.",
+          "Organizations, verification evidence, compliance reviews and risk flags with an explainable decision trail.",
       },
     ],
   }),
-  component: Compliance,
+  component: () => (
+    <Shell role="operator">
+      <Compliance />
+    </Shell>
+  ),
 });
 
-const tiers = [
-  {
-    tier: "TIER 0",
-    name: "Unverified browsing",
-    gate: "No funding, no escrow creation. Directory and rate viewing only.",
-    checks: ["Device attestation", "Rate-limited access"],
-  },
-  {
-    tier: "TIER 1",
-    name: "Verified counterparty",
-    gate: "Escrow up to $10,000 per contract; new counterparties permitted.",
-    checks: ["Mobile number ownership", "National ID match", "PEP watchlist pass"],
-  },
-  {
-    tier: "TIER 2",
-    name: "Cross-border business",
-    gate: "Unlimited corridor volume, ISO 20022 settlement, lender certificate export.",
-    checks: [
-      "Business registration certificate",
-      "Beneficial ownership declaration",
-      "OFAC / UN / EU sanctions screening",
-      "Source-of-funds attestation",
-    ],
-  },
-];
+type Tab = "organizations" | "verifications" | "reviews";
 
-const decisionLog = [
-  {
-    ts: "2026-09-12 05:41:19",
-    subject: "TRD-1188",
-    decision: "FLAG RAISED",
-    rationale: "30d volume $41,620 crossed 80% of the Tier 2 trigger while DSP-0312 is open.",
-  },
-  {
-    ts: "2026-09-10 14:02:55",
-    subject: "TRD-1207",
-    decision: "TIER 1 GRANTED",
-    rationale: "Mobile ownership and national ID matched; sanctions screen returned clear.",
-  },
-  {
-    ts: "2026-09-07 09:18:03",
-    subject: "TRD-1102",
-    decision: "TIER 2 MAINTAINED",
-    rationale: "Annual re-screen of 3 directors returned no consolidated-list matches.",
-  },
-  {
-    ts: "2026-09-02 11:47:40",
-    subject: "TRD-1244",
-    decision: "FUNDING BLOCKED",
-    rationale: "Tier 0 account attempted escrow funding; blocked at the gateway, no funds moved.",
-  },
-];
+const ORG_TYPES = ["company", "sole_trader", "partnership", "cooperative", "nonprofit"];
+const VERIFICATION_TYPES = ["identity", "business", "address", "ownership"];
+const REVIEW_STATUSES = ["approved", "rejected", "suspended", "needs_information"];
+const VERIFICATION_DECISIONS = ["verified", "rejected", "expired"];
+const SEVERITIES = ["low", "medium", "high", "critical"];
+
+const statusTone = (s: string) =>
+  ["approved", "verified", "resolved"].includes(s)
+    ? ("invert" as const)
+    : ["rejected", "suspended", "expired", "critical", "high"].includes(s)
+      ? ("warn" as const)
+      : ("live" as const);
 
 function Compliance() {
-  const [query, setQuery] = useState("");
-  const [active, setActive] = useState<Trader | null>(null);
+  const qc = useQueryClient();
+  const [tab, setTab] = useState<Tab>("organizations");
+  const orgs = useQuery({ queryKey: ["orgs"], queryFn: compliance.organizations });
+  const verifications = useQuery({
+    queryKey: ["verifications"],
+    queryFn: compliance.verifications,
+  });
+  const reviews = useQuery({ queryKey: ["reviews"], queryFn: compliance.reviews });
 
-  const rows = useMemo(
-    () =>
-      seed.filter((t) =>
-        `${t.name} ${t.country} ${t.id}`.toLowerCase().includes(query.toLowerCase()),
-      ),
-    [query],
+  const [orgOpen, setOrgOpen] = useState(false);
+  const [openOrg, setOpenOrg] = useState<Organization | null>(null);
+  const [decide, setDecide] = useState<{ kind: "verification" | "review"; id: string } | null>(
+    null,
   );
+  const [newVerification, setNewVerification] = useState(false);
+  const [newReviewFor, setNewReviewFor] = useState<string | null>(null);
+
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ["orgs"] });
+    void qc.invalidateQueries({ queryKey: ["verifications"] });
+    void qc.invalidateQueries({ queryKey: ["reviews"] });
+  };
+
+  const orgName = (id?: string) => orgs.data?.find((o) => o.id === id)?.legal_name ?? shortId(id);
 
   return (
-    <Shell>
+    <>
       <PageHeader
         eyebrow="Regulatory gateway"
-        title="Compliance & Tiered KYC"
-        description="Verification is proportionate to trade exposure. Every gating decision is logged with a plain-language rationale that the trader can read and contest."
+        title="Compliance & KYC"
+        description="Verification is proportionate to exposure. Every decision records who made it, from which state to which, and why — the log is append-only."
+        actions={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setNewVerification(true)}
+              className="rounded-none font-mono text-xs uppercase"
+            >
+              Submit evidence
+            </Button>
+            <Button
+              onClick={() => setOrgOpen(true)}
+              className="rounded-none font-mono text-xs uppercase"
+            >
+              New organization
+            </Button>
+          </>
+        }
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Metric label="Verified traders" value={seed.filter((t) => t.status === "VERIFIED").length} sub="Tier 1 and Tier 2" />
-        <Metric label="Open risk flags" value={seed.filter((t) => t.status === "FLAGGED").length} sub="Manual review queue" />
-        <Metric label="Sanctions hits" value={seed.filter((t) => t.sanctions === "HIT").length} sub="Consolidated list screening" />
-      </div>
-
-      <div className="grid gap-3 lg:grid-cols-3">
-        {tiers.map((t) => (
-          <Panel key={t.tier} title={t.tier} meta={<Chip>{t.name}</Chip>}>
-            <p className="text-sm text-muted-foreground">{t.gate}</p>
-            <ul className="mt-3 space-y-1.5 font-mono text-[11px]">
-              {t.checks.map((c) => (
-                <li key={c} className="flex gap-2">
-                  <span className="text-muted-foreground">—</span>
-                  {c}
-                </li>
-              ))}
-            </ul>
-          </Panel>
-        ))}
+        <Metric
+          label="Organizations"
+          value={orgs.data?.length ?? "—"}
+          sub={`${orgs.data?.filter((o) => o.verification_status === "approved").length ?? 0} approved`}
+        />
+        <Metric
+          label="Pending verifications"
+          value={verifications.data?.filter((v) => v.status === "pending").length ?? "—"}
+          sub="Evidence awaiting a decision"
+        />
+        <Metric
+          label="Open reviews"
+          value={reviews.data?.filter((r) => r.status === "pending").length ?? "—"}
+          sub="Compliance cases in flight"
+        />
       </div>
 
       <Panel
-        title="Trader verification register"
+        title="Register"
         meta={
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search traders…"
-            className="h-8 w-56 rounded-none font-mono text-xs"
-          />
+          <div className="flex gap-1.5">
+            {(["organizations", "verifications", "reviews"] as const).map((t) => (
+              <button key={t} onClick={() => setTab(t)} className="cursor-pointer">
+                <Chip tone={tab === t ? "invert" : "neutral"}>{t}</Chip>
+              </button>
+            ))}
+          </div>
         }
       >
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[880px] text-sm">
-            <thead>
-              <tr className="border-b border-border text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                <th className="py-2">Trader</th>
-                <th className="py-2">Country</th>
-                <th className="py-2">MSISDN</th>
-                <th className="py-2 text-right">30d volume</th>
-                <th className="py-2 text-center">Sanctions</th>
-                <th className="py-2 text-right">Tier</th>
-                <th className="py-2 text-right">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((t) => (
-                <tr
-                  key={t.id}
-                  onClick={() => setActive(t)}
-                  className="cursor-pointer border-b border-border/60 last:border-0 hover:bg-accent/40"
-                >
-                  <td className="py-2.5">{t.name}</td>
-                  <td className="py-2.5 text-muted-foreground">{t.country}</td>
-                  <td className="py-2.5 font-mono text-xs">{t.msisdn}</td>
-                  <td className="py-2.5 text-right font-mono tabular-nums">${usd(t.volume30d)}</td>
-                  <td className="py-2.5 text-center">
-                    <Chip tone={t.sanctions === "CLEAR" ? "neutral" : "warn"}>{t.sanctions}</Chip>
-                  </td>
-                  <td className="py-2.5 text-right font-mono">T{t.tier}</td>
-                  <td className="py-2.5 text-right">
-                    <Chip tone={t.status === "VERIFIED" ? "invert" : t.status === "FLAGGED" ? "warn" : "neutral"}>
-                      {t.status}
-                    </Chip>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {tab === "organizations" ? (
+          <QueryBoundary
+            query={orgs}
+            isEmpty={(d) => d.length === 0}
+            empty="No organizations yet. Create one to start a review."
+          >
+            {(rows) => (
+              <Table head={["Organization", "Country", "Type", "Registration", "Status"]}>
+                {rows.map((o) => (
+                  <tr
+                    key={o.id}
+                    onClick={() => setOpenOrg(o)}
+                    className="cursor-pointer border-b border-border/60 last:border-0 hover:bg-accent/40"
+                  >
+                    <td className="py-2.5">{o.legal_name}</td>
+                    <td className="py-2.5 font-mono text-xs">{o.country_code}</td>
+                    <td className="py-2.5 font-mono text-xs">{o.organization_type}</td>
+                    <td className="py-2.5 font-mono text-xs text-muted-foreground">
+                      {o.registration_number ?? "—"}
+                    </td>
+                    <td className="py-2.5 text-right">
+                      <Chip tone={statusTone(o.verification_status)}>{o.verification_status}</Chip>
+                    </td>
+                  </tr>
+                ))}
+              </Table>
+            )}
+          </QueryBoundary>
+        ) : tab === "verifications" ? (
+          <QueryBoundary
+            query={verifications}
+            isEmpty={(d) => d.length === 0}
+            empty="No verification evidence submitted."
+          >
+            {(rows) => (
+              <Table head={["Subject", "Type", "Reference", "Submitted", "Status", ""]}>
+                {rows.map((v) => (
+                  <tr key={v.id} className="border-b border-border/60 last:border-0">
+                    <td className="py-2.5 text-xs">
+                      {v.organization_id
+                        ? orgName(v.organization_id)
+                        : `trader ${shortId(v.user_id)}`}
+                    </td>
+                    <td className="py-2.5 font-mono text-xs">{v.verification_type}</td>
+                    <td className="py-2.5 font-mono text-xs text-muted-foreground">
+                      {v.reference}
+                    </td>
+                    <td className="py-2.5 font-mono text-xs text-muted-foreground">
+                      {when(v.created_at)} · {v.submitted_by}
+                    </td>
+                    <td className="py-2.5 text-right">
+                      <Chip tone={statusTone(v.status)}>{v.status}</Chip>
+                    </td>
+                    <td className="py-2.5 text-right">
+                      {v.status === "pending" ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 rounded-none font-mono text-[10px] uppercase"
+                          onClick={() => setDecide({ kind: "verification", id: v.id })}
+                        >
+                          Decide
+                        </Button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </Table>
+            )}
+          </QueryBoundary>
+        ) : (
+          <QueryBoundary
+            query={reviews}
+            isEmpty={(d) => d.length === 0}
+            empty="No compliance reviews opened."
+          >
+            {(rows) => (
+              <Table head={["Organization", "Reason", "Opened", "Status", ""]}>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-b border-border/60 last:border-0">
+                    <td className="py-2.5 text-xs">{orgName(r.organization_id)}</td>
+                    <td className="max-w-xs truncate py-2.5 text-xs">{r.reason}</td>
+                    <td className="py-2.5 font-mono text-xs text-muted-foreground">
+                      {when(r.created_at)} · {r.opened_by}
+                    </td>
+                    <td className="py-2.5 text-right">
+                      <Chip tone={statusTone(r.status)}>{r.status}</Chip>
+                    </td>
+                    <td className="py-2.5 text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 rounded-none font-mono text-[10px] uppercase"
+                        onClick={() => setDecide({ kind: "review", id: r.id })}
+                      >
+                        Decide
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </Table>
+            )}
+          </QueryBoundary>
+        )}
+      </Panel>
+
+      <OrgDialog open={orgOpen} onOpenChange={setOrgOpen} onDone={refresh} />
+      <OrgDetail
+        org={openOrg}
+        onClose={() => setOpenOrg(null)}
+        onOpenReview={(id) => setNewReviewFor(id)}
+      />
+      <DecisionDialog target={decide} onClose={() => setDecide(null)} onDone={refresh} />
+      <VerificationDialog
+        open={newVerification}
+        onOpenChange={setNewVerification}
+        orgs={orgs.data ?? []}
+        onDone={refresh}
+      />
+      <ReviewDialog orgId={newReviewFor} onClose={() => setNewReviewFor(null)} onDone={refresh} />
+    </>
+  );
+}
+
+function Table({ head, children }: { head: string[]; children: ReactNode }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[760px] text-sm">
+        <thead>
+          <tr className="border-b border-border text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+            {head.map((h, i) => (
+              <th key={i} className={`py-2 ${i >= head.length - 2 ? "text-right" : ""}`}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{children}</tbody>
+      </table>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+function Pick({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="rounded-none font-mono text-xs">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent className="rounded-none">
+        {options.map((o) => (
+          <SelectItem key={o} value={o}>
+            {o}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function OrgDialog({
+  open,
+  onOpenChange,
+  onDone,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onDone: () => void;
+}) {
+  const [f, setF] = useState({
+    legal_name: "",
+    trading_name: "",
+    country_code: "RW",
+    organization_type: "company",
+    registration_number: "",
+  });
+  const create = useMutation({
+    mutationFn: () =>
+      compliance.createOrganization({
+        legal_name: f.legal_name.trim(),
+        country_code: f.country_code.trim().toUpperCase(),
+        organization_type: f.organization_type,
+        ...(f.trading_name.trim() ? { trading_name: f.trading_name.trim() } : {}),
+        ...(f.registration_number.trim()
+          ? { registration_number: f.registration_number.trim() }
+          : {}),
+      }),
+    onSuccess: (o) => {
+      toast.success(`${o.legal_name} created`);
+      onDone();
+      onOpenChange(false);
+    },
+    onError: (e) => toast.error(describeError(e)),
+  });
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="rounded-none sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
+            New organization
+          </DialogTitle>
+          <DialogDescription>Legal entity subject to verification.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <Field label="Legal name">
+            <Input
+              className="rounded-none"
+              value={f.legal_name}
+              onChange={(e) => setF({ ...f, legal_name: e.target.value })}
+            />
+          </Field>
+          <Field label="Trading name (optional)">
+            <Input
+              className="rounded-none"
+              value={f.trading_name}
+              onChange={(e) => setF({ ...f, trading_name: e.target.value })}
+            />
+          </Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Country (ISO-2)">
+              <Input
+                maxLength={2}
+                className="rounded-none font-mono"
+                value={f.country_code}
+                onChange={(e) => setF({ ...f, country_code: e.target.value })}
+              />
+            </Field>
+            <Field label="Type">
+              <Pick
+                value={f.organization_type}
+                onChange={(v) => setF({ ...f, organization_type: v })}
+                options={ORG_TYPES}
+              />
+            </Field>
+          </div>
+          <Field label="Registration number (optional)">
+            <Input
+              className="rounded-none font-mono"
+              value={f.registration_number}
+              onChange={(e) => setF({ ...f, registration_number: e.target.value })}
+            />
+          </Field>
         </div>
-      </Panel>
+        <DialogFooter>
+          <Button
+            className="rounded-none font-mono text-xs uppercase"
+            disabled={!f.legal_name.trim() || f.country_code.length !== 2 || create.isPending}
+            onClick={() => create.mutate()}
+          >
+            Create
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-      <Panel title="Explainable decision log" meta={<Chip tone="live">Append-only</Chip>}>
-        <ul className="divide-y divide-border/60">
-          {decisionLog.map((d) => (
-            <li key={d.ts} className="py-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="font-mono text-xs tabular-nums text-muted-foreground">{d.ts}</span>
-                <span className="font-mono text-xs">{d.subject}</span>
-                <Chip tone={d.decision.includes("BLOCKED") || d.decision.includes("FLAG") ? "warn" : "neutral"}>
-                  {d.decision}
-                </Chip>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">{d.rationale}</p>
-            </li>
-          ))}
-        </ul>
-      </Panel>
+function OrgDetail({
+  org,
+  onClose,
+  onOpenReview,
+}: {
+  org: Organization | null;
+  onClose: () => void;
+  onOpenReview: (id: string) => void;
+}) {
+  const qc = useQueryClient();
+  const flags = useQuery({
+    queryKey: ["flags", org?.id],
+    queryFn: () => compliance.riskFlags(org!.id),
+    enabled: !!org,
+  });
+  const [code, setCode] = useState("");
+  const [severity, setSeverity] = useState("medium");
+  const [desc, setDesc] = useState("");
+  const add = useMutation({
+    mutationFn: () =>
+      compliance.addRiskFlag(org!.id, {
+        code: code.trim().toUpperCase(),
+        severity,
+        description: desc.trim(),
+      }),
+    onSuccess: () => {
+      toast.success("Risk flag raised");
+      setCode("");
+      setDesc("");
+      void qc.invalidateQueries({ queryKey: ["flags", org?.id] });
+    },
+    onError: (e) => toast.error(describeError(e)),
+  });
+  const resolve = useMutation({
+    mutationFn: (flagId: string) =>
+      compliance.resolveRiskFlag(org!.id, flagId, "Resolved by operator review"),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["flags", org?.id] }),
+    onError: (e) => toast.error(describeError(e)),
+  });
+  return (
+    <Dialog open={org !== null} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-none sm:max-w-2xl">
+        {org ? (
+          <>
+            <DialogHeader>
+              <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
+                {org.legal_name}
+              </DialogTitle>
+              <DialogDescription>
+                {org.country_code} · {org.organization_type} · {org.verification_status}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-none font-mono text-[10px] uppercase"
+                onClick={() => onOpenReview(org.id)}
+              >
+                Open compliance review
+              </Button>
+            </div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+              Risk flags
+            </div>
+            <QueryBoundary query={flags} isEmpty={(d) => d.length === 0} empty="No risk flags.">
+              {(rows) => (
+                <ul className="divide-y divide-border border border-border">
+                  {rows.map((fl) => (
+                    <li key={fl.id} className="flex items-start justify-between gap-3 px-3 py-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs">{fl.code}</span>
+                          <Chip tone={statusTone(fl.severity)}>{fl.severity}</Chip>
+                          <Chip tone={statusTone(fl.status)}>{fl.status}</Chip>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">{fl.description}</p>
+                      </div>
+                      {fl.status === "open" ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 rounded-none font-mono text-[10px] uppercase"
+                          disabled={resolve.isPending}
+                          onClick={() => resolve.mutate(fl.id)}
+                        >
+                          Resolve
+                        </Button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </QueryBoundary>
+            <div className="grid gap-2 sm:grid-cols-[1fr_140px]">
+              <Input
+                className="rounded-none font-mono"
+                placeholder="Flag code e.g. VOLUME_SPIKE"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+              />
+              <Pick value={severity} onChange={setSeverity} options={SEVERITIES} />
+            </div>
+            <Textarea
+              className="min-h-16 rounded-none"
+              placeholder="Describe the concern…"
+              value={desc}
+              onChange={(e) => setDesc(e.target.value)}
+            />
+            <Button
+              className="rounded-none font-mono text-xs uppercase"
+              disabled={!code.trim() || !desc.trim() || add.isPending}
+              onClick={() => add.mutate()}
+            >
+              Raise flag
+            </Button>
+          </>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-      <Dialog open={active !== null} onOpenChange={(o) => !o && setActive(null)}>
-        <DialogContent className="rounded-none sm:max-w-xl">
-          {active ? (
-            <>
-              <DialogHeader>
-                <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
-                  {active.id} · {active.name}
-                </DialogTitle>
-                <DialogDescription>{active.notes}</DialogDescription>
-              </DialogHeader>
-              <dl className="grid gap-2 border border-border p-3 font-mono text-[11px] sm:grid-cols-2">
-                <div className="flex justify-between gap-3">
-                  <dt className="text-muted-foreground">Tier</dt>
-                  <dd>T{active.tier}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-muted-foreground">Status</dt>
-                  <dd>{active.status}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-muted-foreground">National ID</dt>
-                  <dd>{active.nationalId}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-muted-foreground">Registration</dt>
-                  <dd>{active.registration}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-muted-foreground">Sanctions</dt>
-                  <dd>{active.sanctions}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-muted-foreground">30d volume</dt>
-                  <dd>${usd(active.volume30d)}</dd>
-                </div>
-              </dl>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <Button
-                  variant="outline"
-                  className="rounded-none font-mono text-xs uppercase"
-                  onClick={() => toast.info("Re-screen queued against OFAC, UN and EU lists")}
-                >
-                  Re-run sanctions screen
-                </Button>
-                <Button
-                  className="rounded-none font-mono text-xs uppercase"
-                  disabled={active.tier === 2}
-                  onClick={() =>
-                    toast.success(`${active.id} upgrade requested`, {
-                      description: "Trader notified to submit registration documents.",
-                    })
-                  }
-                >
-                  Request tier upgrade
-                </Button>
-              </div>
-            </>
-          ) : null}
-        </DialogContent>
-      </Dialog>
-    </Shell>
+function DecisionDialog({
+  target,
+  onClose,
+  onDone,
+}: {
+  target: { kind: "verification" | "review"; id: string } | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const options = target?.kind === "verification" ? VERIFICATION_DECISIONS : REVIEW_STATUSES;
+  const [status, setStatus] = useState("");
+  const [rationale, setRationale] = useState("");
+  const chosen = status || options[0] || "";
+  const decide = useMutation({
+    mutationFn: async () => {
+      if (target!.kind === "verification")
+        await compliance.decideVerification(target!.id, chosen, rationale.trim());
+      else await compliance.decideReview(target!.id, chosen, rationale.trim());
+    },
+    onSuccess: () => {
+      toast.success("Decision recorded");
+      setRationale("");
+      setStatus("");
+      onDone();
+      onClose();
+    },
+    onError: (e) => toast.error("Decision refused", { description: describeError(e) }),
+  });
+  return (
+    <Dialog open={target !== null} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="rounded-none sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
+            Record decision
+          </DialogTitle>
+          <DialogDescription>
+            The rationale is stored with the state change and cannot be edited.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <Field label="Outcome">
+            <Pick value={chosen} onChange={setStatus} options={options} />
+          </Field>
+          <Field label="Rationale">
+            <Textarea
+              className="min-h-24 rounded-none"
+              value={rationale}
+              onChange={(e) => setRationale(e.target.value)}
+            />
+          </Field>
+        </div>
+        <DialogFooter>
+          <Button
+            className="rounded-none font-mono text-xs uppercase"
+            disabled={!rationale.trim() || decide.isPending}
+            onClick={() => decide.mutate()}
+          >
+            Record
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function VerificationDialog({
+  open,
+  onOpenChange,
+  orgs,
+  onDone,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  orgs: Organization[];
+  onDone: () => void;
+}) {
+  const [orgId, setOrgId] = useState("");
+  const [type, setType] = useState("identity");
+  const [reference, setReference] = useState("");
+  const [label, setLabel] = useState("");
+  const create = useMutation({
+    mutationFn: () =>
+      compliance.createVerification({
+        organization_id: orgId || orgs[0]!.id,
+        verification_type: type,
+        reference: reference.trim(),
+        ...(label.trim() ? { evidence_label: label.trim() } : {}),
+      }),
+    onSuccess: () => {
+      toast.success("Evidence recorded");
+      setReference("");
+      setLabel("");
+      onDone();
+      onOpenChange(false);
+    },
+    onError: (e) => toast.error(describeError(e)),
+  });
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="rounded-none sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
+            Submit evidence
+          </DialogTitle>
+          <DialogDescription>
+            Record a reference to evidence held elsewhere. Document contents are never uploaded
+            here.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <Field label="Organization">
+            {orgs.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Create an organization first.</p>
+            ) : (
+              <Select value={orgId || orgs[0]!.id} onValueChange={setOrgId}>
+                <SelectTrigger className="rounded-none text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-none">
+                  {orgs.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.legal_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </Field>
+          <Field label="Type">
+            <Pick value={type} onChange={setType} options={VERIFICATION_TYPES} />
+          </Field>
+          <Field label="Reference">
+            <Input
+              className="rounded-none font-mono"
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+              placeholder="Certificate / document reference"
+            />
+          </Field>
+          <Field label="Label (optional)">
+            <Input
+              className="rounded-none"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+            />
+          </Field>
+        </div>
+        <DialogFooter>
+          <Button
+            className="rounded-none font-mono text-xs uppercase"
+            disabled={orgs.length === 0 || !reference.trim() || create.isPending}
+            onClick={() => create.mutate()}
+          >
+            Submit
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ReviewDialog({
+  orgId,
+  onClose,
+  onDone,
+}: {
+  orgId: string | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const create = useMutation({
+    mutationFn: () => compliance.createReview(orgId!, reason.trim()),
+    onSuccess: () => {
+      toast.success("Review opened");
+      setReason("");
+      onDone();
+      onClose();
+    },
+    onError: (e) => toast.error(describeError(e)),
+  });
+  return (
+    <Dialog open={orgId !== null} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="rounded-none sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
+            Open compliance review
+          </DialogTitle>
+          <DialogDescription>Describe why this organization needs review.</DialogDescription>
+        </DialogHeader>
+        <Textarea
+          className="min-h-24 rounded-none"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+        <DialogFooter>
+          <Button
+            className="rounded-none font-mono text-xs uppercase"
+            disabled={!reason.trim() || create.isPending}
+            onClick={() => create.mutate()}
+          >
+            Open review
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
