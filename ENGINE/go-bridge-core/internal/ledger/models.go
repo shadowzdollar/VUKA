@@ -240,6 +240,9 @@ type Service struct {
 	// defaultFxRate is used for cross-border transfers when the request does
 	// not carry an explicit rate. Zero means "require an explicit rate".
 	defaultFxRate float64
+	// currencyRails maps a destination currency to the registry name of the
+	// rail that pays it out (e.g. "KES" -> "mpesa-ke", "NGN" -> "nibss-ng").
+	currencyRails map[string]string
 }
 
 // DB exposes the pool to adjacent local-only services that share the engine
@@ -256,6 +259,27 @@ func NewService(pool *pgxpool.Pool, idem *idempotency.Store, registry *adapters.
 // request omits its own. Set to 0 to require an explicit rate per request.
 func (s *Service) SetDefaultFxRate(rate float64) {
 	s.defaultFxRate = rate
+}
+
+// SetCurrencyRails installs the destination-currency -> payout-rail map used
+// by cross-border transfers. Unmapped currencies fall back to the legacy default rail.
+func (s *Service) SetCurrencyRails(rails map[string]string) {
+	s.currencyRails = make(map[string]string, len(rails))
+	for cur, name := range rails {
+		s.currencyRails[cur] = name
+	}
+}
+
+func (s *Service) railForCurrency(currency string) adapters.TelecomAdapter {
+	if name, ok := s.currencyRails[currency]; ok {
+		if a := s.registry.Get(name); a != nil {
+			return a
+		}
+	}
+	if a := s.registry.Get("mpesa-ke"); a != nil && currency == "KES" {
+		return a
+	}
+	return s.registry.Get(s.adapterName())
 }
 
 // DefaultFxRate returns the engine-wide FX rate (0 when unset). Clients use
