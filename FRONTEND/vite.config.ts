@@ -6,10 +6,23 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
+// The Go engine authenticates with HttpOnly session cookies. Proxying /api through the dev
+// server keeps the browser same-origin, so cookies work without any CORS configuration.
+// Override with VUKA_API_PROXY_TARGET when the engine is not on localhost:8080.
+const engine = process.env["VUKA_API_PROXY_TARGET"] ?? "http://localhost:8080";
+
 export default defineConfig({
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this
     server: { entry: "server" },
+  },
+  vite: {
+    server: {
+      proxy: {
+        "/api": { target: engine, changeOrigin: true },
+        "/healthz": { target: engine, changeOrigin: true },
+      },
+    },
   },
 });
