@@ -115,3 +115,42 @@ limitations, and the next verified step for the long-term VUKA platform.
 - Note: `go test` helpers TRUNCATE tables. Run them against a separate DB (`vuka_test`), never the dev DB. This session lost the dev seed once by pointing `TEST_DATABASE_URL` at `vuka`; re-seed with `make demo-seed`.
 - Verified: `tsc --noEmit` clean, `vite build` clean, ESLint 0 errors; browser E2E (Playwright + system Chrome) against the live engine covering trader login -> send -> invoice -> support and operator/arbiter/approver dispute flow.
 
+
+
+## 2026-09-21 (AU-grade upgrade: ENGINE, CONTRACTS, FRONTEND)
+
+- Decided: VUKA is an African Union submission, not a demo. Real credentials are env-reference placeholders (`ENGINE/PROVIDER_CREDENTIALS.md`); nothing is claimed as licensed or audited.
+- Built (engine): pan-African catalog — 10 countries, 90 corridors, one sandbox rail per country (`internal/providers/africa.go`, `adapters/sandbox_rail.go`); limits in USD equivalents; regional fee tiers.
+- Fixed (engine): the quote/ledger rate mismatch. The ledger keeps `destination = amount / rate` (stored data and reversals depend on it); quotes now use the same convention and also expose `inverse_rate` + `rate_convention`. Test proves RWF 200,000 lands as ~NGN 224k, not an inverted figure.
+- Built (engine): firm quotes — HMAC-signed stateless ids (`providers/quotes.go`) that lock the rate for the TTL, verified on any replica; cross-border transfers and workflows settle at the locked rate. Removes the old fixture that expired 24 h after start.
+- Fixed (engine): cross-border payout rail was hard-coded to `mpesa-ke`; now chosen per destination currency. Workflow default providers derive from the corridor.
+- Built (engine): KYC-tiered USD limits (`internal/risk`), sanctions-screening gate (sandbox screener; fail-closed on error; generic rejections to avoid tipping-off), trader KYC submission (evidence references only), server-side trust score (`internal/trust`), `/api/config/public`, `/readyz`, Prometheus `/metrics`, security headers, DB-backed login throttling.
+- Built (engine): explicit per-provider live activation (`providers/live.go`): needs `VUKA_ALLOW_LIVE_PROVIDERS`, `VUKA_PROVIDER_MODE_<ID>=live` and a credentials JSON; fails closed; MTN MoMo and M-Pesa Daraja adapters exist, other rails stay sandbox until built.
+- Fixed (engine, found by tests): signed quote ids overflowed `quote_id VARCHAR(120)` (every workflow start failed); nil auth store in legacy no-auth workflow mode; top-ups were counted as settlement cycles in the trust score.
+- Built (contracts): `VukaEscrowV2` — arbiter set, pause that never blocks settlement, permissionless 50/50 fallback after the dispute window, split arbitration, capped protocol fee, pull-payment fallback for blacklisted recipients, fee-on-transfer rejection, reentrancy guard. 24 new tests incl. fuzz and a 128k-call solvency invariant; spec + threat model in `CONTRACTS/escrow/ESCROW_V2.md`.
+- Fixed (contracts): both V1 deploy scripts did not compile against the 3-arg constructor (`forge build` failed).
+- Built (indexer): understands V2 events/states (`SPLIT`, timeout refund from LOCKED, fee/deferred events); a test pins every topic constant to keccak256 of its signature.
+- Built (frontend): light/dark design system, sidebar shell, command palette, DataTable, charts, public landing page, `/verification`, i18n (5 languages), CSP/security headers, idle guard. Verified: 17 browser checks + axe scan, 0 violations on 22 page/theme combinations.
+- Known limits: V2 and the engine are not externally audited; FX rates are indicative sandbox data; non-English strings need native review; the screener is a sandbox, not a sanctions control; live adapters exist only for MTN MoMo and M-Pesa Daraja; `VukaEscrowFactory` still deploys V1.
+- Verified: `go test ./...` (all packages, against `vuka_test`), `forge test` (47 pass), `tsc`, ESLint (0 errors), `vite build`.
+
+## 2026-09-21 (analytics expansion)
+
+- Built (engine): `internal/analytics` — server-side aggregation (daily series, currency/status slices, USD-bucket histogram, corridor flows, weekday x hour heatmap, counterparties; platform adds KYC, workflows, provider success, tickets, settlements). `GET /api/trader/analytics` and `GET /api/operator/analytics`; a test proves one trader's report cannot include another's payments and that top-ups are cash-in, not payments.
+- Built (engine): `cmd/seed-analytics` — dev-only fixture (70 payments over 60 days through the real ledger, 3 reversals, 6 failed attempts); refuses production.
+- Fixed (engine): legacy `kyc_status = APPROVED` (older identity fixtures) was unknown to the limit table and would have blocked those traders; now an alias of VERIFIED (tested).
+- Built (frontend): chart toolkit (donut, histogram, area trend, radar, sparkline, gauge, ranked bars, funnel, corridor matrix, activity heatmap), `/analytics` for traders and operators, analytics strips on the overview and cockpit, trust radar + score-lever simulator, invoice ageing, corridor fee-tier explainer, compliance mix donuts.
+- Fixed (frontend, found by axe): flow-matrix label contrast (quantised shading with flipped text), recharts internals exposed to AT (aria-hidden + no focus layer), sr-only tables overflowing mobile pages, grid panels stretching past the viewport (`min-w-0`).
+- Verified: axe (WCAG 2 A/AA + 2.1 A/AA) 0 violations on analytics, trust, invoices, corridors and compliance in both themes; no horizontal scroll at 375 px.
+- Known limits: analytics are USD-equivalent at sandbox reference rates (not market data); the platform view needs a real volume of traffic before distributions are meaningful; the trader's "insights" text is rule-based, not a model.
+
+
+## 2026-09-21 (public site: landing, sign-in, registration)
+
+- Built (engine): `GET /api/public/estimate` — unauthenticated, indicative pricing for the landing calculator (no quote id, bounded by corridor limits, kill-switch aware). Test: `TestPublicEstimateIsIndicativeUnauthenticatedAndBounded`.
+- Built (frontend): landing rewritten — canvas globe hero, cost estimator, payment journey, escrow lab, mobile section (3D phone: hold-to-confirm, weak-signal idempotency demo, USSD concept on live pricing, share/install, data saver + measured page weight), bento features, trust-score lab, papercut atlas with flag-printed markets and passport stamps, framework timeline, comparison, FAQ, CTA, expansive footer.
+- Built (frontend): ten hand-drawn SVG flags (no network), shared `lib/markets.ts` (dial codes, fee-group names, fee rule mirroring the engine), manifest + theme-colour.
+- Built (frontend): four-step registration wizard, richer sign-in, `/about` `/security` `/status` `/privacy` `/terms`.
+- Fixed (found in testing): decorative `sr-only` spans outside a positioned scroller inflated page width on mobile (comparison table); reduced-motion users saw un-revealed sections; `/readyz` was not proxied in dev; footer wordmark and journey sheets failed contrast (now a pseudo-element / full-opacity).
+- Decided: do not reproduce the African Union emblem or flag, and label framework seals as generic; legal pages are drafts; contact addresses are configuration, not invented.
+- Known limits: non-English strings do not cover the new public sections (English only); flag emblems are simplified; USSD and offline/PWA install are concepts or partial; Google Fonts remains third-party; membership/fee groups follow the engine table (Ethiopia is its own "HORN" group).

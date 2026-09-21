@@ -10,17 +10,24 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as ActivityRouteImport } from './routes/activity'
+import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as ComplianceRouteImport } from './routes/compliance'
 import { Route as CorridorsRouteImport } from './routes/corridors'
 import { Route as DisputesRouteImport } from './routes/disputes'
 import { Route as EscrowRouteImport } from './routes/escrow'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as SecurityRouteImport } from './routes/security'
 import { Route as SendRouteImport } from './routes/send'
 import { Route as SettlementsRouteImport } from './routes/settlements'
+import { Route as StatusRouteImport } from './routes/status'
 import { Route as SupportRouteImport } from './routes/support'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as TrustScoreRouteImport } from './routes/trust-score'
+import { Route as VerificationRouteImport } from './routes/verification'
 import { Route as WalletsRouteImport } from './routes/wallets'
 
 const IndexRoute = IndexRouteImport.update({
@@ -28,9 +35,19 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ActivityRoute = ActivityRouteImport.update({
   id: '/activity',
   path: '/activity',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AnalyticsRoute = AnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ComplianceRoute = ComplianceRouteImport.update({
@@ -58,9 +75,19 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SecurityRoute = SecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SendRoute = SendRouteImport.update({
@@ -73,14 +100,29 @@ const SettlementsRoute = SettlementsRouteImport.update({
   path: '/settlements',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StatusRoute = StatusRouteImport.update({
+  id: '/status',
+  path: '/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SupportRoute = SupportRouteImport.update({
   id: '/support',
   path: '/support',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TrustScoreRoute = TrustScoreRouteImport.update({
   id: '/trust-score',
   path: '/trust-score',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerificationRoute = VerificationRouteImport.update({
+  id: '/verification',
+  path: '/verification',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WalletsRoute = WalletsRouteImport.update({
@@ -91,111 +133,160 @@ const WalletsRoute = WalletsRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/activity': typeof ActivityRoute
+  '/analytics': typeof AnalyticsRoute
   '/compliance': typeof ComplianceRoute
   '/corridors': typeof CorridorsRoute
   '/disputes': typeof DisputesRoute
   '/escrow': typeof EscrowRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
+  '/security': typeof SecurityRoute
   '/send': typeof SendRoute
   '/settlements': typeof SettlementsRoute
+  '/status': typeof StatusRoute
   '/support': typeof SupportRoute
+  '/terms': typeof TermsRoute
   '/trust-score': typeof TrustScoreRoute
+  '/verification': typeof VerificationRoute
   '/wallets': typeof WalletsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/activity': typeof ActivityRoute
+  '/analytics': typeof AnalyticsRoute
   '/compliance': typeof ComplianceRoute
   '/corridors': typeof CorridorsRoute
   '/disputes': typeof DisputesRoute
   '/escrow': typeof EscrowRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
+  '/security': typeof SecurityRoute
   '/send': typeof SendRoute
   '/settlements': typeof SettlementsRoute
+  '/status': typeof StatusRoute
   '/support': typeof SupportRoute
+  '/terms': typeof TermsRoute
   '/trust-score': typeof TrustScoreRoute
+  '/verification': typeof VerificationRoute
   '/wallets': typeof WalletsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/activity': typeof ActivityRoute
+  '/analytics': typeof AnalyticsRoute
   '/compliance': typeof ComplianceRoute
   '/corridors': typeof CorridorsRoute
   '/disputes': typeof DisputesRoute
   '/escrow': typeof EscrowRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
+  '/security': typeof SecurityRoute
   '/send': typeof SendRoute
   '/settlements': typeof SettlementsRoute
+  '/status': typeof StatusRoute
   '/support': typeof SupportRoute
+  '/terms': typeof TermsRoute
   '/trust-score': typeof TrustScoreRoute
+  '/verification': typeof VerificationRoute
   '/wallets': typeof WalletsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/about'
     | '/activity'
+    | '/analytics'
     | '/compliance'
     | '/corridors'
     | '/disputes'
     | '/escrow'
     | '/login'
+    | '/privacy'
     | '/register'
+    | '/security'
     | '/send'
     | '/settlements'
+    | '/status'
     | '/support'
+    | '/terms'
     | '/trust-score'
+    | '/verification'
     | '/wallets'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/about'
     | '/activity'
+    | '/analytics'
     | '/compliance'
     | '/corridors'
     | '/disputes'
     | '/escrow'
     | '/login'
+    | '/privacy'
     | '/register'
+    | '/security'
     | '/send'
     | '/settlements'
+    | '/status'
     | '/support'
+    | '/terms'
     | '/trust-score'
+    | '/verification'
     | '/wallets'
   id:
     | '__root__'
     | '/'
+    | '/about'
     | '/activity'
+    | '/analytics'
     | '/compliance'
     | '/corridors'
     | '/disputes'
     | '/escrow'
     | '/login'
+    | '/privacy'
     | '/register'
+    | '/security'
     | '/send'
     | '/settlements'
+    | '/status'
     | '/support'
+    | '/terms'
     | '/trust-score'
+    | '/verification'
     | '/wallets'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AboutRoute: typeof AboutRoute
   ActivityRoute: typeof ActivityRoute
+  AnalyticsRoute: typeof AnalyticsRoute
   ComplianceRoute: typeof ComplianceRoute
   CorridorsRoute: typeof CorridorsRoute
   DisputesRoute: typeof DisputesRoute
   EscrowRoute: typeof EscrowRoute
   LoginRoute: typeof LoginRoute
+  PrivacyRoute: typeof PrivacyRoute
   RegisterRoute: typeof RegisterRoute
+  SecurityRoute: typeof SecurityRoute
   SendRoute: typeof SendRoute
   SettlementsRoute: typeof SettlementsRoute
+  StatusRoute: typeof StatusRoute
   SupportRoute: typeof SupportRoute
+  TermsRoute: typeof TermsRoute
   TrustScoreRoute: typeof TrustScoreRoute
+  VerificationRoute: typeof VerificationRoute
   WalletsRoute: typeof WalletsRoute
 }
 
@@ -208,11 +299,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/activity': {
       id: '/activity'
       path: '/activity'
       fullPath: '/activity'
       preLoaderRoute: typeof ActivityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/analytics': {
+      id: '/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AnalyticsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/compliance': {
@@ -250,11 +355,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/register': {
       id: '/register'
       path: '/register'
       fullPath: '/register'
       preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/security': {
+      id: '/security'
+      path: '/security'
+      fullPath: '/security'
+      preLoaderRoute: typeof SecurityRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/send': {
@@ -271,6 +390,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettlementsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/status': {
+      id: '/status'
+      path: '/status'
+      fullPath: '/status'
+      preLoaderRoute: typeof StatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/support': {
       id: '/support'
       path: '/support'
@@ -278,11 +404,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SupportRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/trust-score': {
       id: '/trust-score'
       path: '/trust-score'
       fullPath: '/trust-score'
       preLoaderRoute: typeof TrustScoreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verification': {
+      id: '/verification'
+      path: '/verification'
+      fullPath: '/verification'
+      preLoaderRoute: typeof VerificationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/wallets': {
@@ -297,17 +437,24 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AboutRoute: AboutRoute,
   ActivityRoute: ActivityRoute,
+  AnalyticsRoute: AnalyticsRoute,
   ComplianceRoute: ComplianceRoute,
   CorridorsRoute: CorridorsRoute,
   DisputesRoute: DisputesRoute,
   EscrowRoute: EscrowRoute,
   LoginRoute: LoginRoute,
+  PrivacyRoute: PrivacyRoute,
   RegisterRoute: RegisterRoute,
+  SecurityRoute: SecurityRoute,
   SendRoute: SendRoute,
   SettlementsRoute: SettlementsRoute,
+  StatusRoute: StatusRoute,
   SupportRoute: SupportRoute,
+  TermsRoute: TermsRoute,
   TrustScoreRoute: TrustScoreRoute,
+  VerificationRoute: VerificationRoute,
   WalletsRoute: WalletsRoute,
 }
 export const routeTree = rootRouteImport

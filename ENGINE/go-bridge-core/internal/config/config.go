@@ -57,6 +57,11 @@ type Config struct {
 	// AllowLiveProviders is the explicit acknowledgement required before any
 	// provider may leave sandbox mode (VUKA_PROVIDER_MODE_<ID>=live).
 	AllowLiveProviders bool
+	// MetricsToken is the bearer token Prometheus presents to /metrics.
+	MetricsToken string
+	// Sandbox screening lists (test names only) — replaced by a vendor in production.
+	SandboxSanctionsDeny   []string
+	SandboxSanctionsReview []string
 
 	OperatorEmail    string
 	OperatorPassword string
@@ -133,6 +138,9 @@ func Load() (*Config, error) {
 		MaxTxnUSD:                   getFloat("VUKA_MAX_TXN_USD", 10000),
 		DailyCorridorUSD:            getFloat("VUKA_DAILY_CORRIDOR_USD", 100000),
 		AllowLiveProviders:          getBool("VUKA_ALLOW_LIVE_PROVIDERS", false),
+		MetricsToken:                os.Getenv("VUKA_METRICS_TOKEN"),
+		SandboxSanctionsDeny:        splitList("VUKA_SANDBOX_SANCTIONS_DENY"),
+		SandboxSanctionsReview:      splitList("VUKA_SANDBOX_SANCTIONS_REVIEW"),
 		OperatorEmail:               os.Getenv("VUKA_OPERATOR_EMAIL"),
 		OperatorPassword:            os.Getenv("VUKA_OPERATOR_PASSWORD"),
 		OperatorRole:                getEnv("VUKA_OPERATOR_ROLE", "operator"),

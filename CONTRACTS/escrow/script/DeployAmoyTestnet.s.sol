@@ -14,7 +14,7 @@ contract DeployAmoyTestnet is Script {
 
         vm.startBroadcast();
         token = new VukaTestToken(msg.sender, INITIAL_SUPPLY);
-        escrow = new VukaEscrow(address(token), arbiter);
+        escrow = new VukaEscrow(address(token), arbiter, address(0));
         vm.stopBroadcast();
     }
 }

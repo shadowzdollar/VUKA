@@ -64,7 +64,7 @@ type Usage struct {
 
 // Evaluate is the pure policy function.
 func Evaluate(status string, amountUSD float64, used Usage, table map[string]Limits) Decision {
-	status = strings.ToUpper(strings.TrimSpace(status))
+	status = canonicalStatus(status)
 	lim, known := table[status]
 	d := Decision{Status: status, AmountUSD: round2(amountUSD), Limits: lim, UsedDay: round2(used.Day), UsedMonth: round2(used.Month)}
 	switch {
@@ -80,6 +80,17 @@ func Evaluate(status string, amountUSD float64, used Usage, table map[string]Lim
 		d.Allowed = true
 	}
 	return d
+}
+
+// canonicalStatus upper-cases the status and maps legacy spellings onto the current tiers.
+// Older identity fixtures wrote APPROVED for a verified trader; treating it as unknown would
+// silently block those accounts from sending.
+func canonicalStatus(s string) string {
+	s = strings.ToUpper(strings.TrimSpace(s))
+	if s == "APPROVED" {
+		return StatusVerified
+	}
+	return s
 }
 
 func round2(v float64) float64 { return math.Round(v*100) / 100 }
@@ -159,4 +170,25 @@ func (s *Service) usage(ctx context.Context, userID string) (Usage, error) {
 		u.Month += m
 	}
 	return u, rows.Err()
+}
+
+// Snapshot is a trader's current standing for display: their tier, the caps
+// that apply, and how much of each window is already used.
+type Snapshot struct {
+	Status    string  `json:"kyc_status"`
+	Limits    Limits  `json:"limits"`
+	UsedDay   float64 `json:"used_day_usd"`
+	UsedMonth float64 `json:"used_month_usd"`
+}
+
+func (s *Service) Snapshot(ctx context.Context, userID string) (Snapshot, error) {
+	var status string
+	if err := s.pool.QueryRow(ctx, `SELECT kyc_status FROM users WHERE id=$1`, userID).Scan(&status); err != nil {
+		return Snapshot{}, fmt.Errorf("risk: load trader: %w", err)
+	}
+	used, err := s.usage(ctx, userID)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	return Snapshot{Status: canonicalStatus(status), Limits: s.limits[canonicalStatus(status)], UsedDay: round2(used.Day), UsedMonth: round2(used.Month)}, nil
 }

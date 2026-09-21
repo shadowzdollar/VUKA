@@ -19,6 +19,12 @@ const (
 	EventEscrowReleased      EventType = "EscrowReleased"
 	EventEscrowRefunded      EventType = "EscrowRefunded"
 	EventDisputeResolved     EventType = "DisputeResolved"
+
+	// VukaEscrowV2 additions. Split/fee/deferred events are informational amounts
+	// recorded next to the terminal state event; only EscrowSplit changes state.
+	EventEscrowSplit    EventType = "EscrowSplit"
+	EventProtocolFee    EventType = "ProtocolFeeCollected"
+	EventPayoutDeferred EventType = "PayoutDeferred"
 )
 
 type State string
@@ -29,6 +35,8 @@ const (
 	StateReleased State = "RELEASED"
 	StateRefunded State = "REFUNDED"
 	StateDisputed State = "DISPUTED"
+	// StateSplit is a partial settlement decided by arbitration (V2).
+	StateSplit State = "SPLIT"
 )
 
 var (
@@ -59,6 +67,12 @@ type ChainEvent struct {
 	Reason             string
 	ReleaseTo          string
 	ReleasedToSupplier *bool
+	// V2 amounts (token base units, decimal strings) and parties.
+	SupplierAmount string
+	BuyerAmount    string
+	FeeAmount      string
+	FeeTo          string
+	Beneficiary    string
 }
 
 func (e ChainEvent) Key() string {
@@ -201,12 +215,23 @@ func Apply(current *Escrow, event ChainEvent) error {
 		}
 		current.State = StateReleased
 	case EventEscrowRefunded:
-		if current.State != StateDisputed {
+		// V1 refunds only after a dispute; V2 also refunds the buyer from LOCKED when the
+		// deadline passes with no confirmation from either party.
+		if current.State != StateDisputed && current.State != StateLocked {
 			return ErrInvalidState
 		}
 		current.State = StateRefunded
+	case EventEscrowSplit:
+		if current.State != StateLocked && current.State != StateDisputed {
+			return ErrInvalidState
+		}
+		current.State = StateSplit
+	case EventProtocolFee, EventPayoutDeferred:
+		if current.State != StateReleased && current.State != StateRefunded && current.State != StateSplit {
+			return ErrInvalidState
+		}
 	case EventDisputeResolved:
-		if current.State != StateReleased && current.State != StateRefunded {
+		if current.State != StateReleased && current.State != StateRefunded && current.State != StateSplit {
 			return ErrInvalidState
 		}
 	default:

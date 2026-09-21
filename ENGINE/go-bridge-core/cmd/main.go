@@ -23,6 +23,7 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"vuka/go-bridge-core/internal/adapters"
+	"vuka/go-bridge-core/internal/analytics"
 	"vuka/go-bridge-core/internal/api"
 	"vuka/go-bridge-core/internal/config"
 	bridgegrpc "vuka/go-bridge-core/internal/grpc"
@@ -34,6 +35,7 @@ import (
 	"vuka/go-bridge-core/internal/providerexec"
 	"vuka/go-bridge-core/internal/providers"
 	"vuka/go-bridge-core/internal/reconciliation"
+	"vuka/go-bridge-core/internal/risk"
 	"vuka/go-bridge-core/internal/settlement"
 	"vuka/go-bridge-core/internal/support"
 	"vuka/go-bridge-core/internal/transactionworkflow"
@@ -104,10 +106,32 @@ func run(log *slog.Logger) error {
 		}
 		currencyRails[country.Currency] = country.ProviderID
 	}
+	// Explicit, per-provider, fail-closed live activation (see providers/live.go).
+	liveProviders := map[string]string{}
+	for _, country := range providers.Countries {
+		if len(enabled) > 0 && !enabled[country.Code] {
+			continue
+		}
+		if !providers.LiveModeRequested(country.ProviderID, os.Getenv) {
+			continue
+		}
+		req := providers.LiveRequestFromEnv(country.ProviderID)
+		if err := catalog.ActivateLive(req, cfg.AllowLiveProviders, os.Getenv, nil); err != nil {
+			return fmt.Errorf("live provider %s refused: %w", country.ProviderID, err)
+		}
+		liveProviders[country.ProviderID] = req.CredentialRef
+		log.Warn("provider switched to LIVE: real network calls enabled", "provider", country.ProviderID, "credentials", req.CredentialRef)
+	}
 	for _, adapter := range catalog.Adapters() {
 		registry.Register(adapter)
 	}
 	log.Info("adapters registered", "available", registry.Names(), "countries", len(currencyRails))
+
+	// KYC-tiered limits (USD equivalents via the catalog's reference table) and the
+	// sanctions gate. The sandbox screener is replaced by a licensed vendor
+	// integration (env://VUKA_SANCTIONS_API_KEY) before production.
+	riskSvc := risk.NewService(pool, providers.USDRates{PerUSD: catalog.ReferenceRates(), Label: cfg.FxSource}, nil)
+	screener := risk.Screener(risk.SandboxScreener{Deny: cfg.SandboxSanctionsDeny, Review: cfg.SandboxSanctionsReview})
 
 	idem := idempotency.NewStore(pool)
 	ledgerSvc := ledger.NewService(pool, idem, registry)
@@ -184,6 +208,9 @@ func run(log *slog.Logger) error {
 	providerExecutionSvc := providerexec.NewService(registry, providerexec.NewPostgresStore(pool))
 	if cfg.ProviderCredentialRef != "" {
 		providerExecutionSvc.SetCredentialReference(cfg.AdapterName, cfg.ProviderCredentialRef)
+	}
+	for id, ref := range liveProviders {
+		providerExecutionSvc.SetCredentialReference(id, ref)
 	}
 	log.Info("provider execution schema ready", "durable_evidence", true, "external_calls", false)
 	workflowCtx, workflowCancel := context.WithTimeout(ctx, 10*time.Second)
@@ -276,7 +303,14 @@ func run(log *slog.Logger) error {
 	// Build the REST handler. When VUKA_WEB_DIR points at the built SPA,
 	// serve the dashboard and the API from the same port (single-origin
 	// production shape; tunnel-friendly).
-	handler := api.NewServerWithRuntimeOptionsAndProviderExecution(ledgerSvc, log, cfg.CORSOrigins, reconciliationRepo, reconciliationPoller, authStore, cfg.ReconciliationLagWarning, cfg.ReconciliationLagCritical, cfg.ReadOnly, settlementSvc, pilotSvc, supportSvc, cfg.LocalSyntheticExecution, providerExecutionSvc, api.WithProviderCatalog(catalog))
+	handler := api.NewServerWithRuntimeOptionsAndProviderExecution(ledgerSvc, log, cfg.CORSOrigins, reconciliationRepo, reconciliationPoller, authStore, cfg.ReconciliationLagWarning, cfg.ReconciliationLagCritical, cfg.ReadOnly, settlementSvc, pilotSvc, supportSvc, cfg.LocalSyntheticExecution, providerExecutionSvc, api.WithProviderCatalog(catalog),
+		api.WithRisk(riskSvc, screener),
+		api.WithAnalytics(analytics.NewService(pool, providers.USDRates{PerUSD: catalog.ReferenceRates(), Label: cfg.FxSource}, cfg.FxSource)),
+		api.WithPublicConfig(api.PublicConfig{
+			Environment: cfg.Environment, ChainID: cfg.ReconciliationChainID, EscrowContract: cfg.ReconciliationContract,
+			ReconciliationEnabled: cfg.ReconciliationEnabled, LiveProviders: len(liveProviders) > 0, SettlementExecution: cfg.SettlementExecutionEnabled,
+		}),
+		api.WithMetricsToken(cfg.MetricsToken))
 	if cfg.WebDir != "" {
 		handler = api.WithWebDir(handler, cfg.WebDir)
 		log.Info("serving web dashboard", "dir", cfg.WebDir)

@@ -25,6 +25,7 @@ func TestEvaluateTiers(t *testing.T) {
 		{"suspended blocked", StatusSuspended, 1, Usage{}, "kyc_not_permitted"},
 		{"unknown status blocked", "WHATEVER", 1, Usage{}, "kyc_not_permitted"},
 		{"case-insensitive status", "verified", 100, Usage{}, ""},
+		{"legacy APPROVED is treated as VERIFIED", "APPROVED", 1_900, Usage{}, ""},
 	}
 	for _, c := range cases {
 		d := Evaluate(c.status, c.amount, c.used, table)

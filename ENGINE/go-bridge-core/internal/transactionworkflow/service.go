@@ -32,7 +32,7 @@ func (s *Service) Start(ctx context.Context, key string, req Request) (Workflow,
 		SourceAccountID: req.SourceAccountID, DestinationAccountID: req.DestinationAccountID,
 		CorridorID: req.CorridorID, QuoteID: req.QuoteID, CollectionProvider: req.CollectionProvider,
 		PayoutProvider: req.PayoutProvider, Amount: req.Amount, CurrencyFrom: req.CurrencyFrom,
-		CurrencyTo: req.CurrencyTo, Rate: req.Rate, State: StateCreated, CreatedAt: now, UpdatedAt: now}
+		CurrencyTo: req.CurrencyTo, Rate: req.Rate, InvoiceNumber: req.InvoiceNumber, State: StateCreated, CreatedAt: now, UpdatedAt: now}
 	if item.IdempotencyKey == "" {
 		return Workflow{}, false, fmt.Errorf("%w: idempotency key is required", ErrInvalidRequest)
 	}
@@ -58,7 +58,7 @@ func (s *Service) Start(ctx context.Context, key string, req Request) (Workflow,
 	if s.ledger == nil {
 		return item, false, s.review(ctx, &item, "", ErrLedgerUnavailable.Error())
 	}
-	ledgerID, err := s.ledger.PostCollectedCrossBorder(ctx, "workflow:"+item.ID, item.SourceAccountID, item.DestinationAccountID, item.Amount, item.CurrencyFrom, item.CurrencyTo, item.Rate)
+	ledgerID, err := s.ledger.PostCollectedCrossBorder(ctx, "workflow:"+item.ID, item.SourceAccountID, item.DestinationAccountID, item.Amount, item.CurrencyFrom, item.CurrencyTo, item.Rate, item.InvoiceNumber)
 	if err != nil {
 		return item, false, s.review(ctx, &item, "", "ledger handoff failed: "+err.Error())
 	}
@@ -97,7 +97,7 @@ func (s *Service) Retry(ctx context.Context, id string, phone string) (Workflow,
 		if s.ledger == nil {
 			return item, s.review(ctx, &item, StepCollection, ErrLedgerUnavailable.Error())
 		}
-		ledgerID, postErr := s.ledger.PostCollectedCrossBorder(ctx, "workflow:"+item.ID, item.SourceAccountID, item.DestinationAccountID, item.Amount, item.CurrencyFrom, item.CurrencyTo, item.Rate)
+		ledgerID, postErr := s.ledger.PostCollectedCrossBorder(ctx, "workflow:"+item.ID, item.SourceAccountID, item.DestinationAccountID, item.Amount, item.CurrencyFrom, item.CurrencyTo, item.Rate, item.InvoiceNumber)
 		if postErr != nil {
 			return item, s.review(ctx, &item, "", "ledger handoff failed: "+postErr.Error())
 		}

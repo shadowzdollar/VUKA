@@ -14,6 +14,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DataTable } from "@/components/vuka/data-table";
+import { LazyHistogramChart } from "@/components/vuka/lazy-charts";
 import { QueryBoundary } from "@/components/vuka/query-state";
 import { Chip, Metric, PageHeader, Panel } from "@/components/vuka/shell";
 import { describeError, isApiError } from "@/lib/api/client";
@@ -29,6 +31,19 @@ export const invoiceSubtotal = (i: Invoice) =>
 export const invoiceTotal = (i: Invoice) => invoiceSubtotal(i) * (1 + i.vat_rate / 100);
 
 type Tab = "issued" | "received";
+
+const AGEING = ["Not yet due", "1–30 days late", "31–60 days late", "60+ days late"];
+
+/** Buckets unpaid invoices by how far past their due date they are (counts, currency-neutral). */
+function ageing(invoices: Invoice[]) {
+  const counts = [0, 0, 0, 0];
+  const today = Date.now();
+  for (const i of invoices) {
+    const late = Math.floor((today - new Date(i.due_date).getTime()) / 86_400_000);
+    counts[late <= 0 ? 0 : late <= 30 ? 1 : late <= 60 ? 2 : 3]! += 1;
+  }
+  return AGEING.map((label, idx) => ({ label, count: counts[idx] ?? 0 }));
+}
 
 export function TraderInvoices() {
   const trader = useTrader();
@@ -71,6 +86,29 @@ export function TraderInvoices() {
         <Metric label="Settled" value={totals.paid} sub="Paid invoices" />
       </div>
 
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Panel title="Owed to you · ageing">
+          <LazyHistogramChart
+            unit="invoices"
+            ariaLabel="Unpaid invoices you issued, by days past due"
+            data={ageing(
+              (all.data ?? []).filter((i) => i.issuer_user_id === trader.id && i.status !== "PAID"),
+            )}
+          />
+        </Panel>
+        <Panel title="You owe · ageing">
+          <LazyHistogramChart
+            unit="invoices"
+            ariaLabel="Unpaid invoices you received, by days past due"
+            data={ageing(
+              (all.data ?? []).filter(
+                (i) => i.counterparty_user_id === trader.id && i.status !== "PAID",
+              ),
+            )}
+          />
+        </Panel>
+      </div>
+
       <Panel
         title="Invoice register"
         meta={
@@ -91,42 +129,68 @@ export function TraderInvoices() {
           }
         >
           {(rows) => (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                    <th className="py-2">Number</th>
-                    <th className="py-2">{tab === "issued" ? "Buyer" : "Supplier"}</th>
-                    <th className="py-2">Issued</th>
-                    <th className="py-2">Due</th>
-                    <th className="py-2 text-right">Total</th>
-                    <th className="py-2 text-right">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((i) => (
-                    <tr
-                      key={i.id}
-                      onClick={() => setActive(i)}
-                      className="cursor-pointer border-b border-border/60 last:border-0 hover:bg-accent/40"
-                    >
-                      <td className="py-2.5 font-mono text-xs">{i.number}</td>
-                      <td className="py-2.5 font-mono text-xs text-muted-foreground">
-                        {shortId(tab === "issued" ? i.counterparty_user_id : i.issuer_user_id)}
-                      </td>
-                      <td className="py-2.5 font-mono text-xs tabular-nums">{day(i.issue_date)}</td>
-                      <td className="py-2.5 font-mono text-xs tabular-nums">{day(i.due_date)}</td>
-                      <td className="py-2.5 text-right font-mono tabular-nums">
-                        {money(invoiceTotal(i), i.currency)}
-                      </td>
-                      <td className="py-2.5 text-right">
-                        <Chip tone={i.status === "PAID" ? "invert" : "live"}>{i.status}</Chip>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              caption={tab === "issued" ? "Issued invoices" : "Received invoices"}
+              exportName={`vuka-invoices-${tab}.csv`}
+              rows={rows}
+              rowKey={(i) => i.id}
+              onRowClick={setActive}
+              initialSort={{ key: "issued", dir: "desc" }}
+              columns={[
+                {
+                  key: "number",
+                  header: "Number",
+                  sort: (i) => i.number,
+                  cell: (i) => <span className="font-mono text-xs">{i.number}</span>,
+                },
+                {
+                  key: "party",
+                  header: tab === "issued" ? "Buyer" : "Supplier",
+                  text: (i) => (tab === "issued" ? i.counterparty_user_id : i.issuer_user_id),
+                  cell: (i) => (
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {shortId(tab === "issued" ? i.counterparty_user_id : i.issuer_user_id)}
+                    </span>
+                  ),
+                },
+                {
+                  key: "issued",
+                  header: "Issued",
+                  sort: (i) => i.issue_date,
+                  cell: (i) => (
+                    <span className="tabular font-mono text-xs">{day(i.issue_date)}</span>
+                  ),
+                },
+                {
+                  key: "due",
+                  header: "Due",
+                  sort: (i) => i.due_date,
+                  cell: (i) => <span className="tabular font-mono text-xs">{day(i.due_date)}</span>,
+                },
+                {
+                  key: "total",
+                  header: "Total",
+                  align: "right",
+                  sort: (i) => invoiceTotal(i),
+                  text: (i) => `${invoiceTotal(i)} ${i.currency}`,
+                  cell: (i) => (
+                    <span className="tabular font-mono">{money(invoiceTotal(i), i.currency)}</span>
+                  ),
+                },
+                {
+                  key: "status",
+                  header: "Status",
+                  align: "right",
+                  sort: (i) => i.status,
+                  cell: (i) => (
+                    <Chip tone={i.status === "PAID" ? "invert" : "live"}>{i.status}</Chip>
+                  ),
+                },
+              ]}
+              empty={
+                tab === "issued" ? "You have not issued any invoices yet." : "No invoices received."
+              }
+            />
           )}
         </QueryBoundary>
       </Panel>

@@ -26,7 +26,7 @@ type Tx struct {
 	Status       string // SUCCESS | FAILED | REVERSED | PENDING | PROCESSING
 	CreatedAt    time.Time
 	Counterparty string // the other side's account id (empty for own-account moves)
-	Trade        bool   // true when money moved between the trader and someone else
+	Trade        bool   // true only for movements between the trader and ANOTHER TRADER (top-ups from settlement accounts are not trade)
 }
 
 // Input is everything the score depends on.
@@ -167,6 +167,7 @@ func Load(ctx context.Context, pool *pgxpool.Pool, userID string) ([]Tx, error) 
 		SELECT t.status::text, t.created_at,
 		       CASE WHEN sa.user_id = $1 THEN t.destination_account_id::text ELSE t.source_account_id::text END,
 		       (sa.user_id = $1) <> (da.user_id = $1)
+		       AND (CASE WHEN sa.user_id = $1 THEN da.type ELSE sa.type END) IN ('BUSINESS','PERSONAL')
 		FROM transactions t
 		JOIN accounts sa ON sa.id = t.source_account_id
 		JOIN accounts da ON da.id = t.destination_account_id

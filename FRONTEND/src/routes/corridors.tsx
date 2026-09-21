@@ -12,11 +12,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DataTable } from "@/components/vuka/data-table";
 import { ErrorState, Loading, QueryBoundary } from "@/components/vuka/query-state";
 import { Chip, Metric, PageHeader, Panel, Shell } from "@/components/vuka/shell";
 import { corridors as corridorApi } from "@/lib/api/endpoints";
 import type { Corridor } from "@/lib/api/types";
-import { fromMinor, money, shortId, toMinor, when } from "@/lib/format";
+import { fromMinor, money, shortId, toMinor, truncMid, when } from "@/lib/format";
 import { buildPacs008, structuralCheck } from "@/lib/pacs008";
 import { useSession, useTrader } from "@/lib/session";
 import { useTransfers, useWallet } from "@/lib/trader-data";
@@ -96,49 +97,138 @@ function TraderCorridors() {
             </div>
 
             <Panel title="Corridor rate card" meta={<Chip tone="live">Live from engine</Chip>}>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[820px] text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                      <th className="py-2">Corridor</th>
-                      <th className="py-2">Pair</th>
-                      <th className="py-2 text-right">Rate</th>
-                      <th className="py-2 text-right">Fee</th>
-                      <th className="py-2 text-right">Min / max</th>
-                      <th className="py-2">Provider</th>
-                      <th className="py-2 text-right">State</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((c) => (
-                      <tr
-                        key={c.id}
-                        onClick={() => setSelectedId(c.id)}
-                        className={`cursor-pointer border-b border-border/60 last:border-0 hover:bg-accent/40 ${selected?.id === c.id ? "bg-accent/30" : ""}`}
-                      >
-                        <td className="py-2.5 font-mono text-xs">{c.id}</td>
-                        <td className="py-2.5 font-mono text-xs">
-                          {c.from_currency} → {c.to_currency} ({c.from_country}→{c.to_country})
-                        </td>
-                        <td className="py-2.5 text-right font-mono tabular-nums">{c.fx.rate}</td>
-                        <td className="py-2.5 text-right font-mono tabular-nums">
-                          {c.fees_bps / 100}%
-                          {c.fixed_fee_minor ? ` + ${fromMinor(c.fixed_fee_minor)}` : ""}
-                        </td>
-                        <td className="py-2.5 text-right font-mono text-xs tabular-nums">
-                          {money(fromMinor(c.min_amount_minor))} –{" "}
-                          {money(fromMinor(c.max_amount_minor))}
-                        </td>
-                        <td className="py-2.5 text-xs text-muted-foreground">{c.provider_id}</td>
-                        <td className="py-2.5 text-right">
-                          <Chip tone={c.kill_switch || !c.enabled ? "warn" : "invert"}>
-                            {c.kill_switch ? "HALTED" : c.enabled ? "LIVE" : "DISABLED"}
-                          </Chip>
-                        </td>
-                      </tr>
+              <DataTable
+                caption="Corridor rate card"
+                rows={rows}
+                rowKey={(c) => c.id}
+                onRowClick={(c) => setSelectedId(c.id)}
+                pageSize={12}
+                exportName="vuka-corridors.csv"
+                initialSort={{ key: "pair", dir: "asc" }}
+                columns={[
+                  {
+                    key: "pair",
+                    header: "Corridor",
+                    sort: (c) => c.id,
+                    text: (c) =>
+                      `${c.id} ${c.from_country} ${c.to_country} ${c.from_currency} ${c.to_currency}`,
+                    cell: (c) => (
+                      <span className={selected?.id === c.id ? "font-semibold" : undefined}>
+                        <span className="font-mono text-xs">
+                          {c.from_currency} → {c.to_currency}
+                        </span>
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {c.from_country} → {c.to_country}
+                        </span>
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "rate",
+                    header: "Indicative rate",
+                    align: "right",
+                    sort: (c) => c.fx.inverse_rate,
+                    text: (c) => String(c.fx.inverse_rate),
+                    cell: (c) => (
+                      <span className="tabular font-mono text-xs">
+                        1 {c.from_currency} = {c.fx.inverse_rate.toPrecision(5)} {c.to_currency}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "fee",
+                    header: "Fee",
+                    align: "right",
+                    sort: (c) => c.fees_bps,
+                    text: (c) => `${c.fees_bps / 100}%`,
+                    cell: (c) => (
+                      <span className="tabular font-mono text-xs">{c.fees_bps / 100}%</span>
+                    ),
+                  },
+                  {
+                    key: "limits",
+                    header: "Min / max",
+                    align: "right",
+                    text: (c) => `${c.min_amount_minor}-${c.max_amount_minor}`,
+                    cell: (c) => (
+                      <span className="tabular font-mono text-xs">
+                        {money(fromMinor(c.min_amount_minor))} –{" "}
+                        {money(fromMinor(c.max_amount_minor))}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "provider",
+                    header: "Payout rail",
+                    sort: (c) => c.provider_id,
+                    cell: (c) => (
+                      <span className="text-xs text-muted-foreground">{c.provider_id}</span>
+                    ),
+                  },
+                  {
+                    key: "state",
+                    header: "State",
+                    align: "right",
+                    sort: (c) => (c.kill_switch ? "HALTED" : c.enabled ? "LIVE" : "DISABLED"),
+                    cell: (c) => (
+                      <Chip tone={c.kill_switch || !c.enabled ? "warn" : "invert"}>
+                        {c.kill_switch ? "HALTED" : c.enabled ? "LIVE" : "DISABLED"}
+                      </Chip>
+                    ),
+                  },
+                ]}
+              />
+            </Panel>
+
+            <Panel title="How pricing works">
+              <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+                <div>
+                  <p className="text-sm text-muted-foreground">
+                    Every corridor is priced from a transparent fee tier plus the indicative FX
+                    rate. A firm quote locks the rate, fee and delivered amount for its validity
+                    window, so what you confirm is what settles.
+                  </p>
+                  <ol className="mt-4 space-y-2 text-sm">
+                    {[
+                      "Choose the corridor and amount — the quote shows fee, rate and the amount delivered.",
+                      "Confirm — the quote id is bound to the payment; a changed market cannot alter it.",
+                      "Collect and pay out — your mobile-money wallet is charged, the recipient is paid on their local rail.",
+                    ].map((step, i) => (
+                      <li key={step} className="flex gap-3">
+                        <span className="font-mono text-xs text-muted-foreground">0{i + 1}</span>
+                        {step}
+                      </li>
                     ))}
-                  </tbody>
-                </table>
+                  </ol>
+                </div>
+                <div>
+                  <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                    Fee tiers
+                  </div>
+                  <ul className="space-y-2">
+                    {Array.from(new Set(rows.map((c) => c.fees_bps)))
+                      .sort((a, b) => a - b)
+                      .map((bps) => {
+                        const n = rows.filter((c) => c.fees_bps === bps).length;
+                        return (
+                          <li
+                            key={bps}
+                            className="flex items-baseline justify-between border border-border px-3 py-2"
+                          >
+                            <span className="tabular font-mono text-lg">
+                              {(bps / 100).toFixed(2)}%
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {n} corridors ·{" "}
+                              {bps <= 80
+                                ? "within a regional economic community"
+                                : "across regions"}
+                            </span>
+                          </li>
+                        );
+                      })}
+                  </ul>
+                </div>
               </div>
             </Panel>
 
@@ -146,10 +236,14 @@ function TraderCorridors() {
               <Panel title="Quote calculator" meta={<Chip>{selected.id}</Chip>}>
                 <div className="grid gap-4 lg:grid-cols-2">
                   <div className="space-y-1.5">
-                    <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
+                    <Label
+                      htmlFor="quote-amount"
+                      className="font-mono text-[10px] uppercase tracking-[0.16em]"
+                    >
                       Send amount ({selected.from_currency})
                     </Label>
                     <Input
+                      id="quote-amount"
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
                       inputMode="decimal"
@@ -166,25 +260,35 @@ function TraderCorridors() {
                     ) : quote.isError ? (
                       <ErrorState error={quote.error} onRetry={() => void quote.refetch()} />
                     ) : quote.data ? (
-                      <dl className="space-y-2 border border-border p-3 font-mono text-xs">
-                        <Row k="Rate applied" v={String(quote.data.quote.rate)} />
-                        <Row
-                          k="Fee"
-                          v={`−${money(fromMinor(quote.data.quote.fee_minor), selected.from_currency)}`}
-                        />
-                        <div className="flex justify-between border-t border-border pt-2 text-sm">
-                          <dt>Beneficiary receives</dt>
-                          <dd className="tabular-nums">
-                            {money(
-                              fromMinor(quote.data.quote.deliver_amount_minor),
-                              selected.to_currency,
-                            )}
-                          </dd>
-                        </div>
-                        <p className="text-[11px] text-muted-foreground">
-                          Quote {quote.data.quote.id} · expires {when(quote.data.quote.expires_at)}
+                      <>
+                        <dl className="space-y-2 border border-border p-3 font-mono text-xs">
+                          <Row
+                            k="Rate"
+                            v={`1 ${selected.from_currency} = ${quote.data.quote.inverse_rate.toPrecision(5)} ${selected.to_currency}`}
+                          />
+                          <Row
+                            k="Ledger rate"
+                            v={`${quote.data.quote.rate.toPrecision(5)} ${selected.from_currency} per ${selected.to_currency}`}
+                          />
+                          <Row
+                            k="Fee"
+                            v={`−${money(fromMinor(quote.data.quote.fee_minor), selected.from_currency)}`}
+                          />
+                          <div className="flex justify-between border-t border-border pt-2 text-sm">
+                            <dt>Beneficiary receives</dt>
+                            <dd className="tabular-nums">
+                              {money(
+                                fromMinor(quote.data.quote.deliver_amount_minor),
+                                selected.to_currency,
+                              )}
+                            </dd>
+                          </div>
+                        </dl>
+                        <p className="mt-2 break-all text-[11px] text-muted-foreground">
+                          Quote {truncMid(quote.data.quote.id, 10, 8)} · expires{" "}
+                          {when(quote.data.quote.expires_at)}
                         </p>
-                      </dl>
+                      </>
                     ) : null}
                   </div>
                 </div>
@@ -273,7 +377,7 @@ function IsoViewer() {
                 setResult(null);
               }}
             >
-              <SelectTrigger className="rounded-none font-mono text-xs">
+              <SelectTrigger aria-label="Transfer" className="rounded-none font-mono text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-none">

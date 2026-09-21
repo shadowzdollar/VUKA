@@ -51,6 +51,7 @@ type Request struct {
 	CurrencyFrom         string  `json:"currency_from"`
 	CurrencyTo           string  `json:"currency_to"`
 	Rate                 float64 `json:"rate"`
+	InvoiceNumber        string  `json:"invoice_number,omitempty"`
 }
 
 type Workflow struct {
@@ -70,6 +71,7 @@ type Workflow struct {
 	CurrencyFrom          string    `json:"currency_from"`
 	CurrencyTo            string    `json:"currency_to"`
 	Rate                  float64   `json:"rate"`
+	InvoiceNumber         string    `json:"invoice_number,omitempty"`
 	State                 string    `json:"state"`
 	FailedStep            string    `json:"failed_step,omitempty"`
 	FailureReason         string    `json:"failure_reason,omitempty"`
@@ -107,7 +109,7 @@ type AccountResolver interface {
 }
 
 type LedgerPoster interface {
-	PostCollectedCrossBorder(context.Context, string, string, string, float64, string, string, float64) (string, error)
+	PostCollectedCrossBorder(context.Context, string, string, string, float64, string, string, float64, string) (string, error)
 }
 
 type CollectionPoster interface {

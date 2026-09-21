@@ -21,6 +21,11 @@ const (
 	topicEscrowReleased      = "efc7f1f15becfaec7a3c17eec78be3fa7adb45698f26fcfd25efe1754c242331"
 	topicEscrowRefunded      = "4022ec06c48ff8ef53ec31d435dd9408ba9fd88c7faa90b2a6b9e5a2b339c1f2"
 	topicDisputeResolved     = "5a87909bff68caaaaf0b3fd9c74eeccc928832f879315e5c6fb7a73612f26c0c"
+
+	// VukaEscrowV2 (keccak256 of the event signature).
+	topicEscrowSplit          = "889eb4c83e70d971f8e5114f5024e5e51c746b12f5211c9966ee87d2d860f9b0"
+	topicProtocolFeeCollected = "3e4febac6100e201db638e98000ef75bf1b86e7187ecd61f2ad8918c293f43ca"
+	topicPayoutDeferred       = "54ce20b025f500d61d580ad59a7050cc533f69121275cfe095ef32ec9976df90"
 )
 
 type rpcLog struct {
@@ -94,7 +99,8 @@ func (c *rpcClient) logs(ctx context.Context, address string, from, to int64) ([
 		"topics": [][]string{{"0x" + topicEscrowCreated, "0x" + topicFundsLocked,
 			"0x" + topicCompletionConfirmed, "0x" + topicDisputeRaised,
 			"0x" + topicEscrowReleased, "0x" + topicEscrowRefunded,
-			"0x" + topicDisputeResolved}},
+			"0x" + topicDisputeResolved, "0x" + topicEscrowSplit,
+			"0x" + topicProtocolFeeCollected, "0x" + topicPayoutDeferred}},
 	}
 	if err := c.call(ctx, "eth_getLogs", []any{filter}, &logs); err != nil {
 		return nil, err

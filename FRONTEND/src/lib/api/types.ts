@@ -117,7 +117,10 @@ export interface Recipient {
 
 // ---- Corridors, quotes, providers ----------------------------------------------------------
 export interface FxQuote {
+  /** Source-currency units per ONE destination unit (the ledger convention). */
   rate: number;
+  /** Destination units per ONE source unit — "1 RWF = x KES". */
+  inverse_rate: number;
   source: string;
   quote_id: string;
   quoted_at: string;
@@ -154,6 +157,9 @@ export interface Quote {
   from_currency: string;
   to_currency: string;
   rate: number;
+  inverse_rate: number;
+  rate_convention: "source_per_destination";
+  rate_source: string;
   quoted_at: string;
   expires_at: string;
   observation_only: boolean;
@@ -302,7 +308,7 @@ export interface Activity {
   created_at: string;
 }
 
-export type EscrowState = "CREATED" | "LOCKED" | "RELEASED" | "REFUNDED" | "DISPUTED";
+export type EscrowState = "CREATED" | "LOCKED" | "RELEASED" | "REFUNDED" | "DISPUTED" | "SPLIT";
 
 export interface EscrowSummary {
   chain_id: number;
@@ -511,4 +517,143 @@ export interface Pilot {
   live_enabled: boolean;
   created_at: string;
   updated_at: string;
+}
+
+// ---- Platform: public config, KYC standing, limits, server trust score -------------------------
+export interface PublicCountry {
+  code: string;
+  name: string;
+  currency: string;
+  region: string;
+  provider_id: string;
+  provider_name: string;
+}
+
+export interface KycLimits {
+  per_txn_usd: number;
+  daily_usd: number;
+  monthly_usd: number;
+}
+
+export interface PublicConfig {
+  api_version: string;
+  environment: string;
+  countries: PublicCountry[];
+  currencies: string[];
+  corridor_count: number;
+  rate_convention: string;
+  kyc_limits: Record<string, KycLimits> | null;
+  chain: { enabled: boolean; chain_id: number; escrow_contract: string };
+  features: Record<string, boolean>;
+}
+
+export interface Standing {
+  kyc_status: string;
+  limits: KycLimits;
+  used_day_usd: number;
+  used_month_usd: number;
+}
+
+export interface TraderVerification {
+  id: string;
+  verification_type: string;
+  status: string;
+  reference: string;
+  evidence_label?: string;
+  created_at: string;
+  reviewed_at?: string;
+}
+
+export interface TrustFactor {
+  key: string;
+  label: string;
+  weight: number;
+  value: number;
+  confidence: number;
+  detail: string;
+}
+
+export interface TrustResult {
+  score: number;
+  band: string;
+  cycles_scored: number;
+  factors: TrustFactor[];
+  computed_at: string;
+  method: string;
+}
+
+// ---- Analytics (server-side aggregates, USD-equivalent at reference rates) --------------------
+export interface AnalyticsSlice {
+  label: string;
+  value_usd: number;
+  count: number;
+}
+
+export interface AnalyticsDay {
+  date: string;
+  out_usd: number;
+  in_usd: number;
+  count: number;
+  failed: number;
+}
+
+export interface AnalyticsBucket {
+  label: string;
+  min_usd: number;
+  max_usd: number;
+  count: number;
+}
+
+export interface AnalyticsFlow {
+  from: string;
+  to: string;
+  volume_usd: number;
+  count: number;
+}
+
+export interface AnalyticsTotals {
+  sent_usd: number;
+  received_usd: number;
+  volume_usd: number;
+  cash_in_usd: number;
+  payments: number;
+  payments_out: number;
+  payments_in: number;
+  succeeded: number;
+  failed: number;
+  reversed: number;
+  success_rate: number;
+  avg_payment_usd: number;
+  largest_payment_usd: number;
+  cross_currency_payments: number;
+  active_traders?: number;
+  new_traders?: number;
+  total_traders?: number;
+}
+
+export interface AnalyticsReport {
+  scope: "trader" | "platform";
+  period_days: number;
+  generated_at: string;
+  rate_basis: string;
+  totals: AnalyticsTotals;
+  daily: AnalyticsDay[];
+  currencies: AnalyticsSlice[];
+  statuses: AnalyticsSlice[];
+  histogram: AnalyticsBucket[];
+  corridors: AnalyticsFlow[];
+  counterparties?: { name: string; volume_usd: number; count: number }[];
+  /** weekday (Mon = 0) x hour (UTC) */
+  heatmap: number[][];
+  kyc?: AnalyticsSlice[];
+  workflows?: AnalyticsSlice[];
+  providers?: {
+    provider: string;
+    total: number;
+    succeeded: number;
+    failed: number;
+    success_rate: number;
+  }[];
+  tickets?: AnalyticsSlice[];
+  settlements?: AnalyticsSlice[];
 }

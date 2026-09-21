@@ -3,6 +3,7 @@ import type {
   Account,
   Activity,
   Balance,
+  AnalyticsReport,
   ComplianceReview,
   CreateInvoiceInput,
   CreateWorkflowInput,
@@ -15,6 +16,10 @@ import type {
   Invoice,
   LedgerEntry,
   Notification,
+  PublicConfig,
+  Standing,
+  TraderVerification,
+  TrustResult,
   OperatorSession,
   Organization,
   Pilot,
@@ -210,6 +215,7 @@ export type ChainScope = {
 };
 
 export const operator = {
+  analytics: (days: number) => api.get<AnalyticsReport>("/api/operator/analytics", { days }),
   activity: (q: {
     limit?: number;
     offset?: number;
@@ -356,4 +362,22 @@ export const pilots = {
       })),
   action: (id: string, action: "pause" | "resume" | "cancel" | "complete") =>
     api.post<unknown>(`/api/pilots/${id}/${action}`),
+};
+
+// ---- Platform ----------------------------------------------------------------------------------
+export const platform = {
+  /** Unauthenticated: countries, currencies, corridor count, limits, chain, feature flags. */
+  config: () => api.get<PublicConfig>("/api/config/public"),
+  standing: () => api.get<Standing>("/api/trader/limits"),
+  kyc: () =>
+    api
+      .get<{ verifications: TraderVerification[] | null; standing?: Standing }>("/api/trader/kyc")
+      .then((r) => ({
+        verifications: r.verifications ?? [],
+        standing: r.standing,
+      })),
+  submitKyc: (input: { verification_type: string; reference: string; evidence_label?: string }) =>
+    api.post<TraderVerification>("/api/trader/kyc", input),
+  trust: () => api.get<TrustResult>("/api/trader/trust-score"),
+  analytics: (days: number) => api.get<AnalyticsReport>("/api/trader/analytics", { days }),
 };

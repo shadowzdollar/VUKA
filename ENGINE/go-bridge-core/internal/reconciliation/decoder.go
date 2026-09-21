@@ -69,6 +69,33 @@ func decodeLog(chainID int64, contract string, log rpcLog) (ChainEvent, error) {
 		} else {
 			err = dataErr
 		}
+	case topicEscrowSplit:
+		event.Type = EventEscrowSplit
+		event.SupplierAmount, err = wordDecimal(log.Data, 0)
+		if err == nil {
+			event.BuyerAmount, err = wordDecimal(log.Data, 1)
+		}
+		if err == nil {
+			event.FeeAmount, err = wordDecimal(log.Data, 2)
+		}
+	case topicProtocolFeeCollected:
+		if len(log.Topics) != 3 {
+			return ChainEvent{}, ErrInvalidEvent
+		}
+		event.Type = EventProtocolFee
+		event.FeeTo, err = topicAddress(log.Topics[2])
+		if err == nil {
+			event.FeeAmount, err = wordDecimal(log.Data, 0)
+		}
+	case topicPayoutDeferred:
+		if len(log.Topics) != 3 {
+			return ChainEvent{}, ErrInvalidEvent
+		}
+		event.Type = EventPayoutDeferred
+		event.Beneficiary, err = topicAddress(log.Topics[2])
+		if err == nil {
+			event.Amount, err = wordDecimal(log.Data, 0)
+		}
 	default:
 		return ChainEvent{}, fmt.Errorf("%w: %s", ErrUnknownEvent, topic)
 	}
@@ -109,4 +136,13 @@ func decodeString(data string, offsetIndex int) (string, error) {
 		return "", ErrInvalidEvent
 	}
 	return string(raw[offset+32 : offset+32+length]), nil
+}
+
+// wordDecimal reads the index-th 32-byte ABI word as an unsigned decimal string.
+func wordDecimal(data string, index int) (string, error) {
+	w, err := word(data, index)
+	if err != nil {
+		return "", err
+	}
+	return new(big.Int).SetBytes(w).String(), nil
 }

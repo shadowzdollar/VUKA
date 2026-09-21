@@ -1,12 +1,15 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AuthFrame } from "@/components/vuka/auth-frame";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordField } from "@/components/vuka/password-field";
 import { Label } from "@/components/ui/label";
 import { describeError, isApiError } from "@/lib/api/client";
-import { auth } from "@/lib/api/endpoints";
+import { auth, platform } from "@/lib/api/endpoints";
+import { useT } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +21,7 @@ export const Route = createFileRoute("/login")({
 type Mode = "trader" | "operator";
 
 function Login() {
+  const t = useT();
   const { session, refresh } = useSession();
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>("trader");
@@ -25,6 +29,14 @@ function Login() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const config = useQuery({
+    queryKey: ["public-config"],
+    queryFn: platform.config,
+    staleTime: 300_000,
+    retry: false,
+  });
+  // Seeded local accounts are offered only by a development engine — never in production.
+  const showDemo = config.data?.environment === "development";
 
   useEffect(() => {
     if (session.status === "trader" || session.status === "operator") {
@@ -43,11 +55,13 @@ function Login() {
       toast.success("Signed in");
     } catch (err) {
       setError(
-        isApiError(err) && err.code === "invalid_credentials"
-          ? mode === "trader"
-            ? "Invalid phone number or password."
-            : "Invalid email or password."
-          : describeError(err),
+        isApiError(err) && err.code === "too_many_attempts"
+          ? t("auth.tooMany")
+          : isApiError(err) && err.code === "invalid_credentials"
+            ? mode === "trader"
+              ? "Invalid phone number or password."
+              : "Invalid email or password."
+            : describeError(err),
       );
     } finally {
       setBusy(false);
@@ -55,13 +69,15 @@ function Login() {
   }
 
   return (
-    <AuthFrame>
-      <h1 className="text-3xl font-semibold tracking-tight">Welcome back</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Sign in to move money, track invoices and settle across corridors.
-      </p>
+    <AuthFrame variant="login">
+      <h1 className="text-3xl font-semibold tracking-tight">{t("auth.welcome")}</h1>
+      <p className="mt-2 text-sm text-muted-foreground">{t("auth.welcome.sub")}</p>
 
-      <div role="tablist" className="mt-8 grid grid-cols-2 border border-border">
+      <div
+        role="tablist"
+        aria-label="Account type"
+        className="mt-8 grid grid-cols-2 border border-border"
+      >
         {(["trader", "operator"] as const).map((m) => (
           <button
             key={m}
@@ -80,7 +96,7 @@ function Login() {
                 : "text-muted-foreground hover:bg-accent",
             )}
           >
-            {m === "trader" ? "Trader" : "Operator / Arbiter"}
+            {m === "trader" ? t("auth.trader") : t("auth.operator")}
           </button>
         ))}
       </div>
@@ -88,7 +104,7 @@ function Login() {
       <form onSubmit={submit} className="mt-6 space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="identifier" className="font-mono text-[10px] uppercase tracking-[0.16em]">
-            {mode === "trader" ? "Mobile number" : "Email"}
+            {mode === "trader" ? t("auth.phone") : t("auth.email")}
           </Label>
           <Input
             id="identifier"
@@ -103,12 +119,10 @@ function Login() {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="password" className="font-mono text-[10px] uppercase tracking-[0.16em]">
-            Password
+            {t("auth.password")}
           </Label>
-          <Input
+          <PasswordField
             id="password"
-            type="password"
-            className="rounded-none"
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -125,15 +139,70 @@ function Login() {
           disabled={busy || !identifier || !password}
           className="w-full rounded-none font-mono text-xs uppercase"
         >
-          {busy ? "Signing in…" : "Sign in"}
+          {busy ? t("auth.signingIn") : t("auth.signIn")}
         </Button>
       </form>
 
+      <details className="mt-5 border border-border p-3 text-xs text-muted-foreground">
+        <summary className="cursor-pointer font-mono uppercase tracking-[0.14em] text-foreground">
+          Forgot your password?
+        </summary>
+        <p className="mt-2">
+          Self-service reset is not yet available in this sandbox. Trader passwords are reset by the
+          support team after identity confirmation; operator credentials are re-issued by the
+          platform administrator. Use{" "}
+          <Link to="/support" className="underline underline-offset-4">
+            Help and support
+          </Link>
+          .
+        </p>
+      </details>
+
+      {showDemo ? (
+        <section
+          aria-label="Development demo accounts"
+          className="mt-5 border border-dashed border-foreground p-3 text-xs"
+        >
+          <div className="font-mono uppercase tracking-[0.16em]">Development demo access</div>
+          <p className="mt-1 text-muted-foreground">
+            Seeded local accounts, shown only because this engine reports environment=development.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {[
+              ["Trader (RW)", "trader", "+250700000991", "vuka-demo-2026"],
+              ["Trader (KE)", "trader", "+254700000882", "vuka-demo-2026"],
+              ["Operator", "operator", "operator@vuka.local", "operator-local-2026"],
+              ["Arbiter", "operator", "arbiter@vuka.local", "arbiter-local-2026"],
+            ].map(([label, m, id, pw]) => (
+              <button
+                key={label}
+                type="button"
+                className="border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] hover:bg-accent"
+                onClick={() => {
+                  setMode(m as Mode);
+                  setIdentifier(id!);
+                  setPassword(pw!);
+                  setError(null);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <ul className="mt-6 grid gap-2 border-t border-border pt-5 text-xs text-muted-foreground sm:grid-cols-3">
+        <li>Sessions end after a period of inactivity.</li>
+        <li>Repeated failed sign-ins are temporarily blocked.</li>
+        <li>VUKA staff will never ask for your password.</li>
+      </ul>
+
       {mode === "trader" ? (
         <p className="mt-6 text-sm text-muted-foreground">
-          New to VUKA?{" "}
+          {t("auth.newHere")}{" "}
           <Link to="/register" className="font-medium text-foreground underline underline-offset-4">
-            Create a trader account
+            {t("auth.createAccount")}
           </Link>
         </p>
       ) : (

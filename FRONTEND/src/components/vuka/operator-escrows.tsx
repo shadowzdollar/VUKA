@@ -8,6 +8,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ChainScopeBar } from "@/components/vuka/chain-scope-bar";
+import { DataTable } from "@/components/vuka/data-table";
+import { LazyStateChart } from "@/components/vuka/lazy-charts";
 import { EmptyState, QueryBoundary } from "@/components/vuka/query-state";
 import { Chip, Metric, PageHeader, Panel } from "@/components/vuka/shell";
 import { operator } from "@/lib/api/endpoints";
@@ -15,7 +17,7 @@ import type { EscrowState, EscrowSummary } from "@/lib/api/types";
 import { scopeReady, useChainScope } from "@/lib/chain-scope";
 import { money, tokenUnits, truncMid, when } from "@/lib/format";
 
-const STATES: EscrowState[] = ["CREATED", "LOCKED", "RELEASED", "REFUNDED", "DISPUTED"];
+const STATES: EscrowState[] = ["CREATED", "LOCKED", "RELEASED", "REFUNDED", "DISPUTED", "SPLIT"];
 
 const tone = (s: EscrowState) =>
   s === "RELEASED"
@@ -47,6 +49,7 @@ export function OperatorEscrows() {
       RELEASED: 0,
       REFUNDED: 0,
       DISPUTED: 0,
+      SPLIT: 0,
     };
     for (const e of escrows.data ?? []) t[e.state] += tokenUnits(e.amount);
     return t;
@@ -65,7 +68,7 @@ export function OperatorEscrows() {
         <EmptyState>Enter the escrow contract address to load escrows.</EmptyState>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <Metric
               label="Locked / created"
               value={money(totals.LOCKED + totals.CREATED)}
@@ -78,7 +81,12 @@ export function OperatorEscrows() {
               value={money(totals.DISPUTED)}
               sub="Frozen pending arbitration"
             />
+            <Metric label="Split" value={money(totals.SPLIT)} sub="Settled by arbiter ruling" />
           </div>
+
+          <Panel title="Escrow value by state">
+            <LazyStateChart data={STATES.map((st) => ({ state: st, amount: totals[st] }))} />
+          </Panel>
 
           <Panel
             title="Escrow register"
@@ -99,50 +107,81 @@ export function OperatorEscrows() {
               empty="No escrows have been reconciled for this contract yet."
             >
               {(rows) => (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[900px] text-sm">
-                    <thead>
-                      <tr className="border-b border-border text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                        <th className="py-2">Escrow</th>
-                        <th className="py-2">Invoice ref</th>
-                        <th className="py-2">Buyer</th>
-                        <th className="py-2">Supplier</th>
-                        <th className="py-2 text-right">Amount</th>
-                        <th className="py-2 text-right">Timeout</th>
-                        <th className="py-2 text-right">State</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows
-                        .filter((e) => filter === "ALL" || e.state === filter)
-                        .map((e) => (
-                          <tr
-                            key={e.escrow_id}
-                            onClick={() => setActive(e)}
-                            className="cursor-pointer border-b border-border/60 last:border-0 hover:bg-accent/40"
-                          >
-                            <td className="py-2.5 font-mono text-xs">#{e.escrow_id}</td>
-                            <td className="py-2.5 font-mono text-xs">{truncMid(e.invoice_ref)}</td>
-                            <td className="py-2.5 font-mono text-xs text-muted-foreground">
-                              {truncMid(e.buyer)}
-                            </td>
-                            <td className="py-2.5 font-mono text-xs text-muted-foreground">
-                              {truncMid(e.supplier)}
-                            </td>
-                            <td className="py-2.5 text-right font-mono tabular-nums">
-                              {money(tokenUnits(e.amount))}
-                            </td>
-                            <td className="py-2.5 text-right font-mono text-xs tabular-nums">
-                              {when(new Date(e.timeout_at * 1000).toISOString())}
-                            </td>
-                            <td className="py-2.5 text-right">
-                              <Chip tone={tone(e.state)}>{e.state}</Chip>
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable
+                  caption="Escrow register"
+                  exportName="vuka-escrows.csv"
+                  rows={rows.filter((e) => filter === "ALL" || e.state === filter)}
+                  rowKey={(e) => String(e.escrow_id)}
+                  onRowClick={setActive}
+                  initialSort={{ key: "id", dir: "desc" }}
+                  empty="No escrows match this filter."
+                  columns={[
+                    {
+                      key: "id",
+                      header: "Escrow",
+                      sort: (e) => e.escrow_id,
+                      text: (e) => `#${e.escrow_id}`,
+                      cell: (e) => <span className="font-mono text-xs">#{e.escrow_id}</span>,
+                    },
+                    {
+                      key: "invoice",
+                      header: "Invoice ref",
+                      sort: (e) => e.invoice_ref,
+                      cell: (e) => (
+                        <span className="font-mono text-xs">{truncMid(e.invoice_ref)}</span>
+                      ),
+                    },
+                    {
+                      key: "buyer",
+                      header: "Buyer",
+                      text: (e) => e.buyer,
+                      cell: (e) => (
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {truncMid(e.buyer)}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "supplier",
+                      header: "Supplier",
+                      text: (e) => e.supplier,
+                      cell: (e) => (
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {truncMid(e.supplier)}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "amount",
+                      header: "Amount",
+                      align: "right",
+                      sort: (e) => tokenUnits(e.amount),
+                      text: (e) => String(tokenUnits(e.amount)),
+                      cell: (e) => (
+                        <span className="tabular font-mono">{money(tokenUnits(e.amount))}</span>
+                      ),
+                    },
+                    {
+                      key: "timeout",
+                      header: "Timeout",
+                      align: "right",
+                      sort: (e) => e.timeout_at,
+                      text: (e) => new Date(e.timeout_at * 1000).toISOString(),
+                      cell: (e) => (
+                        <span className="tabular font-mono text-xs">
+                          {when(new Date(e.timeout_at * 1000).toISOString())}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "state",
+                      header: "State",
+                      align: "right",
+                      sort: (e) => e.state,
+                      cell: (e) => <Chip tone={tone(e.state)}>{e.state}</Chip>,
+                    },
+                  ]}
+                />
               )}
             </QueryBoundary>
           </Panel>

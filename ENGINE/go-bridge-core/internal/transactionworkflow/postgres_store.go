@@ -18,16 +18,16 @@ func (s *PostgresStore) Create(ctx context.Context, item Workflow) (Workflow, bo
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO transaction_workflows
 		(id,idempotency_key,trader_id,source_account_id,destination_account_id,corridor_id,quote_id,
-		 collection_provider,payout_provider,amount,currency_from,currency_to,rate,state)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+		 collection_provider,payout_provider,amount,currency_from,currency_to,rate,state,invoice_number)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NULLIF($15,''))
 		ON CONFLICT (idempotency_key) DO UPDATE SET updated_at=transaction_workflows.updated_at
 		RETURNING id,idempotency_key,trader_id,source_account_id,destination_account_id,corridor_id,quote_id,
 		 collection_provider,payout_provider,COALESCE(collection_execution_id,''),COALESCE(payout_execution_id,''),
 		 COALESCE(ledger_transfer_id,''),amount,currency_from,currency_to,rate,state,COALESCE(failed_step,''),
-		 COALESCE(failure_reason,''),created_at,updated_at`,
+		 COALESCE(failure_reason,''),created_at,updated_at,COALESCE(invoice_number,'')`,
 		item.ID, item.IdempotencyKey, item.TraderID, item.SourceAccountID, item.DestinationAccountID,
 		item.CorridorID, item.QuoteID, item.CollectionProvider, item.PayoutProvider, item.Amount,
-		item.CurrencyFrom, item.CurrencyTo, item.Rate, item.State).Scan(scanWorkflow(&out)...)
+		item.CurrencyFrom, item.CurrencyTo, item.Rate, item.State, item.InvoiceNumber).Scan(scanWorkflow(&out)...)
 	if err != nil {
 		return Workflow{}, false, fmt.Errorf("transaction workflow create: %w", err)
 	}
@@ -38,7 +38,7 @@ func scanWorkflow(w *Workflow) []any {
 	return []any{&w.ID, &w.IdempotencyKey, &w.TraderID, &w.SourceAccountID, &w.DestinationAccountID,
 		&w.CorridorID, &w.QuoteID, &w.CollectionProvider, &w.PayoutProvider, &w.CollectionExecutionID,
 		&w.PayoutExecutionID, &w.LedgerTransferID, &w.Amount, &w.CurrencyFrom, &w.CurrencyTo, &w.Rate,
-		&w.State, &w.FailedStep, &w.FailureReason, &w.CreatedAt, &w.UpdatedAt}
+		&w.State, &w.FailedStep, &w.FailureReason, &w.CreatedAt, &w.UpdatedAt, &w.InvoiceNumber}
 }
 
 func (s *PostgresStore) Get(ctx context.Context, id string) (Workflow, error) {
@@ -46,7 +46,7 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (Workflow, error) {
 	err := s.pool.QueryRow(ctx, `SELECT id,idempotency_key,trader_id,source_account_id,destination_account_id,corridor_id,quote_id,
 		collection_provider,payout_provider,COALESCE(collection_execution_id,''),COALESCE(payout_execution_id,''),
 		COALESCE(ledger_transfer_id,''),amount,currency_from,currency_to,rate,state,COALESCE(failed_step,''),
-		COALESCE(failure_reason,''),created_at,updated_at FROM transaction_workflows WHERE id=$1`, id).Scan(scanWorkflow(&out)...)
+		COALESCE(failure_reason,''),created_at,updated_at,COALESCE(invoice_number,'') FROM transaction_workflows WHERE id=$1`, id).Scan(scanWorkflow(&out)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Workflow{}, ErrNotFound
 	}

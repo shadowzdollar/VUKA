@@ -1,12 +1,15 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { usd0 } from "@/components/vuka/analytics-parts";
+import { LazyTrendChart } from "@/components/vuka/lazy-charts";
 import { QueryBoundary } from "@/components/vuka/query-state";
 import { Chip, Metric, PageHeader, Panel } from "@/components/vuka/shell";
 import { describeError } from "@/lib/api/client";
-import { support } from "@/lib/api/endpoints";
+import { Sparkline } from "@/components/vuka/viz/simple";
+import { platform, support } from "@/lib/api/endpoints";
 import { money, shortId, when } from "@/lib/format";
 import { useTrader } from "@/lib/session";
 import { directionFor, useNotifications, useTransfers, useWallet } from "@/lib/trader-data";
@@ -28,6 +31,12 @@ export function TraderHome() {
     mutationFn: (id: string) => support.markRead(id, trader.id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["notifications"] }),
     onError: (e) => toast.error(describeError(e)),
+  });
+
+  const analytics = useQuery({
+    queryKey: ["analytics", "trader", 30],
+    queryFn: () => platform.analytics(30),
+    staleTime: 60_000,
   });
 
   const verified = trader.kyc_status === "VERIFIED" || trader.kyc_status === "APPROVED";
@@ -92,6 +101,51 @@ export function TraderHome() {
           </div>
         )}
       </QueryBoundary>
+
+      <Panel
+        title="Last 30 days"
+        meta={
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="h-7 rounded-none font-mono text-[10px] uppercase"
+          >
+            <Link to="/analytics">Open insights</Link>
+          </Button>
+        }
+      >
+        <QueryBoundary query={analytics} disabledCodes={["analytics_unavailable"]}>
+          {(r) => (
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Metric
+                  label="Sent"
+                  value={usd0(r.totals.sent_usd)}
+                  trend={<Sparkline values={r.daily.map((d) => d.out_usd)} />}
+                />
+                <Metric
+                  label="Received"
+                  value={usd0(r.totals.received_usd)}
+                  trend={<Sparkline values={r.daily.map((d) => d.in_usd)} />}
+                />
+                <Metric
+                  label="Success rate"
+                  value={`${Math.round(r.totals.success_rate * 100)}%`}
+                  sub={`${r.totals.succeeded} of ${r.totals.succeeded + r.totals.failed + r.totals.reversed} finished`}
+                />
+              </div>
+              <LazyTrendChart
+                data={r.daily.map((d) => ({ label: d.date.slice(5), a: d.out_usd, b: d.in_usd }))}
+                aName="Money out"
+                bName="Money in"
+                ariaLabel="Money in and out per day, USD equivalent"
+                format={usd0}
+              />
+            </div>
+          )}
+        </QueryBoundary>
+      </Panel>
 
       <div className="grid gap-3 lg:grid-cols-3">
         <Panel

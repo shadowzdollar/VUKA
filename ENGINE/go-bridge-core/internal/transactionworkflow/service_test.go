@@ -29,7 +29,7 @@ func (p *fakeCollector) FundCollectedAccount(_ context.Context, _ string, _ stri
 	return "fund-1", nil
 }
 
-func (p *fakePoster) PostCollectedCrossBorder(_ context.Context, _ string, _, _ string, _ float64, _, _ string, _ float64) (string, error) {
+func (p *fakePoster) PostCollectedCrossBorder(_ context.Context, _ string, _, _ string, _ float64, _, _ string, _ float64, _ string) (string, error) {
 	p.calls++
 	if p.err != nil {
 		return "", p.err

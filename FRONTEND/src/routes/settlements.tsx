@@ -426,7 +426,7 @@ function CreateDialog({
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Action">
             <Select value={action} onValueChange={setAction}>
-              <SelectTrigger className="rounded-none font-mono text-xs">
+              <SelectTrigger aria-label="Action" className="rounded-none font-mono text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-none">
@@ -443,7 +443,7 @@ function CreateDialog({
               value={provider || providers.data?.[0]?.config.id || ""}
               onValueChange={setProvider}
             >
-              <SelectTrigger className="rounded-none font-mono text-xs">
+              <SelectTrigger aria-label="Provider" className="rounded-none font-mono text-xs">
                 <SelectValue placeholder="Provider" />
               </SelectTrigger>
               <SelectContent className="rounded-none">

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"vuka/go-bridge-core/internal/ledger"
+	"vuka/go-bridge-core/internal/providers"
 	"vuka/go-bridge-core/internal/transactionworkflow"
 )
 
@@ -22,8 +23,8 @@ func (r workflowAccountResolver) ResolveAccount(ctx context.Context, id string) 
 
 type workflowLedgerPoster struct{ ledger *ledger.Service }
 
-func (p workflowLedgerPoster) PostCollectedCrossBorder(ctx context.Context, key, source, destination string, amount float64, from, to string, rate float64) (string, error) {
-	return p.ledger.PostCollectedCrossBorder(ctx, key, source, destination, amount, from, to, rate)
+func (p workflowLedgerPoster) PostCollectedCrossBorder(ctx context.Context, key, source, destination string, amount float64, from, to string, rate float64, invoice string) (string, error) {
+	return p.ledger.PostCollectedCrossBorder(ctx, key, source, destination, amount, from, to, rate, invoice)
 }
 
 type workflowCollectionPoster struct{ ledger *ledger.Service }
@@ -53,6 +54,7 @@ type workflowRequest struct {
 	CurrencyTo               string  `json:"currency_to"`
 	Rate                     float64 `json:"rate"`
 	ProviderAuthorizationRef string  `json:"provider_authorization_ref"`
+	InvoiceNumber            string  `json:"invoice_number"`
 }
 
 func (s *Server) configureWorkflow() {
@@ -99,11 +101,23 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 		}
 		input.TraderID = traderID
 	}
+	// Default the rails from the corridor: the payer is collected on the rail of the
+	// source currency's country and the recipient is paid on the corridor's provider.
 	if input.CollectionProvider == "" {
-		input.CollectionProvider = "mtn-rw"
+		if id, ok := providers.ProviderIDForCurrency(input.CurrencyFrom); ok {
+			input.CollectionProvider = id
+		} else {
+			input.CollectionProvider = "mtn-rw"
+		}
 	}
 	if input.PayoutProvider == "" {
-		input.PayoutProvider = "mpesa-ke"
+		if corridor, ok := s.providerCatalog.Corridor(input.CorridorID); ok {
+			input.PayoutProvider = corridor.ProviderID
+		} else if id, ok := providers.ProviderIDForCurrency(input.CurrencyTo); ok {
+			input.PayoutProvider = id
+		} else {
+			input.PayoutProvider = "mpesa-ke"
+		}
 	}
 	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
 	if input.TraderID == "" || key == "" {
@@ -142,15 +156,22 @@ func (s *Server) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
 	if s.localSyntheticExecution && strings.TrimSpace(input.ProviderAuthorizationRef) == "" {
 		input.ProviderAuthorizationRef = "local-synthetic://" + key
 	}
-	if err := s.auth.RecordTransactionAuthorization(r.Context(), input.TraderID, key, input.SourceAccountID, input.DestinationAccountID, input.Amount, input.CurrencyFrom, input.CurrencyTo); err != nil {
-		writeError(w, http.StatusInternalServerError, "transaction_authorization_record_failed", "unable to record transaction authorization")
+	if !s.enforceCompliance(w, r, key, input.SourceAccountID, input.DestinationAccountID, input.Amount, input.CurrencyFrom) {
 		return
+	}
+	// The authorization ledger lives with the auth store; the legacy no-auth mode has none.
+	if s.auth != nil {
+		if err := s.auth.RecordTransactionAuthorization(r.Context(), input.TraderID, key, input.SourceAccountID, input.DestinationAccountID, input.Amount, input.CurrencyFrom, input.CurrencyTo); err != nil {
+			writeError(w, http.StatusInternalServerError, "transaction_authorization_record_failed", "unable to record transaction authorization")
+			return
+		}
 	}
 	item, replay, err := s.workflow.Start(r.Context(), key, transactionworkflow.Request{
 		TraderID: input.TraderID, SourceAccountID: input.SourceAccountID, DestinationAccountID: input.DestinationAccountID,
 		CollectionProvider: input.CollectionProvider, PayoutProvider: input.PayoutProvider,
 		CollectionPhone: input.CollectionPhone, PayoutPhone: input.PayoutPhone, CorridorID: input.CorridorID,
 		QuoteID: input.QuoteID, Amount: input.Amount, CurrencyFrom: input.CurrencyFrom, CurrencyTo: input.CurrencyTo, Rate: input.Rate,
+		InvoiceNumber: strings.TrimSpace(input.InvoiceNumber),
 	})
 	if err != nil {
 		status := http.StatusUnprocessableEntity

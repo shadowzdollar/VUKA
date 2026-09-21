@@ -19,6 +19,9 @@
  */
 
 @theme inline {
+  /* Editorial display face for the public site: a text serif with real italics, chosen for a
+     printed trade-ledger feel rather than a tech one. Falls back to Georgia. */
+  --font-display: "Newsreader", Georgia, "Times New Roman", serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -62,30 +65,71 @@
 }
 
 :root {
+  /* Light theme — the "paper" palette from frontend_color_guidelines.md.
+     Ink #0A0A0A on Paper #FFFFFF; secondary text #4A4A4A (AA on paper);
+     hairlines #D6D6D6; shade #F2F2F2. Monochrome by design: state is carried by
+     weight, fill and text, never by hue. */
+  color-scheme: light;
   --radius: 0rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.145 0 0);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.96 0 0);
+  --secondary-foreground: oklch(0.145 0 0);
+  --muted: oklch(0.96 0 0);
+  --muted-foreground: oklch(0.4 0 0);
+  --accent: oklch(0.96 0 0);
+  --accent-foreground: oklch(0.145 0 0);
+  --destructive: oklch(0.145 0 0);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.89 0 0);
+  --input: oklch(0.89 0 0);
+  --ring: oklch(0.145 0 0);
+  --chart-1: oklch(0.145 0 0);
+  --chart-2: oklch(0.4 0 0);
+  --chart-3: oklch(0.6 0 0);
+  --chart-4: oklch(0.78 0 0);
+  --chart-5: oklch(0.89 0 0);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.145 0 0);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.96 0 0);
+  --sidebar-accent-foreground: oklch(0.145 0 0);
+  --sidebar-border: oklch(0.89 0 0);
+  --sidebar-ring: oklch(0.145 0 0);
+}
+
+.dark {
+  color-scheme: dark;
   --background: oklch(0.06 0 0);
   --foreground: oklch(1 0 0);
   --card: oklch(0.12 0 0);
   --card-foreground: oklch(1 0 0);
-  --popover: oklch(0.10 0 0);
+  --popover: oklch(0.1 0 0);
   --popover-foreground: oklch(1 0 0);
   --primary: oklch(1 0 0);
   --primary-foreground: oklch(0.06 0 0);
   --secondary: oklch(0.18 0 0);
   --secondary-foreground: oklch(1 0 0);
   --muted: oklch(0.16 0 0);
-  --muted-foreground: oklch(0.65 0 0);
+  --muted-foreground: oklch(0.7 0 0);
   --accent: oklch(0.22 0 0);
   --accent-foreground: oklch(1 0 0);
-  --destructive: oklch(0.55 0.02 0);
-  --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.27 0 0);
-  --input: oklch(0.27 0 0);
-  --ring: oklch(0.55 0 0);
+  --destructive: oklch(1 0 0);
+  --destructive-foreground: oklch(0.06 0 0);
+  --border: oklch(0.3 0 0);
+  --input: oklch(0.3 0 0);
+  --ring: oklch(0.85 0 0);
   --chart-1: oklch(1 0 0);
   --chart-2: oklch(0.78 0 0);
   --chart-3: oklch(0.58 0 0);
-  --chart-4: oklch(0.40 0 0);
+  --chart-4: oklch(0.4 0 0);
   --chart-5: oklch(0.28 0 0);
   --sidebar: oklch(0.09 0 0);
   --sidebar-foreground: oklch(1 0 0);
@@ -93,12 +137,8 @@
   --sidebar-primary-foreground: oklch(0.06 0 0);
   --sidebar-accent: oklch(0.18 0 0);
   --sidebar-accent-foreground: oklch(1 0 0);
-  --sidebar-border: oklch(0.27 0 0);
-  --sidebar-ring: oklch(0.55 0 0);
-}
-
-.dark {
-  color-scheme: dark;
+  --sidebar-border: oklch(0.3 0 0);
+  --sidebar-ring: oklch(0.85 0 0);
 }
 
 @layer base {
@@ -113,11 +153,168 @@
 }
 
 @layer base {
-  html {
-    color-scheme: dark;
-  }
   body {
     font-feature-settings: "cv11", "ss01";
     -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* ---- Accessibility & motion ------------------------------------------------------------ */
+@layer base {
+  /* One consistent, high-contrast keyboard focus indicator for everything interactive. */
+  :where(
+    a,
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    [role="button"],
+    [role="tab"],
+    [tabindex]
+  ):focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--color-foreground);
+    color: var(--color-background);
+  }
+  /* Respect the user's motion preference across every animation and transition. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+  /* Tabular figures for every money/ID cell so columns of numbers align. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media print {
+  header[data-app-chrome],
+  nav[data-app-chrome],
+  footer[data-app-chrome] {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+    color: #000;
+  }
+}
+
+/* ---- Public-site motion: reveal on scroll, gentle paper tilt ----------------------------- */
+@layer utilities {
+  .reveal {
+    opacity: 0;
+    transform: translateY(14px);
+    transition:
+      opacity 0.7s ease,
+      transform 0.7s ease;
+  }
+  .reveal.is-in {
+    opacity: 1;
+    transform: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+  }
+  .no-js .reveal {
+    opacity: 1;
+    transform: none;
+  }
+  .stage-3d {
+    perspective: 1400px;
+  }
+  .layer-3d {
+    transform-style: preserve-3d;
+    transition: transform 0.25s ease-out;
+    will-change: transform;
+  }
+  @keyframes ink-march {
+    to {
+      stroke-dashoffset: -24;
+    }
+  }
+  @keyframes stamp-in {
+    0% {
+      opacity: 0;
+      transform: scale(1.5) rotate(-8deg);
+    }
+    60% {
+      opacity: 1;
+      transform: scale(0.96) rotate(-4deg);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) rotate(-4deg);
+    }
+  }
+  @keyframes type-line {
+    from {
+      clip-path: inset(0 100% 0 0);
+    }
+    to {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+  .ink-march {
+    animation: ink-march 1.4s linear infinite;
+  }
+  .stamp-in {
+    animation: stamp-in 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  }
+  .type-line {
+    animation: type-line 0.7s steps(28) both;
+  }
+}
+
+/* ---- Flags as cloth: a slow travelling fold, still under reduced motion ------------------------ */
+@layer utilities {
+  .cloth-sheen {
+    background: repeating-linear-gradient(
+      100deg,
+      rgb(255 255 255 / 0) 0,
+      rgb(255 255 255 / 0.22) 9%,
+      rgb(0 0 0 / 0.16) 18%,
+      rgb(255 255 255 / 0) 27%
+    );
+    background-size: 220% 100%;
+    mix-blend-mode: soft-light;
+    animation: cloth-wave 7s linear infinite;
+  }
+  @keyframes cloth-wave {
+    to {
+      background-position: -220% 0;
+    }
+  }
+  @keyframes sway {
+    0%,
+    100% {
+      transform: rotate(-2.2deg);
+    }
+    50% {
+      transform: rotate(2.2deg);
+    }
+  }
+  .sway {
+    transform-origin: 50% 0;
+    animation: sway 4.5s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cloth-sheen,
+    .sway {
+      animation: none;
+    }
   }
 }

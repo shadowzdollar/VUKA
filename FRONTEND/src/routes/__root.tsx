@@ -11,8 +11,10 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
+import { I18nProvider } from "@/lib/i18n";
 import { SessionProvider } from "@/lib/session";
-import { reportLovableError } from "../lib/lovable-error-reporting";
+import { ThemeProvider, themeInitScript } from "@/lib/theme";
+import { reportError } from "../lib/report-error";
 
 function NotFoundComponent() {
   return (
@@ -40,7 +42,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
   useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    reportError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
 
   return (
@@ -74,6 +76,8 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
+const PUBLIC_URL = (import.meta.env["VITE_PUBLIC_URL"] as string | undefined)?.replace(/\/$/, "");
+
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [
@@ -83,21 +87,44 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "description",
         content:
-          "VUKA: invoice-linked, escrow-backed cross-border payments for East African SME traders.",
+          "VUKA: invoice-linked, escrow-backed cross-border payments for African SME traders.",
       },
       { property: "og:title", content: "VUKA — Rise & Cross Over" },
       {
         property: "og:description",
-        content: "Invoice-linked, escrow-backed cross-border payments for East African traders.",
+        content: "Invoice-linked, escrow-backed cross-border payments for African traders.",
       },
       { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+      // Social crawlers need an absolute URL; set VITE_PUBLIC_URL (e.g. https://app.example.org) at build time.
+      ...(PUBLIC_URL
+        ? [
+            { property: "og:image", content: `${PUBLIC_URL}/og-image.png` },
+            { property: "og:image:width", content: "1200" },
+            { property: "og:image:height", content: "630" },
+            { name: "twitter:image", content: `${PUBLIC_URL}/og-image.png` },
+          ]
+        : []),
+      { name: "theme-color", content: "#fafafa", media: "(prefers-color-scheme: light)" },
+      { name: "theme-color", content: "#0a0a0a", media: "(prefers-color-scheme: dark)" },
     ],
+    // Applies the stored/system theme before first paint (no white flash for dark-mode users).
+    scripts: [{ children: themeInitScript }],
     links: [
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap",
+      },
       {
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/icon.svg", type: "image/svg+xml" },
+      { rel: "icon", href: "/favicon.ico", sizes: "48x48" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
     ],
   }),
   shellComponent: RootShell,
@@ -108,7 +135,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
@@ -125,11 +152,15 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <SessionProvider>
-        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-        <Outlet />
-        <Toaster position="bottom-right" />
-      </SessionProvider>
+      <ThemeProvider>
+        <I18nProvider>
+          <SessionProvider>
+            {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+            <Outlet />
+            <Toaster position="bottom-right" />
+          </SessionProvider>
+        </I18nProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

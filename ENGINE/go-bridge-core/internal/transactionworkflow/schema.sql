@@ -46,3 +46,8 @@ DROP TRIGGER IF EXISTS transaction_workflow_events_append_only ON transaction_wo
 CREATE TRIGGER transaction_workflow_events_append_only
 BEFORE UPDATE OR DELETE ON transaction_workflow_events
 FOR EACH ROW EXECUTE FUNCTION prevent_transaction_workflow_event_mutation();
+
+ALTER TABLE transaction_workflows ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(100);
+
+-- Firm quote ids are signed tokens (q1.<payload>.<hmac>, ~150 chars), longer than the original VARCHAR(120).
+ALTER TABLE transaction_workflows ALTER COLUMN quote_id TYPE TEXT;

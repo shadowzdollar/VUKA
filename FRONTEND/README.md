@@ -1,60 +1,11 @@
-# Vuka Trade Trust
+# VUKA — web app
 
-Build VUKA ('Rise & Cross Over'), the enterprise pan-African trade-trust settlement platform for East African SME cross-border commerce (Rwanda RWF ↔ Kenya KES corridor and beyond).
+The web front end for VUKA ("Rise & Cross Over"), a cross-border payment platform for African SMEs:
+invoice-linked payments, escrow, a double-entry ledger and mobile-money payouts. It talks to the Go engine in
+`../ENGINE/go-bridge-core`. Everything runs against **sandbox rails** today; see the honesty notes below.
 
-Design & Aesthetic:
-- Strict, high-contrast monochrome enterprise theme: pure deep black (#000000 / #09090b), crisp white (#ffffff), surgical slate/zinc borders and muted backgrounds (#18181b, #27272a, #71717a).
-- Institutional, investor-ready density: sharp typography, monospaced figures for financial numbers/hashes/timestamps, clean architectural status chips, and comprehensive data tables without generic fluff.
-
-Core Multi-Page Architecture & Screens:
-1. Executive Operations Cockpit (/):
-   - Continental corridor overview (Kigali ↔ Nairobi corridor metrics, active volumes, 24h settlement volume).
-   - Global settlement metrics: Escrow locked vs. released vs. refunded vs. disputed.
-   - Double-entry ledger health: atomic balance reconciliation status (`SUM(debits) - SUM(credits) = 0`).
-   - Global emergency kill-switch and pilot observation controls.
-
-2. Wallet & Double-Entry Ledger Engine (/wallets):
-   - Strict separation of accounts: Personal MoMo, Business Trade Wallet, ESCROW_HELD, Settlement Account, and Fee Account.
-   - Dynamic balance calculation showing that balances are strictly derived from double-entry ledger entries.
-   - Comprehensive immutable ledger stream with debit/credit indicators, transaction references, timestamps, and exportable ledger audit records.
-
-3. Invoices & Smart Escrow Flow (/escrow):
-   - Invoice-linked escrow creator (cryptographic binding of invoice number to smart contract).
-   - Full lifecycle visualization: CREATED → LOCKED (USDC on Polygon with MoMo/M-Pesa on/off-ramp abstraction) → RELEASED / REFUNDED / DISPUTED.
-   - Mutual confirmation actions (buyer & supplier sign-off), 10-day configurable timeout countdown auto-release trigger, and dispute initiation.
-   - Interactive modal to lock funds, test simulated MTN MoMo / Safaricom M-Pesa rails, and confirm releases.
-
-4. Algorithmic Trust & Credit Score Engine (/trust-score):
-   - Algorithmic score calculated strictly from settlement outcomes (completed cycles, % mutual release, arbitration record, volume progression, counterparty diversity).
-   - Transparent breakdown of score factors (no black-box AI or identity bias).
-   - Exportable trade-credit certificate for lenders and banks.
-
-5. Dispute Tribunal & Arbitration Center (/disputes):
-   - Active disputes queue with frozen escrow asset tags.
-   - Evidence locker (bills of lading, delivery logs, communication transcripts).
-   - Arbiter verdict interface with permanent immutable resolution recording.
-
-6. Compliance & Tiered KYC Gateway (/compliance):
-   - Tier 0 (unverified browsing), Tier 1 (phone + national ID check for new counterparties), Tier 2 (cross-border volume threshold, business registration, sanctions screening).
-   - Trader verification status, risk flags, and explainable compliance decision logs.
-
-7. Corridor Operations & ISO 20022 Gateway (/corridors):
-   - RWF/KES corridor rates, FX quotes, transaction fee schedules, and simulated telecom adapters.
-   - Interactive ISO 20022 pacs.008 XML message viewer and schema validator showing the translation of Vuka trade payments into central banking standards.
-
-Ensure rich mock data across all East African corridors, full interactive modals and filters, and a production-grade enterprise navigation layout.
-
-This project was built with [Lovable](https://lovable.dev).
-
-**Live app**: https://vuka-trade-trust.lovable.app
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/e7c60906-9f18-41ec-b3f6-dfaa57b76458).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+Stack: TanStack Start (SSR), React 19, Tailwind 4, shadcn/ui, recharts. Production output is a Nitro server
+(`npm run build`); set `NITRO_PRESET` to target a platform other than plain Node.
 
 ## Backend integration
 
@@ -63,7 +14,7 @@ There are two independent sign-ins, each with its own HttpOnly cookie, and the n
 
 | Identity | Sign in with | Sees |
 | --- | --- | --- |
-| Trader | mobile number + password | overview, wallets & ledger, send payment, invoices, trust score, corridors, support |
+| Trader | mobile number + password | overview, wallets & ledger, send payment, invoices, trust score, verification & limits, corridors, support |
 | Operator / arbiter | email + password | cockpit, escrow register, disputes, compliance, providers, settlements & pilots, activity log |
 
 Traders can self-register at `/register`. Operators are provisioned by the platform team.
@@ -101,12 +52,92 @@ for the variables.
 > Never point the Go test suite at your dev database: its helpers `TRUNCATE` tables. Use a separate
 > `vuka_test` database.
 
+## Enterprise frontend
+
+**Design system.** Semantic tokens in `src/styles.css` (oklch), a light "paper" theme per
+`frontend_color_guidelines.md` and a dark theme, chosen by a stored preference or the OS setting and applied
+before first paint (no flash). Strictly monochrome: state is carried by weight, fill and text, never hue.
+Shared building blocks live in `src/components/vuka/` (`Shell`, `Panel`, `Metric`, `Chip`, `DataTable`,
+`QueryBoundary`, lazy charts); pages compose them rather than restyling.
+
+**Layout & responsiveness.** Sidebar navigation on desktop, drawer on mobile, command palette (⌘/Ctrl-K),
+account menu (theme, language, sign-out), unread-notification bell. `DataTable` collapses each row into a
+labelled card below `md`, so no page needs horizontal scrolling at 375 px.
+
+**Accessibility (WCAG 2.1 AA target).** Skip link, landmarks, route-change announcements with focus moved to
+`<main>`, one high-contrast focus ring, `prefers-reduced-motion`, keyboard-operable table rows, real table
+semantics with captions and `aria-sort`, labelled controls, chart data exposed as sr-only tables. An automated
+axe-core pass (WCAG 2 A/AA + 2.1 A/AA) over every page in both themes reports **zero violations**; automated
+checks catch only part of WCAG, so manual screen-reader testing (NVDA, VoiceOver, TalkBack) is still required
+before launch.
+
+**Internationalisation.** `src/lib/i18n.tsx`: English, French, Kiswahili, Portuguese, Kinyarwanda with
+per-key English fallback. Covered today: navigation, shell, sign-in/registration, landing. The non-English
+strings are first-pass and **need review by native, finance-literate speakers**; Arabic (RTL) is not yet included.
+
+**Security.** SSR responses carry a CSP, `frame-ancestors 'none'`, `nosniff`, HSTS, a strict referrer and
+permissions policy (`src/lib/security-headers.ts`); `script-src` still needs `'unsafe-inline'` for framework
+hydration until nonce support is adopted. No `dangerouslySetInnerHTML`. Sessions are HttpOnly cookies; all
+cached data is cleared on sign-out; an idle guard warns then signs out after 15 min on shared devices.
+Verification documents are fingerprinted (SHA-256) **in the browser and never uploaded**. Amounts are parsed
+with strict decimal rules (`src/lib/schemas.ts`), never `Number()` on free text.
+
+**Performance.** Route-level code splitting (30 chunks), link-intent preloading, lazy-loaded charts (~97 KB gzip
+kept off the critical path), entry bundle ≈ 134 KB gzip, skeletons instead of layout-shifting spinners,
+5-minute caching of the public config.
+
+**Analytics.** `/analytics` is role-aware. Traders get *Insights* (money in/out trend, reliability gauge,
+currency and outcome donuts, payment-size histogram, top counterparties, corridor flow matrix, activity
+heatmap, plain-language observations). Operators get *Network Intelligence* (throughput, corridor matrix,
+verification funnel, rail reliability, workflow states, support and settlement load). The trust page adds a
+radar and a "path to a higher score" that prices each lever in points from the published formula. Charts are
+monochrome, lazy-loaded, and each has an sr-only data table. Aggregation is server-side
+(`ENGINE/.../internal/analytics`). To see realistic data locally run `go run ./cmd/seed-analytics` (dev only;
+refuses production).
+
+**Verification.** `npx tsc --noEmit`, `npm run lint` (0 errors) and `npm run build` are clean. The browser
+suite used during development drives real Chrome against a live engine: landing, security headers, i18n, theme,
+palette, keyboard flows, mobile overflow, KYC hashing, FX payment, KYC-limit refusal, plus the axe scan.
+
+## Public site: landing, sign-in, registration
+
+Design language for the signed-out surface: editorial serif display type (Newsreader, with Georgia fallback),
+engraved cartography and paper stacks, still monochrome apart from national flags. Deliberately not "futuristic".
+Everything below is in `src/components/vuka/landing/` unless noted.
+
+- **Landing** (`landing.tsx`): hero with an interactive canvas globe (real Natural Earth borders, corridor arcs,
+  drag/inertia, lazy-loaded), a **public cost estimator** backed by `GET /api/public/estimate` (with share sheet
+  / WhatsApp link), a 3D paper-stack payment journey, an **escrow lab** (four scenarios with the contract's exact
+  rules), a **mobile section** (3D phone: press-and-hold confirmation, weak-signal idempotent retries, a USSD
+  concept driven by live pricing, share/install; data-saver toggle and a measured page-weight meter), bento
+  features, a **trust-score lab** (client mirror of the published formula), the **atlas of markets** (papercut Africa
+  map with flag-printed markets, planted flag pins, passport-stamp selector, fee groups from the engine's public
+  config), a framework timeline, illustrative stories, comparison table, FAQ, CTA and a five-column footer.
+- **Flags** (`flags.tsx`): ten hand-drawn SVG flags with simplified emblems, no network requests. The African Union
+  emblem is deliberately **not** reproduced, and the framework seals are generic, not official.
+- **Sign-in / registration**: split-screen frame with a 3D receipt; sign-in has show/hide password, Caps Lock
+  warning, and a dev-only demo-access card shown only when the engine reports `environment=development`; the
+  register page is a four-step wizard (account type, details with country-aware phone entry, password strength +
+  consent, review) ending in a welcome screen with the PENDING-tier limits from the public config.
+- **Public pages**: `/about` (principles, roadmap, accessibility statement), `/security` (controls in place *and*
+  what is not done), `/status` (live probes), `/privacy` (with a table of every browser-storage key), `/terms`.
+  Privacy and terms are **drafts pending legal review**. Contact addresses come from `VITE_CONTACT_EMAIL` and
+  `VITE_SECURITY_EMAIL`; until set, the pages show a visible "not yet configured" placeholder.
+- **Mobile**: web manifest (`public/manifest.webmanifest`, SVG icon) and theme-colour meta. There is no service
+  worker, so it is installable but **not offline-capable**. The USSD screen is a concept; a real channel needs a
+  telecom shortcode agreement (`*000#` is a placeholder).
+- **Honesty rules**: personas are labelled composite/illustrative; nothing claims licensing, audit, or AU
+  endorsement; fees and rates on the page come from the engine, not hard-coded.
+- **Tested** with real Chrome + axe (WCAG 2/2.1 A/AA): zero violations on the landing page (light, dark, 375 px),
+  the five public pages, sign-in and each registration step; keyboard, reduced-motion and touch paths covered.
+  Google Fonts is the one third-party request (disclosed in `/privacy`); self-hosting is planned.
+
 ### Things the engine does not provide (and how the UI copes)
 
 - **Escrow contract address.** Escrow, dispute and reconciliation reads need `?contract=`; operators enter it once
   (or set `VITE_ESCROW_CONTRACT`). Without `VUKA_RECONCILIATION_ENABLED` on the engine those pages say so.
-- **Trust score.** No endpoint; computed client-side from transfers and invoices.
-- **Trader KYC submission.** Operator-only in the engine; traders see their status and can raise a support ticket.
+- **Trust score, KYC submission, limits, public config.** Now served by the engine
+  (`/api/trader/trust-score`, `/api/trader/kyc`, `/api/trader/limits`, `/api/config/public`).
 - **Kill switches.** Deployment configuration, shown read-only.
 
 ## Development

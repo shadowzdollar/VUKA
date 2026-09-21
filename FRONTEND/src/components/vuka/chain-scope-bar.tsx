@@ -23,10 +23,14 @@ export function ChainScopeBar({
   return (
     <div className="flex flex-wrap items-end gap-2 border border-border p-3">
       <div className="min-w-[280px] flex-1">
-        <label className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+        <label
+          htmlFor="scope-contract"
+          className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground"
+        >
           Escrow contract
         </label>
         <Input
+          id="scope-contract"
           value={contract}
           onChange={(e) => setContract(e.target.value)}
           placeholder="0x… (VUKA_RECONCILIATION_CONTRACT)"
@@ -34,10 +38,14 @@ export function ChainScopeBar({
         />
       </div>
       <div className="w-28">
-        <label className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+        <label
+          htmlFor="scope-chain"
+          className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground"
+        >
           Chain id
         </label>
         <Input
+          id="scope-chain"
           value={chain}
           onChange={(e) => setChain(e.target.value)}
           inputMode="numeric"

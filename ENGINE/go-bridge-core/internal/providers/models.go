@@ -27,6 +27,9 @@ const (
 	ContractVersion      = "v1"
 	EnvironmentSandbox   = "sandbox"
 	EnvironmentSimulated = "simulated"
+	// EnvironmentLive is reachable only through Catalog.ActivateLive, which
+	// requires an explicit acknowledgement flag and resolvable credentials.
+	EnvironmentLive = "live"
 
 	EventReceived   = "RECEIVED"
 	EventAccepted   = "ACCEPTED"
@@ -72,6 +75,23 @@ func (c CredentialConfig) Validate() error {
 	return nil
 }
 
+// validateLive is the stricter contract for a provider that talks to a real
+// network: it must reference managed credentials (never sandbox://) and any
+// endpoint override must be HTTPS.
+func (c CredentialConfig) validateLive() error {
+	ref := c.SecretRef
+	if strings.Contains(strings.ToLower(ref), "secret_") || strings.Contains(ref, "=") {
+		return fmt.Errorf("%w: secret_ref must be a reference, not a secret", ErrInvalidConfig)
+	}
+	if !strings.HasPrefix(ref, "env://") && !strings.HasPrefix(ref, "vault://") && !strings.HasPrefix(ref, "secret://") {
+		return fmt.Errorf("%w: a live provider needs a managed credential reference (env://, vault:// or secret://)", ErrInvalidConfig)
+	}
+	if c.Endpoint != "" && !strings.HasPrefix(c.Endpoint, "https://") {
+		return fmt.Errorf("%w: a live endpoint override must use https", ErrInvalidConfig)
+	}
+	return nil
+}
+
 type ProviderConfig struct {
 	ID                  string           `json:"id"`
 	DisplayName         string           `json:"display_name"`
@@ -92,13 +112,20 @@ func (c ProviderConfig) Validate() error {
 	if c.ContractVersion != ContractVersion {
 		return fmt.Errorf("%w: unsupported contract version %q", ErrInvalidConfig, c.ContractVersion)
 	}
-	if c.Environment != EnvironmentSandbox && c.Environment != EnvironmentSimulated {
-		return fmt.Errorf("%w: environment must be sandbox or simulated", ErrInvalidConfig)
+	switch c.Environment {
+	case EnvironmentSandbox, EnvironmentSimulated:
+		if c.ExternalCalls {
+			return fmt.Errorf("%w: external provider calls are disabled by default", ErrInvalidConfig)
+		}
+		return c.Credentials.Validate()
+	case EnvironmentLive:
+		if !c.ExternalCalls {
+			return fmt.Errorf("%w: a live provider must declare external_calls", ErrInvalidConfig)
+		}
+		return c.Credentials.validateLive()
+	default:
+		return fmt.Errorf("%w: environment must be sandbox, simulated or live", ErrInvalidConfig)
 	}
-	if c.ExternalCalls {
-		return fmt.Errorf("%w: external provider calls are disabled by default", ErrInvalidConfig)
-	}
-	return c.Credentials.Validate()
 }
 
 type FXQuote struct {
@@ -300,6 +327,21 @@ func (c *Catalog) Adapters() map[string]ProviderAdapter {
 		out[id] = a
 	}
 	return out
+}
+
+// ReferenceRates returns the per-USD reference table when the rate source is the
+// static USDRates (used to convert amounts to USD for limits); nil otherwise.
+func (c *Catalog) ReferenceRates() map[string]float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if u, ok := c.rates.(USDRates); ok {
+		out := make(map[string]float64, len(u.PerUSD))
+		for k, v := range u.PerUSD {
+			out[k] = v
+		}
+		return out
+	}
+	return nil
 }
 
 // Corridor returns one corridor's configuration.

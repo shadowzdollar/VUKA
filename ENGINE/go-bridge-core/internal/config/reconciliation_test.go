@@ -73,11 +73,33 @@ func TestProductionAcceptsProtectedReadOnlyMode(t *testing.T) {
 	t.Setenv("VUKA_READ_ONLY", "true")
 	t.Setenv("MTN_SIM_MODE", "")
 	t.Setenv("MTN_SIM_FAIL_RATE", "0")
+	t.Setenv("VUKA_QUOTE_SIGNING_KEY", "0123456789abcdef0123456789abcdef")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := cfg.Validate(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestProductionRequiresASharedQuoteSigningKey(t *testing.T) {
+	t.Setenv("VUKA_ENV", "production")
+	t.Setenv("VUKA_OPERATOR_EMAIL", "operator@example.com")
+	t.Setenv("VUKA_OPERATOR_PASSWORD", "a-production-password")
+	t.Setenv("VUKA_CORS_ORIGINS", "https://console.example.com")
+	t.Setenv("VUKA_READ_ONLY", "true")
+	t.Setenv("VUKA_QUOTE_SIGNING_KEY", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("production must refuse to start without VUKA_QUOTE_SIGNING_KEY")
+	}
+	t.Setenv("VUKA_QUOTE_SIGNING_KEY", "too-short")
+	cfg, _ = Load()
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("a short quote signing key must be rejected")
 	}
 }

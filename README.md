@@ -4,6 +4,8 @@
 
 **A trade-trust settlement platform for East African SME traders — built on top of existing mobile money rails, with trust enforced by blockchain escrow instead of just displayed as a history log.**
 
+> **Current progress and hand-off notes: see [`STATUS.md`](STATUS.md).**
+
 > Status: **RESHAPE / v2 DESIGN.** This is the master planning document for VUKA v2 — a from-scratch rebuild of the original hackathon prototype, no longer built for a regulator's judging panel, but for real traders. This document is meant to be the single source of truth as the system is built, upgraded, and continued across tools (starting in GPT, later continued in Claude Code) and across time.
 
 ---

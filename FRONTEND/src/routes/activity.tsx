@@ -68,6 +68,7 @@ function Activity() {
               setSearch(e.target.value);
               setPage(0);
             }}
+            aria-label="Search actor, resource or details"
             placeholder="Search actor, resource, details…"
             className="w-72 rounded-none font-mono text-xs"
           />
@@ -77,11 +78,13 @@ function Activity() {
               setAction(e.target.value.toUpperCase());
               setPage(0);
             }}
+            aria-label="Filter by action"
             placeholder="ACTION"
             className="w-48 rounded-none font-mono text-xs"
           />
           <Input
             type="date"
+            aria-label="From date"
             value={from}
             onChange={(e) => {
               setFrom(e.target.value);
@@ -91,6 +94,7 @@ function Activity() {
           />
           <Input
             type="date"
+            aria-label="To date"
             value={to}
             onChange={(e) => {
               setTo(e.target.value);

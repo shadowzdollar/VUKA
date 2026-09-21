@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DataTable } from "@/components/vuka/data-table";
 import { QueryBoundary, Loading, ErrorState } from "@/components/vuka/query-state";
 import { Chip, Metric, PageHeader, Panel, Shell } from "@/components/vuka/shell";
 import { describeError, newIdempotencyKey } from "@/lib/api/client";
@@ -61,7 +62,6 @@ function Wallets() {
   const [fundOpen, setFundOpen] = useState(false);
   const [entriesFor, setEntriesFor] = useState<Transfer | null>(null);
   const [accountFilter, setAccountFilter] = useState("ALL");
-  const [query, setQuery] = useState("");
 
   const ownIds = useMemo(
     () => new Set(wallet.data?.accounts.map((a) => a.id) ?? []),
@@ -70,22 +70,13 @@ function Wallets() {
 
   const rows = useMemo(
     () =>
-      (transfers.data ?? []).filter((t) => {
-        if (
-          accountFilter !== "ALL" &&
-          t.source_account_id !== accountFilter &&
-          t.destination_account_id !== accountFilter
-        )
-          return false;
-        const q = query.trim().toLowerCase();
-        return (
-          !q ||
-          `${t.id} ${t.invoice_number ?? ""} ${t.external_reference ?? ""}`
-            .toLowerCase()
-            .includes(q)
-        );
-      }),
-    [transfers.data, accountFilter, query],
+      (transfers.data ?? []).filter(
+        (t) =>
+          accountFilter === "ALL" ||
+          t.source_account_id === accountFilter ||
+          t.destination_account_id === accountFilter,
+      ),
+    [transfers.data, accountFilter],
   );
 
   function exportCsv() {
@@ -163,83 +154,110 @@ function Wallets() {
       </QueryBoundary>
 
       <Panel title="Transfer register" meta={<Chip>{rows.length} transfers</Chip>}>
-        <div className="mb-4 flex flex-wrap gap-2">
-          <Select value={accountFilter} onValueChange={setAccountFilter}>
-            <SelectTrigger className="w-64 rounded-none font-mono text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="rounded-none">
-              <SelectItem value="ALL">All accounts</SelectItem>
-              {(wallet.data?.accounts ?? []).map((a) => (
-                <SelectItem key={a.id} value={a.id}>
-                  {accountLabel(a)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filter by id, invoice or provider reference…"
-            className="w-80 rounded-none font-mono text-xs"
-          />
-        </div>
-        <QueryBoundary
-          query={transfers}
-          empty="No transfers yet. Top up a wallet or send a payment to see activity here."
-          isEmpty={() => rows.length === 0}
-        >
+        <QueryBoundary query={transfers}>
           {() => (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[860px] text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                    <th className="py-2">Transfer</th>
-                    <th className="py-2">Time</th>
-                    <th className="py-2">Direction</th>
-                    <th className="py-2">Invoice</th>
-                    <th className="py-2">Reference</th>
-                    <th className="py-2 text-right">Amount</th>
-                    <th className="py-2 text-right">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((t) => {
-                    const dir = directionFor(t, ownIds);
+            <DataTable
+              caption="Transfer register"
+              exportName="vuka-transfers.csv"
+              rows={rows}
+              rowKey={(t) => t.id}
+              onRowClick={setEntriesFor}
+              initialSort={{ key: "time", dir: "desc" }}
+              empty="No transfers yet. Top up a wallet or send a payment to see activity here."
+              toolbar={
+                <Select value={accountFilter} onValueChange={setAccountFilter}>
+                  <SelectTrigger
+                    className="h-8 w-64 rounded-none font-mono text-xs"
+                    aria-label="Filter by account"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-none">
+                    <SelectItem value="ALL">All accounts</SelectItem>
+                    {(wallet.data?.accounts ?? []).map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {accountLabel(a)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              }
+              columns={[
+                {
+                  key: "id",
+                  header: "Transfer",
+                  sort: (t) => t.id,
+                  cell: (t) => <span className="font-mono text-xs">{shortId(t.id)}</span>,
+                },
+                {
+                  key: "time",
+                  header: "Time",
+                  sort: (t) => t.created_at,
+                  text: (t) => t.created_at,
+                  cell: (t) => (
+                    <span className="tabular font-mono text-xs text-muted-foreground">
+                      {when(t.created_at)}
+                    </span>
+                  ),
+                },
+                {
+                  key: "dir",
+                  header: "Direction",
+                  sort: (t) => directionFor(t, ownIds),
+                  text: (t) => directionFor(t, ownIds),
+                  cell: (t) => {
+                    const d = directionFor(t, ownIds);
                     return (
-                      <tr
-                        key={t.id}
-                        onClick={() => setEntriesFor(t)}
-                        className="cursor-pointer border-b border-border/60 last:border-0 hover:bg-accent/40"
-                      >
-                        <td className="py-2.5 font-mono text-xs">{shortId(t.id)}</td>
-                        <td className="py-2.5 font-mono text-xs tabular-nums text-muted-foreground">
-                          {when(t.created_at)}
-                        </td>
-                        <td className="py-2.5 font-mono text-xs uppercase">
-                          {dir === "out" ? "Sent" : dir === "in" ? "Received" : "Internal"}
-                        </td>
-                        <td className="py-2.5 font-mono text-xs">{t.invoice_number ?? "—"}</td>
-                        <td className="py-2.5 font-mono text-xs text-muted-foreground">
-                          {t.external_reference ?? "—"}
-                        </td>
-                        <td className="py-2.5 text-right font-mono tabular-nums">
-                          {dir === "out" ? "−" : dir === "in" ? "+" : ""}
-                          {money(t.amount, t.currency)}
-                        </td>
-                        <td className="py-2.5 text-right">
-                          <Chip tone={statusTone(t.status)}>{t.status}</Chip>
-                        </td>
-                      </tr>
+                      <span className="font-mono text-xs uppercase">
+                        {d === "out" ? "Sent" : d === "in" ? "Received" : "Internal"}
+                      </span>
                     );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                  },
+                },
+                {
+                  key: "invoice",
+                  header: "Invoice",
+                  text: (t) => t.invoice_number ?? "",
+                  cell: (t) => <span className="font-mono text-xs">{t.invoice_number ?? "—"}</span>,
+                },
+                {
+                  key: "ref",
+                  header: "Reference",
+                  text: (t) => t.external_reference ?? "",
+                  cell: (t) => (
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {t.external_reference ?? "—"}
+                    </span>
+                  ),
+                },
+                {
+                  key: "amount",
+                  header: "Amount",
+                  align: "right",
+                  sort: (t) => t.amount,
+                  text: (t) => `${t.amount} ${t.currency}`,
+                  cell: (t) => {
+                    const d = directionFor(t, ownIds);
+                    return (
+                      <span className="tabular font-mono">
+                        {d === "out" ? "−" : d === "in" ? "+" : ""}
+                        {money(t.amount, t.currency)}
+                      </span>
+                    );
+                  },
+                },
+                {
+                  key: "status",
+                  header: "Status",
+                  align: "right",
+                  sort: (t) => t.status,
+                  cell: (t) => <Chip tone={statusTone(t.status)}>{t.status}</Chip>,
+                },
+              ]}
+            />
           )}
         </QueryBoundary>
       </Panel>
-
       <FundDialog
         open={fundOpen}
         onOpenChange={setFundOpen}
@@ -304,7 +322,7 @@ function FundDialog({
           <div className="space-y-1.5">
             <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">Wallet</Label>
             <Select value={account?.id ?? ""} onValueChange={setAccountId}>
-              <SelectTrigger className="rounded-none font-mono text-xs">
+              <SelectTrigger aria-label="Wallet" className="rounded-none font-mono text-xs">
                 <SelectValue placeholder="Select wallet" />
               </SelectTrigger>
               <SelectContent className="rounded-none">

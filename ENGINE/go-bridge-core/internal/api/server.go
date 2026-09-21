@@ -37,18 +37,21 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"vuka/go-bridge-core/internal/adapters"
+	"vuka/go-bridge-core/internal/analytics"
 	"vuka/go-bridge-core/internal/identity"
 	"vuka/go-bridge-core/internal/ledger"
 	"vuka/go-bridge-core/internal/pilot"
 	"vuka/go-bridge-core/internal/providerexec"
 	"vuka/go-bridge-core/internal/providers"
 	"vuka/go-bridge-core/internal/reconciliation"
+	"vuka/go-bridge-core/internal/risk"
 	"vuka/go-bridge-core/internal/settlement"
 	"vuka/go-bridge-core/internal/support"
 	"vuka/go-bridge-core/internal/transactionworkflow"
@@ -74,6 +77,12 @@ type Server struct {
 	support                   *support.Service
 	providerExecution         *providerexec.Service
 	workflow                  *transactionworkflow.Service
+	risk                      *risk.Service
+	analytics                 *analytics.Service
+	screener                  risk.Screener
+	publicCfg                 PublicConfig
+	metrics                   *metrics
+	metricsToken              string
 }
 
 // Option customises a Server at construction time. Options are variadic so
@@ -212,15 +221,22 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
 		return
 	}
+	if wait := s.auth.lockedFor(r.Context(), "operator", req.Email); wait > 0 {
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", int(wait.Seconds())+1))
+		writeError(w, http.StatusTooManyRequests, "too_many_attempts", "too many failed sign-in attempts; try again later")
+		return
+	}
 	token, err := s.auth.login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		if errors.Is(err, errInvalidCredentials) {
+			s.auth.recordLoginFailure(r.Context(), "operator", req.Email)
 			writeError(w, http.StatusUnauthorized, "invalid_credentials", "invalid email or password")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "authentication_error", err.Error())
 		return
 	}
+	s.auth.clearLoginFailures(r.Context(), "operator", req.Email)
 	operator, err := s.auth.operatorForSession(r.Context(), token)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "authentication_error", err.Error())
@@ -272,8 +288,14 @@ func (s *Server) handleTraderLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
 		return
 	}
+	if wait := s.auth.lockedFor(r.Context(), "trader", req.Phone); wait > 0 {
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", int(wait.Seconds())+1))
+		writeError(w, http.StatusTooManyRequests, "too_many_attempts", "too many failed sign-in attempts; try again later")
+		return
+	}
 	token, err := s.auth.traderLogin(r.Context(), req.Phone, req.Password)
 	if errors.Is(err, errInvalidCredentials) {
+		s.auth.recordLoginFailure(r.Context(), "trader", req.Phone)
 		writeError(w, http.StatusUnauthorized, "invalid_credentials", "invalid phone or password")
 		return
 	}
@@ -281,6 +303,7 @@ func (s *Server) handleTraderLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "authentication_error", err.Error())
 		return
 	}
+	s.auth.clearLoginFailures(r.Context(), "trader", req.Phone)
 	trader, err := s.auth.traderForSession(r.Context(), token)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "authentication_error", err.Error())
@@ -335,6 +358,16 @@ func (s *Server) handler(corsOrigins []string) http.Handler {
 	s.mux.HandleFunc("GET /api/fx", s.handleGetFx)
 	s.mux.Handle("GET /api/events", s.hub)
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
+	s.mux.HandleFunc("GET /readyz", s.handleReadyz)
+	s.mux.HandleFunc("GET /metrics", s.handleMetricsAuthed)
+	s.mux.HandleFunc("GET /api/config/public", s.handlePublicConfig)
+	s.mux.HandleFunc("GET /api/public/estimate", s.handlePublicEstimate)
+	s.mux.HandleFunc("GET /api/trader/kyc", s.handleTraderKYCList)
+	s.mux.HandleFunc("POST /api/trader/kyc", s.handleTraderKYCSubmit)
+	s.mux.HandleFunc("GET /api/trader/trust-score", s.handleTraderTrust)
+	s.mux.HandleFunc("GET /api/trader/limits", s.handleTraderLimits)
+	s.mux.HandleFunc("GET /api/trader/analytics", s.handleTraderAnalytics)
+	s.mux.HandleFunc("GET /api/operator/analytics", s.handleOperatorAnalytics)
 	s.mux.HandleFunc("POST /api/auth/login", s.handleLogin)
 	s.mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
 	s.mux.HandleFunc("GET /api/auth/me", s.handleCurrentOperator)
@@ -475,6 +508,12 @@ func (s *Server) handler(corsOrigins []string) http.Handler {
 		protected.Handle("GET /api/trader/auth/me", s.auth.traderRequire(http.HandlerFunc(s.handleCurrentTrader)))
 		protected.Handle("GET /api/trader/me", s.auth.traderRequire(http.HandlerFunc(s.handleCurrentTrader)))
 		protected.Handle("GET /api/trader/recipients", s.auth.traderRequire(http.HandlerFunc(s.handleTraderRecipient)))
+		protected.Handle("GET /api/trader/kyc", s.auth.traderRequire(http.HandlerFunc(s.handleTraderKYCList)))
+		protected.Handle("POST /api/trader/kyc", s.auth.traderRequire(http.HandlerFunc(s.handleTraderKYCSubmit)))
+		protected.Handle("GET /api/trader/trust-score", s.auth.traderRequire(http.HandlerFunc(s.handleTraderTrust)))
+		protected.Handle("GET /api/trader/limits", s.auth.traderRequire(http.HandlerFunc(s.handleTraderLimits)))
+		protected.Handle("GET /api/trader/analytics", s.auth.traderRequire(http.HandlerFunc(s.handleTraderAnalytics)))
+		protected.Handle("GET /api/operator/analytics", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleOperatorAnalytics)))
 		protected.Handle("GET /api/quotes", s.auth.traderRequire(http.HandlerFunc(s.handleQuote)))
 		protected.Handle("GET /api/corridors", s.auth.traderRequire(http.HandlerFunc(s.handleCorridorStatus)))
 		protected.Handle("GET /api/support/tickets", s.auth.traderRequire(http.HandlerFunc(s.handleListSupportTickets)))
@@ -841,8 +880,13 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 		}
 		w.Header().Set("X-Request-ID", requestID)
 		w.Header().Set("X-API-Version", "1")
+		securityHeaders(w, r)
+		if s.metrics == nil {
+			s.metrics = newMetrics()
+		}
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		defer func() {
+			s.metrics.observe(r.Method, r.URL.Path, sw.status, time.Since(start))
 			if rec := recover(); rec != nil {
 				s.log.Error("panic recovered", "err", rec, "path", r.URL.Path)
 				writeError(w, http.StatusInternalServerError, "internal_error", "internal server error")
@@ -1102,6 +1146,9 @@ func (s *Server) handleCreateTransfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !s.enforceCompliance(w, r, key, req.SourceAccountID, req.DestinationAccountID, req.Amount, req.Currency) {
+		return
+	}
 	t, replay, err := s.ledger.Transfer(r.Context(), key, req)
 	if err != nil {
 		s.mapServiceError(w, err)
@@ -1137,16 +1184,36 @@ func (s *Server) handleCreateCrossBorderTransfer(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusForbidden, "forbidden", "the authenticated trader cannot debit this account")
 		return
 	}
+	if !s.enforceCompliance(w, r, key, req.SourceAccountID, req.DestinationAccountID, req.Amount, req.CurrencyFrom) {
+		return
+	}
 	if req.QuoteID != "" && s.providerCatalog != nil {
-		amountMinor := int64(req.Amount * 100)
+		amountMinor := int64(math.Round(req.Amount * 100))
 		corridorID := req.CorridorID
 		if corridorID == "" {
-			corridorID = "rw-rwf-ke-kes"
+			id, cerr := s.requireCorridor(req.CurrencyFrom, req.CurrencyTo)
+			if cerr != nil {
+				writeError(w, http.StatusUnprocessableEntity, "no_corridor", cerr.Error())
+				return
+			}
+			corridorID = id
 		}
 		if err := s.providerCatalog.ValidateQuote(corridorID, req.QuoteID, amountMinor, time.Now().UTC()); err != nil {
 			writeError(w, http.StatusUnprocessableEntity, "invalid_quote", err.Error())
 			return
 		}
+		// The firm quote's locked rate is authoritative: the customer is settled at
+		// the rate they were shown, not at whatever the engine default is now.
+		locked, verr := s.providerCatalog.VerifyQuote(req.QuoteID, time.Now().UTC())
+		if verr != nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_quote", verr.Error())
+			return
+		}
+		if req.FxRate != 0 && math.Abs(req.FxRate-locked.Rate) > 1e-9 {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_quote", "fx_rate does not match the firm quote")
+			return
+		}
+		req.FxRate = locked.Rate
 	}
 
 	t, replay, err := s.ledger.CrossBorderTransfer(r.Context(), key, req)

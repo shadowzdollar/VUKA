@@ -1,13 +1,14 @@
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Loading, ErrorState } from "@/components/vuka/query-state";
+import { LazyRadarView } from "@/components/vuka/lazy-charts";
 import { Chip, Metric, PageHeader, Panel, Shell } from "@/components/vuka/shell";
+import type { TrustFactor } from "@/lib/api/types";
 import { day } from "@/lib/format";
 import { useTrader } from "@/lib/session";
-import { useInvoices, useTransfers, useWallet } from "@/lib/trader-data";
-import { computeTrust } from "@/lib/trust";
+import { platform } from "@/lib/api/endpoints";
 
 export const Route = createFileRoute("/trust-score")({
   head: () => ({
@@ -26,6 +27,36 @@ export const Route = createFileRoute("/trust-score")({
   ),
 });
 
+const ACTIONS: Record<string, string> = {
+  cycles:
+    "Complete more payments. Ten finished payments give this factor its full weight; failed payments lower the rate.",
+  invoices: "Issue invoices and get them paid. Five invoices give this factor its full weight.",
+  reversals: "Avoid reversals: agree amounts and recipients before sending.",
+  volume:
+    "Keep activity steady across consecutive 30-day windows (four settled payments across two windows).",
+  diversity:
+    "Trade with more distinct partners. Five different counterparties give this factor its full weight.",
+};
+
+/** score = 300 + 550 × Σ(weight × value × confidence) / 10 000, so each lever has an exact point value. */
+function opportunities(factors: TrustFactor[]) {
+  return factors
+    .map((f) => {
+      const raiseValue = (550 * f.weight * (100 - f.value) * f.confidence) / 10_000;
+      const addEvidence = (550 * f.weight * f.value * (1 - f.confidence)) / 10_000;
+      const potential =
+        raiseValue + addEvidence + (550 * f.weight * (100 - f.value) * (1 - f.confidence)) / 10_000;
+      return {
+        factor: f,
+        points: Math.round(potential),
+        lever: addEvidence >= raiseValue ? "evidence" : "quality",
+      };
+    })
+    .filter((o) => o.points > 0)
+    .sort((a, b) => b.points - a.points)
+    .slice(0, 3);
+}
+
 async function sha256Hex(text: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("");
@@ -33,20 +64,15 @@ async function sha256Hex(text: string): Promise<string> {
 
 function TrustScore() {
   const trader = useTrader();
-  const wallet = useWallet();
-  const transfers = useTransfers();
-  const invoices = useInvoices();
-
-  const result = useMemo(() => {
-    if (!wallet.data || !transfers.data || !invoices.data) return null;
-    return computeTrust(
-      transfers.data,
-      invoices.data,
-      new Set(wallet.data.accounts.map((a) => a.id)),
-    );
-  }, [wallet.data, transfers.data, invoices.data]);
-
-  const failure = [wallet, transfers, invoices].find((q) => q.isError);
+  const trustQuery = useQuery({
+    queryKey: ["trust", trader.id],
+    queryFn: platform.trust,
+    staleTime: 60_000,
+  });
+  const result = trustQuery.data
+    ? { ...trustQuery.data, cyclesScored: trustQuery.data.cycles_scored }
+    : null;
+  const failure = trustQuery.isError ? trustQuery : undefined;
 
   async function exportCertificate() {
     if (!result) return;
@@ -101,7 +127,7 @@ function TrustScore() {
       />
 
       {failure ? (
-        <ErrorState error={failure.error} onRetry={() => void failure.refetch()} />
+        <ErrorState error={failure.error} onRetry={() => void trustQuery.refetch()} />
       ) : !result ? (
         <Loading />
       ) : (
@@ -163,6 +189,52 @@ function TrustScore() {
                   </li>
                 ))}
               </ul>
+            </Panel>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <Panel title="Score shape">
+              <LazyRadarView
+                ariaLabel="Trust factors: current effective value and potential"
+                data={result.factors.map((f) => ({
+                  axis: f.label.split(" ")[0] ?? f.label,
+                  value: f.value * f.confidence,
+                  potential: 100,
+                }))}
+              />
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                The solid shape is each factor's value weighted by how much evidence backs it; the
+                dashed outline is the ceiling.
+              </p>
+            </Panel>
+            <Panel
+              title="Path to a higher score"
+              meta={<Chip>{opportunities(result.factors).length} levers</Chip>}
+            >
+              {opportunities(result.factors).length === 0 ? (
+                <p className="text-sm text-muted-foreground">Every factor is at its ceiling.</p>
+              ) : (
+                <ol className="space-y-4">
+                  {opportunities(result.factors).map((o, i) => (
+                    <li key={o.factor.key} className="flex gap-3">
+                      <span className="font-mono text-xs text-muted-foreground">0{i + 1}</span>
+                      <div>
+                        <div className="text-sm">
+                          {o.factor.label}
+                          <span className="ml-2 font-mono text-xs">+{o.points} pts possible</span>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {ACTIONS[o.factor.key] ?? o.factor.detail}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+              <p className="mt-4 text-[11px] text-muted-foreground">
+                Point values come from the published formula: 300 + 550 × Σ(weight × value ×
+                evidence) ÷ 10 000.
+              </p>
             </Panel>
           </div>
 

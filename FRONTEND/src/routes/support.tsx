@@ -92,8 +92,14 @@ function Support() {
         <Panel title="New ticket">
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">Subject</Label>
+              <Label
+                htmlFor="ticket-subject"
+                className="font-mono text-[10px] uppercase tracking-[0.16em]"
+              >
+                Subject
+              </Label>
               <Input
+                id="ticket-subject"
                 value={subject}
                 maxLength={200}
                 onChange={(e) => setSubject(e.target.value)}
@@ -104,7 +110,7 @@ function Support() {
             <div className="space-y-1.5">
               <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">Priority</Label>
               <Select value={priority} onValueChange={(v) => setPriority(v as typeof priority)}>
-                <SelectTrigger className="rounded-none font-mono text-xs">
+                <SelectTrigger aria-label="Priority" className="rounded-none font-mono text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="rounded-none">
@@ -117,8 +123,14 @@ function Support() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">Details</Label>
+              <Label
+                htmlFor="ticket-details"
+                className="font-mono text-[10px] uppercase tracking-[0.16em]"
+              >
+                Details
+              </Label>
               <Textarea
+                id="ticket-details"
                 value={description}
                 maxLength={10000}
                 onChange={(e) => setDescription(e.target.value)}

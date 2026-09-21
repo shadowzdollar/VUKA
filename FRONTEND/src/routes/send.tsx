@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,7 @@ import { stateTone, WorkflowTracker } from "@/components/vuka/workflow-tracker";
 import { ApiError, describeError, isApiError, newIdempotencyKey } from "@/lib/api/client";
 import { corridors as corridorApi, ledger, workflows } from "@/lib/api/endpoints";
 import type { Account, Recipient, Workflow } from "@/lib/api/types";
-import { fromMinor, money, shortId, toMinor } from "@/lib/format";
+import { fromMinor, money, shortId, toMinor, truncMid } from "@/lib/format";
 import { readRecentWorkflows, rememberWorkflow } from "@/lib/recent-workflows";
 import { useTrader } from "@/lib/session";
 import { useInvoices, useWallet } from "@/lib/trader-data";
@@ -53,7 +53,7 @@ export const Route = createFileRoute("/send")({
   ),
 });
 
-type Mode = "domestic" | "ledger-fx" | "workflow";
+type Mode = "domestic" | "workflow";
 
 function useDebounced<T>(value: T, ms = 400): T {
   const [v, setV] = useState(value);
@@ -74,6 +74,7 @@ function workflowFromError(e: unknown): Workflow | undefined {
 function SendPayment() {
   const trader = useTrader();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { invoice: invoiceParam } = Route.useSearch();
   const wallet = useWallet();
   const corridors = useQuery({ queryKey: ["corridors"], queryFn: corridorApi.list });
@@ -124,13 +125,7 @@ function SendPayment() {
   const balance = source ? (wallet.data?.balances[source.id]?.amount ?? 0) : 0;
 
   const mode: Mode | null =
-    !source || !dest
-      ? null
-      : source.currency === dest.currency
-        ? "domestic"
-        : invoiceNumber
-          ? "ledger-fx"
-          : "workflow";
+    !source || !dest ? null : source.currency === dest.currency ? "domestic" : "workflow";
   const corridor = useMemo(
     () =>
       source && dest && source.currency !== dest.currency
@@ -207,22 +202,6 @@ function SendPayment() {
         await ledger.createTransfer(input, key);
         return null;
       }
-      if (mode === "ledger-fx") {
-        await ledger.crossBorder(
-          {
-            source_account_id: source!.id,
-            destination_account_id: dest!.id,
-            amount: value,
-            currency_from: source!.currency,
-            currency_to: dest!.currency,
-            invoice_number: invoiceNumber,
-            quote_id: quote.data!.quote.id,
-            corridor_id: corridor!.id,
-          },
-          key,
-        );
-        return null;
-      }
       const res = await workflows.start(
         {
           source_account_id: source!.id,
@@ -235,6 +214,7 @@ function SendPayment() {
           currency_from: source!.currency,
           currency_to: dest!.currency,
           rate: quote.data!.quote.rate,
+          ...(invoiceNumber ? { invoice_number: invoiceNumber } : {}),
           ...(authRef.trim() ? { provider_authorization_ref: authRef.trim() } : {}),
         },
         key,
@@ -288,6 +268,16 @@ function SendPayment() {
         });
         return;
       }
+      if (e instanceof ApiError && e.code.startsWith("kyc_")) {
+        toast.error("Verification limit reached", {
+          description: e.message,
+          action: {
+            label: "Verify account",
+            onClick: () => void navigate({ to: "/verification" }),
+          },
+        });
+        return;
+      }
       toast.error("Payment not completed", { description: describeError(e) });
     },
   });
@@ -321,7 +311,7 @@ function SendPayment() {
                   Pay from
                 </Label>
                 <Select value={source?.id ?? ""} onValueChange={setSourceId}>
-                  <SelectTrigger className="rounded-none font-mono text-xs">
+                  <SelectTrigger aria-label="Pay from" className="rounded-none font-mono text-xs">
                     <SelectValue placeholder="Business wallet" />
                   </SelectTrigger>
                   <SelectContent className="rounded-none">
@@ -381,7 +371,10 @@ function SendPayment() {
                     Recipient wallet
                   </Label>
                   <Select value={dest?.id ?? ""} onValueChange={setDestId}>
-                    <SelectTrigger className="rounded-none font-mono text-xs">
+                    <SelectTrigger
+                      aria-label="Recipient wallet"
+                      className="rounded-none font-mono text-xs"
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="rounded-none">
@@ -413,7 +406,10 @@ function SendPayment() {
                     Pay an invoice (optional)
                   </Label>
                   <Select value={invoiceNumber || "none"} onValueChange={pickInvoice}>
-                    <SelectTrigger className="rounded-none font-mono text-xs">
+                    <SelectTrigger
+                      aria-label="Pay an invoice"
+                      className="rounded-none font-mono text-xs"
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="rounded-none">
@@ -460,14 +456,6 @@ function SendPayment() {
                 </div>
               ) : null}
 
-              {mode === "ledger-fx" ? (
-                <p className="border border-dashed border-border p-3 text-[11px] text-muted-foreground">
-                  Paying an invoice across currencies settles as a ledger transfer bound to the
-                  invoice number. Provider collection/payout workflows do not carry an invoice
-                  reference.
-                </p>
-              ) : null}
-
               {problem && amount ? (
                 <p role="status" className="text-xs text-muted-foreground">
                   {problem}
@@ -512,7 +500,10 @@ function SendPayment() {
                   k={`Fee (${corridor!.fees_bps / 100}%)`}
                   v={`−${money(fromMinor(q.fee_minor), q.from_currency)}`}
                 />
-                <Line k="Rate" v={String(q.rate)} />
+                <Line
+                  k="Rate"
+                  v={`1 ${q.from_currency} = ${q.inverse_rate.toPrecision(5)} ${q.to_currency}`}
+                />
                 <div className="flex justify-between border-t border-border pt-2 text-sm">
                   <dt>Recipient receives</dt>
                   <dd className="tabular-nums">
@@ -520,7 +511,8 @@ function SendPayment() {
                   </dd>
                 </div>
                 <p className="pt-1 text-[11px] text-muted-foreground">
-                  Quote {q.id} · valid until {new Date(q.expires_at).toLocaleString()}
+                  Quote {truncMid(q.id, 10, 8)} · valid until{" "}
+                  {new Date(q.expires_at).toLocaleString()}
                   {quote.data?.execution === "local_synthetic" ? " · sandbox execution" : ""}
                 </p>
               </dl>

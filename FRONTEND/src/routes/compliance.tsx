@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { LazyDonutChart } from "@/components/vuka/lazy-charts";
 import { QueryBoundary } from "@/components/vuka/query-state";
 import { Chip, Metric, PageHeader, Panel, Shell } from "@/components/vuka/shell";
 import { describeError } from "@/lib/api/client";
@@ -53,6 +54,12 @@ const VERIFICATION_TYPES = ["identity", "business", "address", "ownership"];
 const REVIEW_STATUSES = ["approved", "rejected", "suspended", "needs_information"];
 const VERIFICATION_DECISIONS = ["verified", "rejected", "expired"];
 const SEVERITIES = ["low", "medium", "high", "critical"];
+
+function tally(values: string[]) {
+  const m = new Map<string, number>();
+  for (const v of values) m.set(v, (m.get(v) ?? 0) + 1);
+  return Array.from(m, ([label, value]) => ({ label, value }));
+}
 
 const statusTone = (s: string) =>
   ["approved", "verified", "resolved"].includes(s)
@@ -128,6 +135,25 @@ function Compliance() {
           value={reviews.data?.filter((r) => r.status === "pending").length ?? "—"}
           sub="Compliance cases in flight"
         />
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Panel title="Verification evidence · by status">
+          <LazyDonutChart
+            data={tally((verifications.data ?? []).map((v) => v.status))}
+            ariaLabel="Verification evidence by status"
+            center={{ value: String(verifications.data?.length ?? 0), label: "items" }}
+            format={(v) => String(v)}
+          />
+        </Panel>
+        <Panel title="Organizations · by verification status">
+          <LazyDonutChart
+            data={tally((orgs.data ?? []).map((o) => o.verification_status))}
+            ariaLabel="Organizations by verification status"
+            center={{ value: String(orgs.data?.length ?? 0), label: "organizations" }}
+            format={(v) => String(v)}
+          />
+        </Panel>
       </div>
 
       <Panel
@@ -305,7 +331,7 @@ function Pick({
 }) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="rounded-none font-mono text-xs">
+      <SelectTrigger aria-label="Choose an option" className="rounded-none font-mono text-xs">
         <SelectValue />
       </SelectTrigger>
       <SelectContent className="rounded-none">
@@ -654,7 +680,7 @@ function VerificationDialog({
               <p className="text-xs text-muted-foreground">Create an organization first.</p>
             ) : (
               <Select value={orgId || orgs[0]!.id} onValueChange={setOrgId}>
-                <SelectTrigger className="rounded-none text-xs">
+                <SelectTrigger aria-label="Organization" className="rounded-none text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="rounded-none">

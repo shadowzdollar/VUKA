@@ -24,6 +24,11 @@ CREATE TABLE IF NOT EXISTS escrows (
 
 ALTER TABLE escrows ADD COLUMN IF NOT EXISTS timeout_at BIGINT NOT NULL DEFAULT 0;
 
+-- VukaEscrowV2 adds the SPLIT state (partial settlement by arbitration).
+ALTER TABLE escrows DROP CONSTRAINT IF EXISTS escrows_state_check;
+ALTER TABLE escrows ADD CONSTRAINT escrows_state_check
+    CHECK (state IN ('CREATED', 'LOCKED', 'RELEASED', 'REFUNDED', 'DISPUTED', 'SPLIT'));
+
 CREATE TABLE IF NOT EXISTS chain_events (
     chain_id BIGINT NOT NULL,
     contract_address VARCHAR(42) NOT NULL,

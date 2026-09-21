@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ChainScopeBar } from "@/components/vuka/chain-scope-bar";
+import { DataTable } from "@/components/vuka/data-table";
 import { EmptyState, QueryBoundary } from "@/components/vuka/query-state";
 import { Chip, Metric, PageHeader, Panel, Shell } from "@/components/vuka/shell";
 import { describeError, download } from "@/lib/api/client";
@@ -92,42 +93,66 @@ function Tribunal() {
               empty="No disputes have been raised for this contract."
             >
               {(rows) => (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[820px] text-sm">
-                    <thead>
-                      <tr className="border-b border-border text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                        <th className="py-2">Case</th>
-                        <th className="py-2">Escrow</th>
-                        <th className="py-2">Claim</th>
-                        <th className="py-2">Raised</th>
-                        <th className="py-2">Tx</th>
-                        <th className="py-2 text-right">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((d) => (
-                        <tr
-                          key={d.id}
-                          onClick={() => setActive(d)}
-                          className="cursor-pointer border-b border-border/60 last:border-0 hover:bg-accent/40"
-                        >
-                          <td className="py-2.5 font-mono text-xs">{truncMid(d.id, 8, 4)}</td>
-                          <td className="py-2.5 font-mono text-xs">#{d.escrow_id}</td>
-                          <td className="max-w-xs truncate py-2.5 text-xs">{d.reason}</td>
-                          <td className="py-2.5 font-mono text-xs tabular-nums text-muted-foreground">
-                            {when(d.created_at)}
-                          </td>
-                          <td className="py-2.5 font-mono text-xs text-muted-foreground">
-                            {truncMid(d.raised_transaction_hash)}
-                          </td>
-                          <td className="py-2.5 text-right">
-                            <Chip tone={isOpen(d) ? "warn" : "invert"}>{d.status}</Chip>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable
+                  caption="Arbitration queue"
+                  exportName="vuka-disputes.csv"
+                  rows={rows}
+                  rowKey={(d) => d.id}
+                  onRowClick={setActive}
+                  initialSort={{ key: "raised", dir: "desc" }}
+                  columns={[
+                    {
+                      key: "case",
+                      header: "Case",
+                      sort: (d) => d.id,
+                      text: (d) => d.id,
+                      cell: (d) => (
+                        <span className="font-mono text-xs">{truncMid(d.id, 8, 4)}</span>
+                      ),
+                    },
+                    {
+                      key: "escrow",
+                      header: "Escrow",
+                      sort: (d) => d.escrow_id,
+                      text: (d) => `#${d.escrow_id}`,
+                      cell: (d) => <span className="font-mono text-xs">#{d.escrow_id}</span>,
+                    },
+                    {
+                      key: "claim",
+                      header: "Claim",
+                      text: (d) => d.reason,
+                      cell: (d) => <span className="line-clamp-2 text-xs">{d.reason}</span>,
+                    },
+                    {
+                      key: "raised",
+                      header: "Raised",
+                      sort: (d) => d.created_at,
+                      text: (d) => d.created_at,
+                      cell: (d) => (
+                        <span className="tabular font-mono text-xs text-muted-foreground">
+                          {when(d.created_at)}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "tx",
+                      header: "Tx",
+                      text: (d) => d.raised_transaction_hash,
+                      cell: (d) => (
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {truncMid(d.raised_transaction_hash)}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "status",
+                      header: "Status",
+                      align: "right",
+                      sort: (d) => d.status,
+                      cell: (d) => <Chip tone={isOpen(d) ? "warn" : "invert"}>{d.status}</Chip>,
+                    },
+                  ]}
+                />
               )}
             </QueryBoundary>
           </Panel>
@@ -304,7 +329,10 @@ function CaseDialog({ dispute, onClose }: { dispute: Dispute | null; onClose: ()
                   <Section title="Record recommendation">
                     <div className="space-y-2">
                       <Select value={choice} onValueChange={(v) => setChoice(v as typeof choice)}>
-                        <SelectTrigger className="w-48 rounded-none font-mono text-xs">
+                        <SelectTrigger
+                          aria-label="Recommendation"
+                          className="w-48 rounded-none font-mono text-xs"
+                        >
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="rounded-none">

@@ -34,7 +34,7 @@ import (
 // caller must prove collection succeeded before invoking it. Payout remains a
 // separate provider step, so a payout failure is visible as a workflow review
 // item rather than being reported as a successful ledger transfer.
-func (s *Service) PostCollectedCrossBorder(ctx context.Context, key, sourceID, destinationID string, amount float64, from, to string, rate float64) (string, error) {
+func (s *Service) PostCollectedCrossBorder(ctx context.Context, key, sourceID, destinationID string, amount float64, from, to string, rate float64, invoiceNumber string) (string, error) {
 	if s == nil || s.pool == nil || s.idem == nil {
 		return "", fmt.Errorf("ledger: internal handoff unavailable")
 	}
@@ -82,7 +82,7 @@ func (s *Service) PostCollectedCrossBorder(ctx context.Context, key, sourceID, d
 	}
 	transferID, err := insertTransaction(ctx, tx, key, TransferRequest{
 		SourceAccountID: sourceID, DestinationAccountID: destinationID,
-		Amount: amount, Currency: from,
+		Amount: amount, Currency: from, InvoiceNumber: invoiceNumber,
 	}, StatusProcessing, "", "", &rate)
 	if err != nil {
 		if isUniqueViolation(err) {

@@ -6,6 +6,9 @@ import { ChainScopeBar } from "@/components/vuka/chain-scope-bar";
 import { EmptyState, QueryBoundary } from "@/components/vuka/query-state";
 import { Chip, Metric, PageHeader, Panel } from "@/components/vuka/shell";
 import { describeError } from "@/lib/api/client";
+import { usd0 } from "@/components/vuka/analytics-parts";
+import { LazyTrendChart } from "@/components/vuka/lazy-charts";
+import { Gauge, Sparkline } from "@/components/vuka/viz/simple";
 import { corridors, operator, pilots, settlements } from "@/lib/api/endpoints";
 import type { ReconciliationStatus } from "@/lib/api/types";
 import { scopeReady, useChainScope } from "@/lib/chain-scope";
@@ -48,6 +51,13 @@ export function OperatorCockpit() {
   const policy = useQuery({ queryKey: ["settlements"], queryFn: () => settlements.list() });
   const pilotList = useQuery({ queryKey: ["pilots"], queryFn: pilots.list });
 
+  const platformStats = useQuery({
+    queryKey: ["analytics", "platform", 30],
+    queryFn: () => operator.analytics(30),
+    staleTime: 60_000,
+    retry: false,
+  });
+
   const ack = useMutation({
     mutationFn: (s: ReconciliationStatus) =>
       operator.ackAlert(scope, s.alert_level as "warning" | "critical", alertMessage(s)),
@@ -58,12 +68,13 @@ export function OperatorCockpit() {
     onError: (e) => toast.error("Could not acknowledge", { description: describeError(e) }),
   });
 
-  const sums = { locked: 0, released: 0, refunded: 0, disputed: 0 };
+  const sums = { locked: 0, released: 0, refunded: 0, disputed: 0, split: 0 };
   for (const e of escrows.data ?? []) {
     const v = tokenUnits(e.amount);
     if (e.state === "LOCKED" || e.state === "CREATED") sums.locked += v;
     else if (e.state === "RELEASED") sums.released += v;
     else if (e.state === "REFUNDED") sums.refunded += v;
+    else if (e.state === "SPLIT") sums.split += v;
     else sums.disputed += v;
   }
 
@@ -87,7 +98,7 @@ export function OperatorCockpit() {
 
       <ChainScopeBar scope={scope} onChange={setScope} />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <Metric
           label="Escrow locked"
           value={ready ? money(sums.locked) : "—"}
@@ -109,6 +120,45 @@ export function OperatorCockpit() {
           sub="Under arbiter control"
         />
       </div>
+
+      <Panel
+        title="Network pulse · last 30 days"
+        meta={
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="h-7 rounded-none font-mono text-[10px] uppercase"
+          >
+            <Link to="/analytics">Network intelligence</Link>
+          </Button>
+        }
+      >
+        <QueryBoundary query={platformStats} disabledCodes={["analytics_unavailable"]}>
+          {(r) => (
+            <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
+              <div className="space-y-3">
+                <Gauge
+                  value={r.totals.success_rate}
+                  label="Settlement success"
+                  sub={`${r.totals.succeeded} settled · ${r.totals.failed} failed`}
+                />
+                <Metric
+                  label="Settled volume"
+                  value={usd0(r.totals.volume_usd)}
+                  trend={<Sparkline values={r.daily.map((d) => d.out_usd)} />}
+                />
+              </div>
+              <LazyTrendChart
+                data={r.daily.map((d) => ({ label: d.date.slice(5), a: d.out_usd }))}
+                aName="Settled volume"
+                ariaLabel="Settled volume per day, USD equivalent"
+                format={usd0}
+              />
+            </div>
+          )}
+        </QueryBoundary>
+      </Panel>
 
       <div className="grid gap-3 lg:grid-cols-3">
         <Panel

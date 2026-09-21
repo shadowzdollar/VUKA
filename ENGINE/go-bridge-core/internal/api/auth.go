@@ -151,7 +151,7 @@ func (s *AuthStore) EnsureSchema(ctx context.Context) error {
 			return fmt.Errorf("auth: ensure schema statement %d: %w", index+1, err)
 		}
 	}
-	return nil
+	return s.ensureThrottleSchema(ctx)
 }
 
 func (s *AuthStore) RecordTransactionAuthorization(ctx context.Context, traderID, key, sourceID, destinationID string, amount float64, from, to string) error {
