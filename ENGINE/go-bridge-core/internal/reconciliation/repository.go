@@ -426,8 +426,8 @@ func (r *Repository) ApproveDisputeDecision(ctx context.Context, decisionID, app
 	var createdAt time.Time
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO dispute_decision_approvals (decision_id, approver_email)
-		SELECT id, $2 FROM dispute_decisions
-		WHERE id = $1 AND decided_by <> $2
+		SELECT id, $2::text FROM dispute_decisions
+		WHERE id = $1 AND decided_by <> $2::text
 		RETURNING id, decision_id, approver_email, created_at`,
 		decisionID, approver).Scan(&approval.ID, &approval.DecisionID, &approval.ApproverEmail, &createdAt)
 	if errors.Is(err, pgx.ErrNoRows) {
