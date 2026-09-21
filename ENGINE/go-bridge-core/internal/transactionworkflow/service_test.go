@@ -46,19 +46,26 @@ func (fakeAccounts) ResolveAccount(_ context.Context, id string) (string, string
 	return "trader-2", "KES", true, nil
 }
 
+// One catalog for the whole test package so quotes issued in request() verify in the service.
+var testCatalog = providers.NewDefaultCatalog()
+
 func serviceForMode(collectionMode, payoutMode string, poster LedgerPoster) *Service {
 	registry := adapters.NewRegistry()
 	registry.Register(adapters.NewMTNAdapter(0, 0, collectionMode, time.Millisecond))
 	registry.Register(adapters.NewMpesaAdapter(0, 0, payoutMode, time.Millisecond))
 	exec := providerexec.NewService(registry, providerexec.NewMemoryStore())
-	return NewService(NewMemoryStore(), exec, providers.NewDefaultCatalog(), fakeAccounts{}, poster, &fakeCollector{})
+	return NewService(NewMemoryStore(), exec, testCatalog, fakeAccounts{}, poster, &fakeCollector{})
 }
 
 func request() Request {
+	q, err := testCatalog.Quote("rw-rwf-ke-kes", 500000, time.Now().UTC())
+	if err != nil {
+		panic(err)
+	}
 	return Request{TraderID: "trader-1", SourceAccountID: "source", DestinationAccountID: "destination",
 		CollectionProvider: "mtn-rw", PayoutProvider: "mpesa-ke", CollectionPhone: "+2501",
-		PayoutPhone: "+2541", CorridorID: "rw-rwf-ke-kes", QuoteID: "fixture-rwf-kes-1",
-		Amount: 100, CurrencyFrom: "RWF", CurrencyTo: "KES", Rate: 0.95}
+		PayoutPhone: "+2541", CorridorID: "rw-rwf-ke-kes", QuoteID: q.ID,
+		Amount: 5000, CurrencyFrom: "RWF", CurrencyTo: "KES", Rate: q.Rate}
 }
 
 func TestStartCompletesAndDuplicateReplays(t *testing.T) {
