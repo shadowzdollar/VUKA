@@ -12,13 +12,13 @@ var ErrUnsupportedCurrencyPair = errors.New("fx: unsupported currency pair")
 var ErrStaleQuote = errors.New("fx: quote is stale")
 
 type FXQuote struct {
-	Pair         string    `json:"pair"`
-	Rate         float64   `json:"rate"`
-	Bid          float64   `json:"bid"`
-	Ask          float64   `json:"ask"`
-	Source       string    `json:"source"`
-	Timestamp    time.Time `json:"timestamp"`
-	ExpiresAt    time.Time `json:"expires_at"`
+	Pair      string    `json:"pair"`
+	Rate      float64   `json:"rate"`
+	Bid       float64   `json:"bid"`
+	Ask       float64   `json:"ask"`
+	Source    string    `json:"source"`
+	Timestamp time.Time `json:"timestamp"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 type FXProvider interface {
@@ -26,10 +26,10 @@ type FXProvider interface {
 }
 
 type LiveFXProvider struct {
-	mu           sync.RWMutex
-	baseRates    map[string]float64
-	spreadPct    float64
-	ttl          time.Duration
+	mu        sync.RWMutex
+	baseRates map[string]float64
+	spreadPct float64
+	ttl       time.Duration
 }
 
 func NewLiveFXProvider(spreadPct float64, ttl time.Duration) *LiveFXProvider {
