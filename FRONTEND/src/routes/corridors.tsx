@@ -1,211 +1,469 @@
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Shell, PageHeader, Panel, Metric, Chip } from "@/components/vuka/shell";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
-import { corridors, pacs008, usd } from "@/lib/vuka-data";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ErrorState, Loading, QueryBoundary } from "@/components/vuka/query-state";
+import { Chip, Metric, PageHeader, Panel, Shell } from "@/components/vuka/shell";
+import { corridors as corridorApi } from "@/lib/api/endpoints";
+import type { Corridor } from "@/lib/api/types";
+import { fromMinor, money, shortId, toMinor, when } from "@/lib/format";
+import { buildPacs008, structuralCheck } from "@/lib/pacs008";
+import { useSession, useTrader } from "@/lib/session";
+import { useTransfers, useWallet } from "@/lib/trader-data";
 
 export const Route = createFileRoute("/corridors")({
   head: () => ({
     meta: [
-      { title: "Corridor Operations & ISO 20022 Gateway — VUKA" },
+      { title: "Corridors — VUKA" },
       {
         name: "description",
-        content:
-          "RWF/KES corridor rates, fee schedules, simulated telecom adapters and a pacs.008 ISO 20022 message viewer with schema validation.",
-      },
-      { property: "og:title", content: "Corridor Operations & ISO 20022 Gateway — VUKA" },
-      {
-        property: "og:description",
-        content: "Translate VUKA trade payments into central-banking standard messaging.",
+        content: "Corridor pricing, limits, provider health and ISO 20022 message rendering.",
       },
     ],
   }),
-  component: Corridors,
+  component: CorridorsPage,
 });
 
-const adapters = [
-  { name: "MTN MoMo Rwanda", env: "SANDBOX", uptime: "99.94%", latency: "1.9s" },
-  { name: "Safaricom M-Pesa Kenya", env: "SANDBOX", uptime: "99.88%", latency: "2.4s" },
-  { name: "Airtel Money Uganda", env: "SANDBOX", uptime: "99.41%", latency: "3.1s" },
-  { name: "Vodacom M-Pesa Tanzania", env: "SANDBOX", uptime: "98.90%", latency: "3.8s" },
-];
-
-function Corridors() {
-  const [amount, setAmount] = useState("1000000");
-  const [selected, setSelected] = useState(corridors[0]!);
-  const [validation, setValidation] = useState<string | null>(null);
-
-  const send = Number(amount) || 0;
-  const gross = send * selected.rate;
-  const fee = gross * (selected.feePct / 100);
-
+function CorridorsPage() {
   return (
     <Shell>
+      <Switch />
+    </Shell>
+  );
+}
+
+function Switch() {
+  const { session } = useSession();
+  return session.status === "operator" ? <OperatorProviders /> : <TraderCorridors />;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Trader: rate card, live quote, ISO 20022 rendering of a real transfer
+// ---------------------------------------------------------------------------------------------
+function TraderCorridors() {
+  const corridors = useQuery({ queryKey: ["corridors"], queryFn: corridorApi.list });
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [amount, setAmount] = useState("100000");
+
+  const selected: Corridor | undefined =
+    corridors.data?.find((c) => c.id === selectedId) ?? corridors.data?.[0];
+  const minor = Number(amount) > 0 ? toMinor(Number(amount)) : 0;
+
+  const quote = useQuery({
+    queryKey: ["quote", selected?.id, minor],
+    queryFn: () => corridorApi.quote(selected!.id, minor),
+    enabled: !!selected && minor > 0,
+    retry: false,
+  });
+
+  return (
+    <>
       <PageHeader
-        eyebrow="Network operations"
-        title="Corridors & ISO 20022 Gateway"
-        description="Corridor pricing, telecom adapter health and the translation layer that renders every VUKA trade payment as a standards-compliant pacs.008 message."
+        eyebrow="Network"
+        title="Corridors"
+        description="Live corridor pricing and limits from the engine, a firm quote calculator, and an ISO 20022 rendering of your own transfers."
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Live corridors" value={corridors.filter((c) => c.status === "LIVE").length} sub="Rwanda, Kenya, Uganda" />
-        <Metric label="Pilot corridors" value={corridors.filter((c) => c.status === "PILOT").length} sub="Volume-capped observation" />
-        <Metric label="24h corridor volume" value={`$${usd(corridors.reduce((s, c) => s + c.volume24h, 0))}`} sub="All rails combined" />
-        <Metric label="Adapters online" value={`${adapters.length}/4`} sub="Sandbox telecom simulators" />
-      </div>
-
-      <Panel title="Corridor rate card" meta={<Chip tone="live">Indicative mid + spread</Chip>}>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-sm">
-            <thead>
-              <tr className="border-b border-border text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                <th className="py-2">Pair</th>
-                <th className="py-2">Route</th>
-                <th className="py-2 text-right">Rate</th>
-                <th className="py-2 text-right">Spread</th>
-                <th className="py-2 text-right">Fee</th>
-                <th className="py-2">Rails</th>
-                <th className="py-2 text-right">State</th>
-              </tr>
-            </thead>
-            <tbody>
-              {corridors.map((c) => (
-                <tr
-                  key={c.id}
-                  onClick={() => setSelected(c)}
-                  className={`cursor-pointer border-b border-border/60 last:border-0 hover:bg-accent/40 ${selected.id === c.id ? "bg-accent/30" : ""}`}
-                >
-                  <td className="py-2.5 font-mono text-xs">{c.pair}</td>
-                  <td className="py-2.5 text-muted-foreground">{c.route}</td>
-                  <td className="py-2.5 text-right font-mono tabular-nums">{c.rate}</td>
-                  <td className="py-2.5 text-right font-mono tabular-nums">{c.spreadBps} bps</td>
-                  <td className="py-2.5 text-right font-mono tabular-nums">{c.feePct}%</td>
-                  <td className="py-2.5 text-xs text-muted-foreground">{c.rails.join(" · ")}</td>
-                  <td className="py-2.5 text-right">
-                    <Chip tone={c.status === "LIVE" ? "invert" : c.status === "PILOT" ? "live" : "dead"}>
-                      {c.status}
-                    </Chip>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
-
-      <div className="grid gap-3 lg:grid-cols-2">
-        <Panel title="FX quote simulator" meta={<Chip>{selected.pair}</Chip>}>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
-                Send amount ({selected.pair.split(" / ")[0]})
-              </Label>
-              <Input
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                inputMode="decimal"
-                className="rounded-none font-mono"
+      <QueryBoundary
+        query={corridors}
+        isEmpty={(d) => d.length === 0}
+        empty="No corridors are configured."
+      >
+        {(rows) => (
+          <>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Metric label="Corridors" value={rows.length} sub="Configured on this engine" />
+              <Metric
+                label="Enabled"
+                value={rows.filter((c) => c.enabled && !c.kill_switch).length}
+                sub="Accepting quotes"
+              />
+              <Metric
+                label="Halted"
+                value={rows.filter((c) => c.kill_switch).length}
+                sub="Kill switch active"
               />
             </div>
-            <dl className="space-y-2 border border-border p-3 font-mono text-xs">
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">Rate applied</dt>
-                <dd className="tabular-nums">{selected.rate}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">Gross converted</dt>
-                <dd className="tabular-nums">{usd(gross)}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">Corridor fee ({selected.feePct}%)</dt>
-                <dd className="tabular-nums">−{usd(fee)}</dd>
-              </div>
-              <div className="flex justify-between border-t border-border pt-2">
-                <dt>Beneficiary receives</dt>
-                <dd className="tabular-nums">
-                  {usd(gross - fee)} {selected.pair.split(" / ")[1]}
-                </dd>
-              </div>
-            </dl>
-            <Button
-              className="w-full rounded-none font-mono text-xs uppercase"
-              onClick={() =>
-                toast.success("Quote locked for 90 seconds", {
-                  description: `${selected.route} · ${selected.rails.join(" → ")}`,
-                })
-              }
-            >
-              Lock quote
-            </Button>
-          </div>
-        </Panel>
 
-        <Panel title="Telecom adapters" meta={<Chip tone="live">Sandbox</Chip>}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                <th className="py-2">Adapter</th>
-                <th className="py-2 text-right">Uptime</th>
-                <th className="py-2 text-right">p50 latency</th>
-                <th className="py-2 text-right">Probe</th>
-              </tr>
-            </thead>
-            <tbody>
-              {adapters.map((a) => (
-                <tr key={a.name} className="border-b border-border/60 last:border-0">
-                  <td className="py-2.5">{a.name}</td>
-                  <td className="py-2.5 text-right font-mono tabular-nums">{a.uptime}</td>
-                  <td className="py-2.5 text-right font-mono tabular-nums">{a.latency}</td>
-                  <td className="py-2.5 text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 rounded-none font-mono text-[10px] uppercase"
-                      onClick={() =>
-                        toast.success(`${a.name} probe OK`, { description: "Handshake 200 · sandbox" })
-                      }
-                    >
-                      Ping
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Panel>
-      </div>
+            <Panel title="Corridor rate card" meta={<Chip tone="live">Live from engine</Chip>}>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[820px] text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                      <th className="py-2">Corridor</th>
+                      <th className="py-2">Pair</th>
+                      <th className="py-2 text-right">Rate</th>
+                      <th className="py-2 text-right">Fee</th>
+                      <th className="py-2 text-right">Min / max</th>
+                      <th className="py-2">Provider</th>
+                      <th className="py-2 text-right">State</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((c) => (
+                      <tr
+                        key={c.id}
+                        onClick={() => setSelectedId(c.id)}
+                        className={`cursor-pointer border-b border-border/60 last:border-0 hover:bg-accent/40 ${selected?.id === c.id ? "bg-accent/30" : ""}`}
+                      >
+                        <td className="py-2.5 font-mono text-xs">{c.id}</td>
+                        <td className="py-2.5 font-mono text-xs">
+                          {c.from_currency} → {c.to_currency} ({c.from_country}→{c.to_country})
+                        </td>
+                        <td className="py-2.5 text-right font-mono tabular-nums">{c.fx.rate}</td>
+                        <td className="py-2.5 text-right font-mono tabular-nums">
+                          {c.fees_bps / 100}%
+                          {c.fixed_fee_minor ? ` + ${fromMinor(c.fixed_fee_minor)}` : ""}
+                        </td>
+                        <td className="py-2.5 text-right font-mono text-xs tabular-nums">
+                          {money(fromMinor(c.min_amount_minor))} –{" "}
+                          {money(fromMinor(c.max_amount_minor))}
+                        </td>
+                        <td className="py-2.5 text-xs text-muted-foreground">{c.provider_id}</td>
+                        <td className="py-2.5 text-right">
+                          <Chip tone={c.kill_switch || !c.enabled ? "warn" : "invert"}>
+                            {c.kill_switch ? "HALTED" : c.enabled ? "LIVE" : "DISABLED"}
+                          </Chip>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
 
-      <Panel
-        title="ISO 20022 pacs.008 message"
-        meta={
-          <>
-            {validation ? <Chip tone="invert">{validation}</Chip> : null}
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 rounded-none font-mono text-[10px] uppercase"
-              onClick={() => {
-                setValidation("Schema valid · 0 errors");
-                toast.success("pacs.008.001.08 validated against schema");
+            {selected ? (
+              <Panel title="Quote calculator" meta={<Chip>{selected.id}</Chip>}>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
+                      Send amount ({selected.from_currency})
+                    </Label>
+                    <Input
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      inputMode="decimal"
+                      className="rounded-none font-mono"
+                    />
+                  </div>
+                  <div>
+                    {minor === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Enter an amount for a firm quote.
+                      </p>
+                    ) : quote.isFetching && !quote.data ? (
+                      <Loading label="Fetching quote" />
+                    ) : quote.isError ? (
+                      <ErrorState error={quote.error} onRetry={() => void quote.refetch()} />
+                    ) : quote.data ? (
+                      <dl className="space-y-2 border border-border p-3 font-mono text-xs">
+                        <Row k="Rate applied" v={String(quote.data.quote.rate)} />
+                        <Row
+                          k="Fee"
+                          v={`−${money(fromMinor(quote.data.quote.fee_minor), selected.from_currency)}`}
+                        />
+                        <div className="flex justify-between border-t border-border pt-2 text-sm">
+                          <dt>Beneficiary receives</dt>
+                          <dd className="tabular-nums">
+                            {money(
+                              fromMinor(quote.data.quote.deliver_amount_minor),
+                              selected.to_currency,
+                            )}
+                          </dd>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          Quote {quote.data.quote.id} · expires {when(quote.data.quote.expires_at)}
+                        </p>
+                      </dl>
+                    ) : null}
+                  </div>
+                </div>
+              </Panel>
+            ) : null}
+          </>
+        )}
+      </QueryBoundary>
+
+      <IsoViewer />
+    </>
+  );
+}
+
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="text-muted-foreground">{k}</dt>
+      <dd className="tabular-nums">{v}</dd>
+    </div>
+  );
+}
+
+function IsoViewer() {
+  const trader = useTrader();
+  const wallet = useWallet();
+  const transfers = useTransfers();
+  const [id, setId] = useState("");
+  const [result, setResult] = useState<ReturnType<typeof structuralCheck> | null>(null);
+
+  const usable = (transfers.data ?? []).filter((t) => t.status === "SUCCESS");
+  const t = usable.find((x) => x.id === id) ?? usable[0];
+  const own = new Set(wallet.data?.accounts.map((a) => a.id) ?? []);
+  const xml = t
+    ? buildPacs008(t, {
+        debtorName: own.has(t.source_account_id)
+          ? trader.full_name
+          : `VUKA account ${shortId(t.source_account_id)}`,
+        creditorName: own.has(t.destination_account_id)
+          ? trader.full_name
+          : `VUKA account ${shortId(t.destination_account_id)}`,
+      })
+    : "";
+
+  return (
+    <Panel
+      title="ISO 20022 pacs.008 message"
+      meta={
+        <>
+          {result ? (
+            <Chip tone={result.ok ? "invert" : "warn"}>
+              {result.ok ? "Structure OK" : `${result.problems.length} problem(s)`}
+            </Chip>
+          ) : null}
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!xml}
+            className="h-7 rounded-none font-mono text-[10px] uppercase"
+            onClick={() => {
+              const r = structuralCheck(xml);
+              setResult(r);
+              if (r.ok) toast.success("Well-formed, all mandatory elements present");
+              else toast.error(r.problems[0] ?? "Invalid message");
+            }}
+          >
+            Check structure
+          </Button>
+        </>
+      }
+    >
+      {transfers.isPending ? (
+        <Loading />
+      ) : usable.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Complete a payment to render it as a standards-based credit-transfer message.
+        </p>
+      ) : (
+        <>
+          <div className="mb-3 max-w-md space-y-1.5">
+            <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">Transfer</Label>
+            <Select
+              value={t?.id ?? ""}
+              onValueChange={(v) => {
+                setId(v);
+                setResult(null);
               }}
             >
-              Validate schema
-            </Button>
-          </>
-        }
+              <SelectTrigger className="rounded-none font-mono text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-none">
+                {usable.slice(0, 25).map((x) => (
+                  <SelectItem key={x.id} value={x.id}>
+                    {shortId(x.id)} · {money(x.amount, x.currency)}
+                    {x.invoice_number ? ` · ${x.invoice_number}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <pre className="overflow-x-auto border border-border bg-muted/30 p-4 font-mono text-[11px] leading-relaxed">
+            {xml}
+          </pre>
+          {result && !result.ok ? (
+            <ul className="mt-3 border-2 border-foreground p-3 text-xs">
+              {result.problems.map((p) => (
+                <li key={p}>{p}</li>
+              ))}
+            </ul>
+          ) : null}
+          <p className="mt-3 text-xs text-muted-foreground">
+            Rendered in your browser from the ledger transfer. The check above confirms
+            well-formedness and mandatory elements only; full schema validation is performed by the
+            ISO 20022 gateway service.
+          </p>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Operator: provider health, webhook evidence, provider reconciliation
+// ---------------------------------------------------------------------------------------------
+function OperatorProviders() {
+  const providers = useQuery({
+    queryKey: ["providers"],
+    queryFn: corridorApi.providers,
+    refetchInterval: 30_000,
+  });
+  const events = useQuery({ queryKey: ["webhook-events"], queryFn: corridorApi.webhookEvents });
+  const recon = useQuery({ queryKey: ["provider-recon"], queryFn: corridorApi.reconciliation });
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Network operations"
+        title="Corridors & Providers"
+        description="Telecom provider readiness and kill switches, authenticated webhook evidence, and per-corridor provider reconciliation. Callbacks are evidence only and never mutate ledger entries."
+      />
+
+      <QueryBoundary
+        query={providers}
+        isEmpty={(d) => d.length === 0}
+        empty="No providers registered."
       >
-        <pre className="overflow-x-auto border border-border bg-muted/30 p-4 font-mono text-[11px] leading-relaxed text-foreground">
-          {pacs008}
-        </pre>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Every released escrow emits a pacs.008 credit transfer with the invoice reference carried
-          in structured remittance information, so bank and central-bank counterparties can
-          reconcile a VUKA settlement without bespoke integration.
-        </p>
-      </Panel>
-    </Shell>
+        {(rows) => (
+          <>
+            <div className="grid gap-3 sm:grid-cols-4">
+              <Metric label="Providers" value={rows.length} sub="Registered adapters" />
+              <Metric
+                label="Healthy"
+                value={rows.filter((p) => p.healthy).length}
+                sub="Passing readiness checks"
+              />
+              <Metric
+                label="Kill switch"
+                value={rows.filter((p) => p.config.kill_switch).length}
+                sub="Providers halted"
+              />
+              <Metric
+                label="External calls"
+                value={rows.filter((p) => p.config.external_calls).length}
+                sub="Live provider traffic"
+              />
+            </div>
+            <Panel title="Provider registry" meta={<Chip tone="live">Sandbox</Chip>}>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[820px] text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                      <th className="py-2">Provider</th>
+                      <th className="py-2">Environment</th>
+                      <th className="py-2">Countries</th>
+                      <th className="py-2">Currencies</th>
+                      <th className="py-2">Checked</th>
+                      <th className="py-2 text-right">Health</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((p) => (
+                      <tr key={p.config.id} className="border-b border-border/60 last:border-0">
+                        <td className="py-2.5">
+                          <div>{p.config.display_name}</div>
+                          <div className="font-mono text-[10px] text-muted-foreground">
+                            {p.config.id}
+                          </div>
+                        </td>
+                        <td className="py-2.5 font-mono text-xs">{p.config.environment}</td>
+                        <td className="py-2.5 font-mono text-xs">
+                          {p.config.supported_countries.join(", ")}
+                        </td>
+                        <td className="py-2.5 font-mono text-xs">
+                          {p.config.supported_currencies.join(", ")}
+                        </td>
+                        <td className="py-2.5 font-mono text-xs text-muted-foreground">
+                          {when(p.last_checked)}
+                        </td>
+                        <td className="py-2.5 text-right">
+                          <Chip tone={p.config.kill_switch || !p.healthy ? "warn" : "invert"}>
+                            {p.config.kill_switch
+                              ? "KILL SWITCH"
+                              : p.healthy
+                                ? "HEALTHY"
+                                : "DEGRADED"}
+                          </Chip>
+                          {p.reason ? (
+                            <div className="mt-1 text-[10px] text-muted-foreground">{p.reason}</div>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+          </>
+        )}
+      </QueryBoundary>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Panel title="Provider reconciliation">
+          <QueryBoundary
+            query={recon}
+            isEmpty={(d) => d.length === 0}
+            empty="No reconciliation records yet."
+          >
+            {(rows) => (
+              <ul className="divide-y divide-border/60">
+                {rows.map((r) => (
+                  <li
+                    key={`${r.provider_id}-${r.corridor_id}`}
+                    className="flex items-center justify-between gap-3 py-2.5"
+                  >
+                    <div>
+                      <div className="font-mono text-xs">
+                        {r.provider_id} · {r.corridor_id}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {r.open_items} open · last event {when(r.last_event_at)}
+                      </div>
+                    </div>
+                    <Chip tone={r.open_items > 0 ? "warn" : "invert"}>{r.state}</Chip>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </QueryBoundary>
+        </Panel>
+
+        <Panel title="Webhook evidence">
+          <QueryBoundary
+            query={events}
+            isEmpty={(d) => d.length === 0}
+            empty="No provider callbacks received."
+          >
+            {(rows) => (
+              <ul className="divide-y divide-border/60">
+                {rows.slice(0, 10).map((e) => (
+                  <li key={e.id} className="flex items-center justify-between gap-3 py-2.5">
+                    <div>
+                      <div className="font-mono text-xs">
+                        {e.provider_id} · {e.event_type}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {when(e.received_at)} · {e.settlement_action}
+                      </div>
+                    </div>
+                    <Chip tone={e.authenticated ? "invert" : "warn"}>
+                      {e.authenticated ? "AUTHENTICATED" : "UNVERIFIED"}
+                    </Chip>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </QueryBoundary>
+        </Panel>
+      </div>
+    </>
   );
 }
