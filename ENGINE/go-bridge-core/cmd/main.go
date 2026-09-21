@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -73,28 +74,47 @@ func run(log *slog.Logger) error {
 	}
 	log.Info("database connected")
 
-	// Wire the adapter registry (Phase 1: simulated MTN Rwanda; Phase 2:
-	// simulated M-Pesa Kenya for the RWF -> KES corridor).
+	// Build the pan-African provider catalog (sandbox rails; live activation is a
+	// separate, explicit step) and register exactly the rails it describes.
+	rateOverrides, err := providers.ParseRateOverrides(cfg.FxRates)
+	if err != nil {
+		return err
+	}
+	catalog, err := providers.NewAfricaCatalog(providers.AfricaOptions{
+		SandboxDelay: cfg.MTNSimDelay, SandboxMode: cfg.MTNSimMode, SandboxFail: cfg.MTNSimFailRate,
+		QuoteTTL: cfg.QuoteTTL, QuoteKey: []byte(cfg.QuoteSigningKey), Rates: rateOverrides,
+		RateSource: cfg.FxSource, Countries: cfg.EnabledCountries,
+		MaxTxnUSD: cfg.MaxTxnUSD, DailyUSD: cfg.DailyCorridorUSD,
+	})
+	if err != nil {
+		return err
+	}
+	if cfg.QuoteSigningKey == "" {
+		log.Warn("VUKA_QUOTE_SIGNING_KEY is unset: using an ephemeral key, firm quotes will not verify across replicas or restarts")
+	}
 	registry := adapters.NewRegistry()
-	registry.Register(adapters.NewMTNAdapter(
-		cfg.MTNSimDelay,
-		cfg.MTNSimFailRate,
-		cfg.MTNSimMode,
-		cfg.MTNSimTimeout,
-	))
-	registry.Register(adapters.NewMpesaAdapter(
-		cfg.MTNSimDelay,
-		cfg.MTNSimFailRate,
-		cfg.MTNSimMode,
-		cfg.MTNSimTimeout,
-	))
-	log.Info("adapters registered", "available", registry.Names())
+	currencyRails := map[string]string{}
+	enabled := map[string]bool{}
+	for _, code := range cfg.EnabledCountries {
+		enabled[strings.ToUpper(code)] = true
+	}
+	for _, country := range providers.Countries {
+		if len(enabled) > 0 && !enabled[country.Code] {
+			continue
+		}
+		currencyRails[country.Currency] = country.ProviderID
+	}
+	for _, adapter := range catalog.Adapters() {
+		registry.Register(adapter)
+	}
+	log.Info("adapters registered", "available", registry.Names(), "countries", len(currencyRails))
 
 	idem := idempotency.NewStore(pool)
 	ledgerSvc := ledger.NewService(pool, idem, registry)
 	if cfg.FxRateRWFKES > 0 {
 		ledgerSvc.SetDefaultFxRate(cfg.FxRateRWFKES)
 	}
+	ledgerSvc.SetCurrencyRails(currencyRails)
 
 	// Bootstrap the ledger schema on every start (idempotent). This is what
 	// makes the engine deployable to ANY empty PostgreSQL — Render's managed
@@ -112,10 +132,11 @@ func run(log *slog.Logger) error {
 	// Seed the SETTLEMENT accounts used by cross-border transfers.
 	seedCtx, seedCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer seedCancel()
-	if err := ledgerSvc.EnsureSettlementAccounts(seedCtx, "RWF", "KES"); err != nil {
+	settlementCurrencies := providers.SupportedCurrencies(cfg.EnabledCountries)
+	if err := ledgerSvc.EnsureSettlementAccounts(seedCtx, settlementCurrencies...); err != nil {
 		return err
 	}
-	log.Info("settlement accounts ready", "currencies", []string{"RWF", "KES"})
+	log.Info("settlement accounts ready", "currencies", settlementCurrencies)
 
 	var reconciliationRepo *reconciliation.Repository
 	var reconciliationPoller *reconciliation.Poller
@@ -255,7 +276,7 @@ func run(log *slog.Logger) error {
 	// Build the REST handler. When VUKA_WEB_DIR points at the built SPA,
 	// serve the dashboard and the API from the same port (single-origin
 	// production shape; tunnel-friendly).
-	handler := api.NewServerWithRuntimeOptionsAndProviderExecution(ledgerSvc, log, cfg.CORSOrigins, reconciliationRepo, reconciliationPoller, authStore, cfg.ReconciliationLagWarning, cfg.ReconciliationLagCritical, cfg.ReadOnly, settlementSvc, pilotSvc, supportSvc, cfg.LocalSyntheticExecution, providerExecutionSvc)
+	handler := api.NewServerWithRuntimeOptionsAndProviderExecution(ledgerSvc, log, cfg.CORSOrigins, reconciliationRepo, reconciliationPoller, authStore, cfg.ReconciliationLagWarning, cfg.ReconciliationLagCritical, cfg.ReadOnly, settlementSvc, pilotSvc, supportSvc, cfg.LocalSyntheticExecution, providerExecutionSvc, api.WithProviderCatalog(catalog))
 	if cfg.WebDir != "" {
 		handler = api.WithWebDir(handler, cfg.WebDir)
 		log.Info("serving web dashboard", "dir", cfg.WebDir)
