@@ -76,6 +76,20 @@ type Server struct {
 	workflow                  *transactionworkflow.Service
 }
 
+// Option customises a Server at construction time. Options are variadic so
+// existing constructors stay source-compatible.
+type Option func(*Server)
+
+// WithProviderCatalog replaces the default sandbox catalog (e.g. with the
+// configured pan-African catalog).
+func WithProviderCatalog(c *providers.Catalog) Option {
+	return func(s *Server) {
+		if c != nil {
+			s.providerCatalog = c
+		}
+	}
+}
+
 func reconciliationActivityResource(chainID int64, contract string) string {
 	return fmt.Sprintf("reconciliation:%d:%s", chainID, strings.ToLower(strings.TrimSpace(contract)))
 }
@@ -158,7 +172,7 @@ func NewServerWithRuntimeOptions(ledgerSvc *ledger.Service, log *slog.Logger, co
 // NewServerWithRuntimeOptionsAndProviderExecution wires the durable provider
 // execution boundary. A nil service uses a local simulated store for tests;
 // production passes a PostgreSQL-backed service from main.
-func NewServerWithRuntimeOptionsAndProviderExecution(ledgerSvc *ledger.Service, log *slog.Logger, corsOrigins []string, repo *reconciliation.Repository, poller *reconciliation.Poller, auth *AuthStore, lagWarning, lagCritical int64, readOnly bool, settlementSvc *settlement.Service, pilotSvc *pilot.Service, supportSvc *support.Service, localSyntheticExecution bool, executionSvc *providerexec.Service) http.Handler {
+func NewServerWithRuntimeOptionsAndProviderExecution(ledgerSvc *ledger.Service, log *slog.Logger, corsOrigins []string, repo *reconciliation.Repository, poller *reconciliation.Poller, auth *AuthStore, lagWarning, lagCritical int64, readOnly bool, settlementSvc *settlement.Service, pilotSvc *pilot.Service, supportSvc *support.Service, localSyntheticExecution bool, executionSvc *providerexec.Service, opts ...Option) http.Handler {
 	if executionSvc == nil {
 		registry := adapters.NewRegistry()
 		registry.Register(adapters.NewMTNAdapter(0, 0, "success", time.Second))
@@ -166,6 +180,9 @@ func NewServerWithRuntimeOptionsAndProviderExecution(ledgerSvc *ledger.Service, 
 		executionSvc = providerexec.NewService(registry, providerexec.NewMemoryStore())
 	}
 	s := &Server{ledger: ledgerSvc, log: log, mux: http.NewServeMux(), hub: NewHub(), reconciliation: repo, reconciliationPoller: poller, auth: auth, reconciliationLagWarning: lagWarning, reconciliationLagCritical: lagCritical, readOnly: readOnly, localSyntheticExecution: localSyntheticExecution, providerCatalog: providers.NewDefaultCatalog(), settlement: settlementSvc, pilot: pilotSvc, support: supportSvc, providerExecution: executionSvc}
+	for _, opt := range opts {
+		opt(s)
+	}
 	if ledgerSvc != nil {
 		s.identity = identity.NewService(ledgerSvc.DB())
 		if s.settlement == nil {
