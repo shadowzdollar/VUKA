@@ -251,6 +251,11 @@ func (s *Service) DecideVerification(ctx context.Context, verificationID, review
 		req.Status, reviewer, now, verificationID); err != nil {
 		return nil, err
 	}
+	if v.UserID != nil {
+		if err := recomputeTraderKYC(ctx, tx, *v.UserID); err != nil {
+			return nil, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
@@ -540,3 +545,27 @@ func nullString(s string) *string {
 }
 func isUnique(err error) bool  { var e *pgconn.PgError; return errors.As(err, &e) && e.Code == "23505" }
 func isForeign(err error) bool { var e *pgconn.PgError; return errors.As(err, &e) && e.Code == "23503" }
+
+// recomputeTraderKYC derives users.kyc_status from the trader's decided
+// verifications so the ledger-side tier limits follow compliance decisions:
+//
+//	identity verified                  -> VERIFIED
+//	identity + business verified       -> BUSINESS_VERIFIED
+//	identity rejected, none verified   -> REJECTED
+//	otherwise                          -> PENDING
+//
+// SUSPENDED is an operator-imposed state and is never overwritten here.
+func recomputeTraderKYC(ctx context.Context, tx pgx.Tx, userID string) error {
+	_, err := tx.Exec(ctx, `
+		UPDATE users u SET kyc_status = CASE
+			WHEN EXISTS (SELECT 1 FROM identity_verifications i WHERE i.user_id = u.id AND i.verification_type = 'identity' AND i.status = 'verified')
+			 AND EXISTS (SELECT 1 FROM identity_verifications i WHERE i.user_id = u.id AND i.verification_type = 'business' AND i.status = 'verified')
+				THEN 'BUSINESS_VERIFIED'
+			WHEN EXISTS (SELECT 1 FROM identity_verifications i WHERE i.user_id = u.id AND i.verification_type = 'identity' AND i.status = 'verified')
+				THEN 'VERIFIED'
+			WHEN EXISTS (SELECT 1 FROM identity_verifications i WHERE i.user_id = u.id AND i.verification_type = 'identity' AND i.status = 'rejected')
+				THEN 'REJECTED'
+			ELSE 'PENDING' END
+		WHERE u.id = $1 AND u.kyc_status <> 'SUSPENDED'`, userID)
+	return err
+}
