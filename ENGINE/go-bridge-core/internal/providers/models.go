@@ -102,12 +102,14 @@ func (c ProviderConfig) Validate() error {
 }
 
 type FXQuote struct {
-	Rate      float64   `json:"rate"`
-	Source    string    `json:"source"`
-	QuoteID   string    `json:"quote_id"`
-	QuotedAt  time.Time `json:"quoted_at"`
-	ExpiresAt time.Time `json:"expires_at"`
-	MarkupBps int       `json:"markup_bps"`
+	// Rate is source-currency units per ONE destination unit (ledger convention).
+	Rate        float64   `json:"rate"`
+	InverseRate float64   `json:"inverse_rate,omitempty"`
+	Source      string    `json:"source"`
+	QuoteID     string    `json:"quote_id"`
+	QuotedAt    time.Time `json:"quoted_at"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	MarkupBps   int       `json:"markup_bps"`
 }
 
 func (q FXQuote) Validate() error {
@@ -143,15 +145,21 @@ type CorridorConfig struct {
 }
 
 type Quote struct {
-	ID              string    `json:"id"`
-	CorridorID      string    `json:"corridor_id"`
-	ProviderID      string    `json:"provider_id"`
-	SourceAmount    int64     `json:"source_amount_minor"`
-	FeeMinor        int64     `json:"fee_minor"`
-	DeliverAmount   int64     `json:"deliver_amount_minor"`
-	FromCurrency    string    `json:"from_currency"`
-	ToCurrency      string    `json:"to_currency"`
+	ID            string `json:"id"`
+	CorridorID    string `json:"corridor_id"`
+	ProviderID    string `json:"provider_id"`
+	SourceAmount  int64  `json:"source_amount_minor"`
+	FeeMinor      int64  `json:"fee_minor"`
+	DeliverAmount int64  `json:"deliver_amount_minor"`
+	FromCurrency  string `json:"from_currency"`
+	ToCurrency    string `json:"to_currency"`
+	// Rate is source-currency units per ONE destination-currency unit (the
+	// ledger posting convention); InverseRate is destination units per one
+	// source unit ("1 RWF = x KES"). RateConvention says which is which.
 	Rate            float64   `json:"rate"`
+	InverseRate     float64   `json:"inverse_rate"`
+	RateConvention  string    `json:"rate_convention"`
+	RateSource      string    `json:"rate_source"`
 	QuotedAt        time.Time `json:"quoted_at"`
 	ExpiresAt       time.Time `json:"expires_at"`
 	ObservationOnly bool      `json:"observation_only"`
@@ -242,42 +250,76 @@ type Catalog struct {
 	webhookEvents  []WebhookEvent
 	reconciliation map[string]ReconciliationStatus
 	validators     map[string]WebhookSignatureValidator
+	signer         *QuoteSigner
+	rates          RateSource
+	quoteTTL       time.Duration
+}
+
+// RateSource supplies the FX reference rate for a currency pair. The returned
+// rate follows the ledger's posting convention: units of `from` per ONE unit
+// of `to` (so the destination is credited amount / rate). Implementations may
+// be static (sandbox), a table override, or a live provider.
+type RateSource interface {
+	Rate(from, to string) (rate float64, source string, err error)
+}
+
+// RateConvention names the convention in every API payload so no client can
+// misread a rate.
+const RateConvention = "source_per_destination"
+
+// SetQuoteSigner installs the signer used for firm quotes (shared across replicas).
+func (c *Catalog) SetQuoteSigner(s *QuoteSigner) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.signer = s
+}
+
+// SetRateSource installs a live/override rate source; nil falls back to each corridor's snapshot.
+func (c *Catalog) SetRateSource(r RateSource) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.rates = r
+}
+
+// SetQuoteTTL sets how long a firm quote stays valid.
+func (c *Catalog) SetQuoteTTL(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if d > 0 {
+		c.quoteTTL = d
+	}
+}
+
+// Adapters returns the registered adapter for every provider (id -> adapter),
+// so the engine can register exactly the rails the catalog describes.
+func (c *Catalog) Adapters() map[string]ProviderAdapter {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := make(map[string]ProviderAdapter, len(c.adapters))
+	for id, a := range c.adapters {
+		out[id] = a
+	}
+	return out
+}
+
+// Corridor returns one corridor's configuration.
+func (c *Catalog) Corridor(id string) (CorridorConfig, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	item, ok := c.corridors[id]
+	return item, ok
 }
 
 func NewCatalog() *Catalog {
 	return &Catalog{
+		signer:         NewEphemeralQuoteSigner(),
+		quoteTTL:       10 * time.Minute,
 		providers:      make(map[string]ProviderConfig),
 		adapters:       make(map[string]ProviderAdapter),
 		corridors:      make(map[string]CorridorConfig),
 		reconciliation: make(map[string]ReconciliationStatus),
 		validators:     make(map[string]WebhookSignatureValidator),
 	}
-}
-
-func NewDefaultCatalog() *Catalog {
-	c := NewCatalog()
-	_ = c.RegisterProvider(ProviderConfig{
-		ID: "mtn-rw", DisplayName: "MTN MoMo Rwanda (sandbox)",
-		ContractVersion: ContractVersion, Environment: EnvironmentSimulated, Enabled: true,
-		Credentials:        CredentialConfig{SecretRef: "sandbox://mtn-rw/webhook"},
-		SupportedCountries: []string{"RW"}, SupportedCurrencies: []string{"RWF"},
-	}, adapters.NewMTNAdapter(0, 0, "success", 5*time.Second))
-	_ = c.RegisterProvider(ProviderConfig{
-		ID: "mpesa-ke", DisplayName: "M-Pesa Kenya (sandbox)",
-		ContractVersion: ContractVersion, Environment: EnvironmentSimulated, Enabled: true,
-		Credentials:        CredentialConfig{SecretRef: "sandbox://mpesa-ke/webhook"},
-		SupportedCountries: []string{"KE"}, SupportedCurrencies: []string{"KES"},
-	}, adapters.NewMpesaAdapter(0, 0, "success", 5*time.Second))
-	_ = c.RegisterCorridor(CorridorConfig{
-		ID: "rw-rwf-ke-kes", FromCountry: "RW", ToCountry: "KE",
-		FromCurrency: "RWF", ToCurrency: "KES", ProviderID: "mpesa-ke",
-		FeesBps: 100, FixedFeeMinor: 0, MinAmountMinor: 1, MaxAmountMinor: 50000000,
-		DailyLimitMinor: 100000000, LiquidityOwner: "vuka-treasury",
-		OperationsOwner: "vuka-operations", Enabled: true,
-		FX: FXQuote{Rate: 0.95, Source: "sandbox-fixture", QuoteID: "fixture-rwf-kes-1",
-			QuotedAt: time.Now().UTC(), ExpiresAt: time.Now().UTC().Add(24 * time.Hour)},
-	})
-	return c
 }
 
 func (c *Catalog) RegisterProvider(config ProviderConfig, adapter ProviderAdapter) error {
@@ -311,56 +353,92 @@ func (c *Catalog) RegisterCorridor(config CorridorConfig) error {
 	return nil
 }
 
-func (c *Catalog) Quote(corridorID string, amountMinor int64, now time.Time) (Quote, error) {
+// quoteChecks resolves the corridor/provider and enforces enablement, kill
+// switches and amount limits. Shared by Quote and ValidateQuote so a quote can
+// never be issued or accepted for a corridor that would refuse the amount.
+func (c *Catalog) quoteChecks(corridorID string, amountMinor int64) (CorridorConfig, ProviderConfig, error) {
 	c.mu.RLock()
 	corridor, ok := c.corridors[corridorID]
 	provider := c.providers[corridor.ProviderID]
 	c.mu.RUnlock()
 	if !ok {
-		return Quote{}, fmt.Errorf("%w: unknown corridor %q", ErrInvalidConfig, corridorID)
+		return CorridorConfig{}, ProviderConfig{}, fmt.Errorf("%w: unknown corridor %q", ErrInvalidConfig, corridorID)
 	}
-
 	if !corridor.Enabled || !provider.Enabled {
-		return Quote{}, ErrProviderDisabled
+		return CorridorConfig{}, ProviderConfig{}, ErrProviderDisabled
 	}
 	if corridor.KillSwitch || provider.KillSwitch {
-		return Quote{}, ErrKillSwitchActive
+		return CorridorConfig{}, ProviderConfig{}, ErrKillSwitchActive
 	}
 	if amountMinor < corridor.MinAmountMinor || amountMinor > corridor.MaxAmountMinor ||
 		amountMinor > corridor.DailyLimitMinor {
-		return Quote{}, ErrLimitExceeded
+		return CorridorConfig{}, ProviderConfig{}, ErrLimitExceeded
 	}
-	if err := corridor.FX.Validate(); err != nil {
+	return corridor, provider, nil
+}
+
+// Quote issues a firm, signed quote. fee = ceil(amount*bps) + fixed;
+// deliver = floor((amount - fee) / rate), where rate is source-per-destination
+// (the same convention the ledger uses to credit the destination account).
+func (c *Catalog) Quote(corridorID string, amountMinor int64, now time.Time) (Quote, error) {
+	corridor, _, err := c.quoteChecks(corridorID, amountMinor)
+	if err != nil {
 		return Quote{}, err
+	}
+	c.mu.RLock()
+	rates, signer, ttl := c.rates, c.signer, c.quoteTTL
+	c.mu.RUnlock()
+
+	rate, source := corridor.FX.Rate, corridor.FX.Source
+	if rates != nil {
+		r, src, rerr := rates.Rate(corridor.FromCurrency, corridor.ToCurrency)
+		if rerr != nil {
+			return Quote{}, rerr
+		}
+		rate, source = r, src
+	}
+	if rate <= 0 || math.IsNaN(rate) || math.IsInf(rate, 0) {
+		return Quote{}, fmt.Errorf("%w: FX rate must be finite and positive", ErrInvalidConfig)
 	}
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
 	fee := (amountMinor*int64(corridor.FeesBps) + 9999) / 10000
 	fee += corridor.FixedFeeMinor
-	deliver := int64(float64(amountMinor-fee) * corridor.FX.Rate)
+	deliver := int64(math.Floor(float64(amountMinor-fee) / rate))
 	if deliver <= 0 {
 		return Quote{}, ErrLimitExceeded
 	}
+	expires := now.Add(ttl)
 	return Quote{
-		ID: corridor.FX.QuoteID, CorridorID: corridor.ID, ProviderID: corridor.ProviderID,
+		ID: signer.Sign(corridorID, rate, source, expires), CorridorID: corridor.ID, ProviderID: corridor.ProviderID,
 		SourceAmount: amountMinor, FeeMinor: fee, DeliverAmount: deliver,
 		FromCurrency: corridor.FromCurrency, ToCurrency: corridor.ToCurrency,
-		Rate: corridor.FX.Rate, QuotedAt: now, ExpiresAt: corridor.FX.ExpiresAt,
-		ObservationOnly: true,
+		Rate: rate, InverseRate: 1 / rate, RateConvention: RateConvention, RateSource: source,
+		QuotedAt: now, ExpiresAt: expires, ObservationOnly: true,
 	}, nil
 }
 
+// VerifyQuote authenticates a quote id and returns what it locked.
+func (c *Catalog) VerifyQuote(quoteID string, now time.Time) (VerifiedQuote, error) {
+	c.mu.RLock()
+	signer := c.signer
+	c.mu.RUnlock()
+	return signer.Verify(quoteID, now)
+}
+
+// ValidateQuote confirms a quote id was issued for this corridor, has not
+// expired, and that the corridor would still accept the amount.
 func (c *Catalog) ValidateQuote(corridorID, quoteID string, amountMinor int64, now time.Time) error {
-	quote, err := c.Quote(corridorID, amountMinor, now)
+	if _, _, err := c.quoteChecks(corridorID, amountMinor); err != nil {
+		return err
+	}
+	vq, err := c.VerifyQuote(quoteID, now)
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(quoteID) == "" || quote.ID != quoteID {
-		return fmt.Errorf("%w: quote id does not match corridor quote", ErrInvalidConfig)
-	}
-	if !now.Before(quote.ExpiresAt) {
-		return fmt.Errorf("%w: quote has expired", ErrInvalidConfig)
+	if vq.CorridorID != corridorID {
+		return fmt.Errorf("%w: quote was issued for a different corridor", ErrInvalidConfig)
 	}
 	return nil
 }
