@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"vuka/go-bridge-core/internal/api"
 	"vuka/go-bridge-core/internal/ledger"
 	"vuka/go-bridge-core/internal/testutil"
 )
@@ -255,4 +256,32 @@ func createTransferReq(t *testing.T, srv http.Handler, src, dst string, amount f
 		t.Fatalf("decode: %v", err)
 	}
 	return body.Transfer
+}
+
+func TestCORS_Preflight_AllowsPatchAndCredentialsForAllowList(t *testing.T) {
+	srv := newServer(t)
+	req := httptest.NewRequest(http.MethodOptions, "/api/support/tickets/x", nil)
+	req.Header.Set("Origin", "http://localhost:5173")
+	req.Header.Set("Access-Control-Request-Method", "PATCH")
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if got := rr.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "PATCH") {
+		t.Errorf("Allow-Methods=%q, want PATCH", got)
+	}
+	if got := rr.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
+		t.Errorf("Allow-Credentials=%q, want true for an explicit allow-list", got)
+	}
+}
+
+func TestCORS_OpenMode_NeverAllowsCredentials(t *testing.T) {
+	h := api.NewCORS(nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req.Header.Set("Origin", "http://anything.example")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if got := rr.Header().Get("Access-Control-Allow-Credentials"); got != "" {
+		t.Errorf("Allow-Credentials=%q in open mode, want empty", got)
+	}
 }
