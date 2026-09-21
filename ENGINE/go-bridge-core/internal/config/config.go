@@ -43,6 +43,21 @@ type Config struct {
 	// port. Empty disables static serving (API-only mode).
 	WebDir string
 
+	// Pan-African corridor catalog (see internal/providers/africa.go).
+	// QuoteSigningKey signs firm FX quotes; it MUST be identical on every replica
+	// and at least 32 bytes in production. FxRates overrides the sandbox reference
+	// table ("KES=129.5,RWF=1380", units per USD) until a live rate source is wired.
+	QuoteSigningKey  string
+	QuoteTTL         time.Duration
+	FxRates          string
+	FxSource         string
+	EnabledCountries []string
+	MaxTxnUSD        float64
+	DailyCorridorUSD float64
+	// AllowLiveProviders is the explicit acknowledgement required before any
+	// provider may leave sandbox mode (VUKA_PROVIDER_MODE_<ID>=live).
+	AllowLiveProviders bool
+
 	OperatorEmail    string
 	OperatorPassword string
 	OperatorRole     string
@@ -110,6 +125,14 @@ func Load() (*Config, error) {
 		FxRateRWFKES:                getFloat("VUKA_FX_RWF_KES", 0),
 		CORSOrigins:                 splitList("VUKA_CORS_ORIGINS"),
 		WebDir:                      getEnv("VUKA_WEB_DIR", ""),
+		QuoteSigningKey:             os.Getenv("VUKA_QUOTE_SIGNING_KEY"),
+		QuoteTTL:                    getDuration("VUKA_QUOTE_TTL_MS", 10*time.Minute),
+		FxRates:                     os.Getenv("VUKA_FX_RATES"),
+		FxSource:                    getEnv("VUKA_FX_SOURCE", "sandbox-reference"),
+		EnabledCountries:            splitList("VUKA_ENABLED_COUNTRIES"),
+		MaxTxnUSD:                   getFloat("VUKA_MAX_TXN_USD", 10000),
+		DailyCorridorUSD:            getFloat("VUKA_DAILY_CORRIDOR_USD", 100000),
+		AllowLiveProviders:          getBool("VUKA_ALLOW_LIVE_PROVIDERS", false),
 		OperatorEmail:               os.Getenv("VUKA_OPERATOR_EMAIL"),
 		OperatorPassword:            os.Getenv("VUKA_OPERATOR_PASSWORD"),
 		OperatorRole:                getEnv("VUKA_OPERATOR_ROLE", "operator"),
@@ -191,7 +214,16 @@ func (c *Config) Validate() error {
 	if (c.OperatorEmail == "") != (c.OperatorPassword == "") {
 		return fmt.Errorf("config: VUKA_OPERATOR_EMAIL and VUKA_OPERATOR_PASSWORD must be provided together")
 	}
+	if c.QuoteSigningKey != "" && len(c.QuoteSigningKey) < 32 {
+		return fmt.Errorf("config: VUKA_QUOTE_SIGNING_KEY must be at least 32 characters")
+	}
+	if c.MaxTxnUSD <= 0 || c.DailyCorridorUSD < c.MaxTxnUSD {
+		return fmt.Errorf("config: VUKA_MAX_TXN_USD must be positive and not exceed VUKA_DAILY_CORRIDOR_USD")
+	}
 	if c.Environment == "production" {
+		if c.QuoteSigningKey == "" {
+			return fmt.Errorf("config: VUKA_QUOTE_SIGNING_KEY is required in production (shared by every replica)")
+		}
 		if c.OperatorEmail == "" || c.OperatorPassword == "" {
 			return fmt.Errorf("config: operator credentials are required in production")
 		}
