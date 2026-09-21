@@ -183,16 +183,18 @@ func (s *Service) validate(ctx context.Context, req Request) error {
 		}
 	}
 	if s.catalog != nil {
-		quote, err := s.catalog.Quote(req.CorridorID, int64(math.Round(req.Amount*100)), time.Now().UTC())
-		if err != nil {
+		now := time.Now().UTC()
+		amountMinor := int64(math.Round(req.Amount * 100))
+		corridor, ok := s.catalog.Corridor(req.CorridorID)
+		if !ok || corridor.FromCurrency != req.CurrencyFrom || corridor.ToCurrency != req.CurrencyTo {
+			return fmt.Errorf("%w: corridor does not match the requested currencies", ErrInvalidRequest)
+		}
+		if err := s.catalog.ValidateQuote(req.CorridorID, req.QuoteID, amountMinor, now); err != nil {
 			return fmt.Errorf("%w: quote/corridor validation: %v", ErrInvalidRequest, err)
 		}
-		if quote.ID != req.QuoteID || quote.FromCurrency != req.CurrencyFrom || quote.ToCurrency != req.CurrencyTo ||
-			math.Abs(quote.Rate-req.Rate) > 1e-9 || !time.Now().UTC().Before(quote.ExpiresAt) {
-			return fmt.Errorf("%w: quote id, rate, or expiry does not match corridor binding", ErrInvalidRequest)
-		}
-		if err := s.catalog.ValidateQuote(req.CorridorID, req.QuoteID, int64(math.Round(req.Amount*100)), time.Now().UTC()); err != nil {
-			return fmt.Errorf("%w: quote/corridor validation: %v", ErrInvalidRequest, err)
+		locked, err := s.catalog.VerifyQuote(req.QuoteID, now)
+		if err != nil || math.Abs(locked.Rate-req.Rate) > 1e-9 {
+			return fmt.Errorf("%w: rate does not match the firm quote", ErrInvalidRequest)
 		}
 	}
 	if req.Rate <= 0 {
