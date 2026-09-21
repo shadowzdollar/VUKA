@@ -99,6 +99,19 @@ limitations, and the next verified step for the long-term VUKA platform.
 - Fixed: translation dictionary key schema typo in `i18n.ts` (`invises` -> `invoices`).
 - Final System Status: 100% Production Ready. 21/21 smart contract tests, 100% Go backend test suite pass across 13 packages, and 0 error TypeScript Vite PWA build.
 
+## 2026-09-21
 
-
+- Built: `FRONTEND` is now wired to the Go engine instead of `vuka-data.ts` mocks (deleted). Typed API layer in `FRONTEND/src/lib/api/` (client, wire types, endpoint groups), cookie sessions for both identities in `src/lib/session.tsx`, role-aware shell/nav.
+- Built: trader surface: `/login`, `/register`, overview, wallets + double-entry drill-down + sandbox top-up, `/send` (recipient lookup, live corridor quote, idempotent submit, workflow tracker with retry, provider-authorization-ref prompt), invoices (issue/list/pay), trust score, corridors + pacs.008 rendering, support tickets + notifications.
+- Built: operator surface: cockpit (reconciliation status + alert ack), escrow register, dispute tribunal (arbiter notes/recommendation, operator approval, CSV export), compliance (orgs, verification evidence, reviews, risk flags), settlements + pilots, activity log.
+- Fixed: `ENGINE/.../reconciliation/repository.go` `ApproveDisputeDecision` failed with SQLSTATE 42P08 (`$2` used as both inserted value and `decided_by <> $2`), so no dispute decision could ever be approved. Added `TestRepositoryApprovesDisputeDecision`, verified it fails without the fix.
+- Fixed: `internal/api/cors.go` allowed only GET/POST and never credentials, so cross-origin `PATCH /api/support/tickets/{id}` and cookie sessions were impossible. Now allows PATCH and, only when an explicit origin allow-list is configured, `Allow-Credentials`. Open mode (empty list) never sends credentials. Tests added.
+- Decided: dev traffic goes through a Vite proxy (`/api`, `/healthz` -> `VUKA_API_PROXY_TARGET`, default `:8080`) so HttpOnly cookies stay same-origin.
+- Decided: trust score is computed client-side from the trader's own transfers/invoices (`src/lib/trust.ts`); the engine has no scoring endpoint. Mutual-release and arbitration factors are omitted because escrows are keyed by wallet address, not trader.
+- Known shortcut: `POST /api/transaction-workflows` has no `invoice_number`, so invoice-linked FX payments use `POST /api/transfers/cross-border` (ledger only, no provider collect/payout). Needs an engine change to unify.
+- Known issue (engine, NOT fixed): quote and ledger disagree on the rate convention. Quote: `deliver = (amount - fee) * rate` (fixture rate 0.95). Ledger/workflow: `destination = amount / rate`. RWF 10,000 quoted "KES 9,405.00" actually credited KES 10,526.32. Needs a decision on the convention before any real rate is configured.
+- Known gap (engine): escrow/dispute/reconciliation reads need `?contract=`; the engine does not advertise it, so operators enter it once (`VITE_ESCROW_CONTRACT` / localStorage).
+- Known gap (engine): no trader-facing KYC submission endpoint (`POST /api/verifications` is operator-only); the trader UI shows status and routes to a support ticket.
+- Note: `go test` helpers TRUNCATE tables. Run them against a separate DB (`vuka_test`), never the dev DB. This session lost the dev seed once by pointing `TEST_DATABASE_URL` at `vuka`; re-seed with `make demo-seed`.
+- Verified: `tsc --noEmit` clean, `vite build` clean, ESLint 0 errors; browser E2E (Playwright + system Chrome) against the live engine covering trader login -> send -> invoice -> support and operator/arbiter/approver dispute flow.
 
