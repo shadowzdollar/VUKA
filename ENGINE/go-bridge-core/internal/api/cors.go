@@ -32,9 +32,16 @@ func NewCORS(origins []string, next http.Handler) http.Handler {
 			h := w.Header()
 			h.Set("Access-Control-Allow-Origin", origin)
 			h.Add("Vary", "Origin")
-			h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			h.Set("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key, X-Client-ID, Accept")
+			h.Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
+			h.Set("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key, X-Client-ID, X-Request-ID, Authorization, Accept")
+			h.Set("Access-Control-Expose-Headers", "X-Request-ID, X-API-Version, Retry-After")
 			h.Set("Access-Control-Max-Age", "600")
+			// Session cookies are cross-origin credentials. Only allow them for an explicit
+			// allow-list: with an empty list every origin is echoed, which must never be
+			// combined with credentials.
+			if len(allowed) > 0 {
+				h.Set("Access-Control-Allow-Credentials", "true")
+			}
 		}
 
 		// Preflight: respond 204 with no body and stop.
