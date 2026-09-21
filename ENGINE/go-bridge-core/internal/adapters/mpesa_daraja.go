@@ -15,16 +15,16 @@ import (
 
 // DarajaConfig contains Safaricom M-Pesa API credentials and endpoints.
 type DarajaConfig struct {
-	ConsumerKey    string
-	ConsumerSecret string
-	PassKey        string
-	ShortCode      string
-	B2CShortCode   string
-	InitiatorName  string
+	ConsumerKey        string
+	ConsumerSecret     string
+	PassKey            string
+	ShortCode          string
+	B2CShortCode       string
+	InitiatorName      string
 	SecurityCredential string
-	CallbackURL    string
-	Environment    string // "sandbox" or "production"
-	Timeout        time.Duration
+	CallbackURL        string
+	Environment        string // "sandbox" or "production"
+	Timeout            time.Duration
 }
 
 // MpesaDarajaAdapter implements production-ready Safaricom M-Pesa Daraja integrations.
