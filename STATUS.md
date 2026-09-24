@@ -5,6 +5,51 @@ A living hand-off note. Newest day first; each day adds a section at the top. Fo
 
 ---
 
+## 2026-09-24 — day 2: security hardening & evidence
+
+**Chosen focus for today** (of four options put to the user: security, standards/interoperability,
+reach/localisation, access-on-real-networks): security hardening, because it needs no external
+account or partner and is the first thing a telecom or regulator reviewer checks.
+
+### What happened
+
+- New [`SECURITY.md`](SECURITY.md) at the repo root: scope, a table of the automated scans, the
+  design-level controls already in place, what is honestly *not* done yet, how to report a
+  vulnerability, and a **dated scan log** (below is the summary; the file has full detail).
+- Ran four scanners for the first time on this codebase and fixed what they found:
+  - `govulncheck` (Go): 3 real vulnerabilities, all fixed by dependency bumps (grpc, x/text).
+  - `slither` (Solidity): 1 real High fixed — `VukaForwarder.execute` didn't check `msg.value`
+    against the signed `req.value`, so forced/overpaid ETH could later be swept by an unrelated
+    signed request. Fixed with a `require`-equivalent check + 3 new tests. Several more findings
+    reviewed and documented as already-mitigated (reentrancy guard + CEI, intentional low-level
+    ERC20 calls) rather than silently ignored.
+  - `gosec` (Go): found a real gap — `cmd/seed` (creates demo accounts with a public password) had
+    no production guard, unlike its sibling seed commands. Fixed by adding the same guard there and
+    to three other unguarded seed commands. Remaining findings (simulated RNG, test-DB defaults)
+    annotated `#nosec` with a reason so they don't silently resurface.
+  - `npm audit` (frontend): clean, 0 vulnerabilities.
+- Full regression after every fix: `go build`, `go vet`, `go test ./...` (all packages, against
+  `vuka_test`), `forge test` (50/50). All clean.
+- The Postgres dev container (`vuka-postgres`) had stopped since the last session; restarted it —
+  routine, not a finding.
+
+### What this does *not* claim
+
+- This is **not** the independent audit or penetration test tracked as `PENDING` in
+  `CONTRACTS/escrow/PHASE5_INDEPENDENT_SECURITY_REVIEW.md`. Automated scanning is a prerequisite for
+  that review, not a substitute.
+- No CI pipeline runs these scans automatically yet — today's run was manual. Wiring `govulncheck`/
+  `gosec`/`slither`/`npm audit` into CI on every push is the natural next step in this area.
+- `gosec`'s SSA-based analyzers (the deeper taint-tracking rules) crash on several packages under
+  this environment's Go toolchain version — a tooling/toolchain compatibility gap, not a code issue.
+  The simpler AST-based rules (which is what found the real `cmd/seed` gap) still ran to completion.
+
+### Housekeeping
+
+- Working tree for today's changes is committed as one snapshot (see `git log`); nothing pushed.
+
+---
+
 ## 2026-09-21 — end of day 1 of the AU-grade upgrade
 
 **Goal:** VUKA is a submission to the African Union and a partner pitch to telecoms across the continent, so the

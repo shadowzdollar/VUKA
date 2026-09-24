@@ -23,6 +23,10 @@ func main() {
 		log.Error("config", "err", err)
 		os.Exit(1)
 	}
+	if cfg.Environment == "production" {
+		log.Error("refusing to seed a synthetic dispute fixture in production")
+		os.Exit(1)
+	}
 	arbiterEmail, arbiterPassword, operatorEmail, operatorPassword, err := seedCredentials()
 	if err != nil {
 		log.Error("credentials", "err", err)

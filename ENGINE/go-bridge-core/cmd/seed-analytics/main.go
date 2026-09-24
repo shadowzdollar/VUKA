@@ -83,7 +83,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	rng := rand.New(rand.NewSource(20260921))
+	rng := rand.New(rand.NewSource(20260921)) // #nosec G404 -- fixed seed for reproducible dev fixture data, not security-sensitive; refused in production above
 	now := time.Now().UTC()
 	batch := now.UnixNano()
 	made, reversed, failed := 0, 0, 0

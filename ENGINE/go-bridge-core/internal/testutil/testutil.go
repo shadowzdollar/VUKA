@@ -40,7 +40,7 @@ func Logger() *slog.Logger {
 
 // DefaultTestURL is used when TEST_DATABASE_URL is unset. It targets the
 // vuka_test database provisioned by `make -C ENGINE test-integration`.
-const DefaultTestURL = "postgres://vuka:changeme@localhost:5433/vuka_test?sslmode=disable"
+const DefaultTestURL = "postgres://vuka:changeme@localhost:5433/vuka_test?sslmode=disable" // #nosec G101 -- local test-database default, not a real credential
 
 // TestPool returns a SHARED, process-wide pool to the test database and
 // truncates all ledger tables so each test starts from a clean ledger.

@@ -154,3 +154,32 @@ limitations, and the next verified step for the long-term VUKA platform.
 - Fixed (found in testing): decorative `sr-only` spans outside a positioned scroller inflated page width on mobile (comparison table); reduced-motion users saw un-revealed sections; `/readyz` was not proxied in dev; footer wordmark and journey sheets failed contrast (now a pseudo-element / full-opacity).
 - Decided: do not reproduce the African Union emblem or flag, and label framework seals as generic; legal pages are drafts; contact addresses are configuration, not invented.
 - Known limits: non-English strings do not cover the new public sections (English only); flag emblems are simplified; USSD and offline/PWA install are concepts or partial; Google Fonts remains third-party; membership/fee groups follow the engine table (Ethiopia is its own "HORN" group).
+
+## 2026-09-24 (security hardening & evidence — day 2 of the daily upgrade cadence)
+
+- Added `SECURITY.md`: scope, what is automated vs. still `PENDING` (links to
+  `CONTRACTS/escrow/PHASE5_INDEPENDENT_SECURITY_REVIEW.md`), a dated scan log, and a coordinated-
+  disclosure contact via `VITE_SECURITY_EMAIL`.
+- Ran `govulncheck ./...` on the engine: 3 real vulnerabilities (gRPC HTTP/2 panic/OOM, an
+  `x/text` infinite-loop reachable from the M-Pesa adapter). Fixed by bumping
+  `google.golang.org/grpc` v1.83.0→v1.83.2 and `golang.org/x/text` v0.37.0→v0.41.0; `go test ./...`
+  re-run clean.
+- Ran `slither` on `CONTRACTS/escrow`: fixed one real High (`VukaForwarder.execute` never checked
+  `msg.value == req.value`, so ETH forced into the forwarder — e.g. via `selfdestruct`, which
+  bypasses `receive`/`fallback` — could later be swept by an unrelated signed request). Added the
+  check (`ValueMismatch`) and three regression tests. Reviewed and documented five further
+  High/Medium findings as accepted, already-mitigated patterns (reentrancy guard + checks-effects-
+  interactions on every `_settle` path, an intentional low-level-call ERC20 interface for
+  non-standard tokens, bounded bps rounding). `forge test`: 50/50 pass.
+- Ran `gosec` on the engine and found a real gap: `cmd/seed` (creates demo trader accounts with a
+  publicly documented password) had no production guard, unlike its sibling seeders. Added the same
+  `Environment == "production"` refusal to `cmd/seed`, `cmd/seed-dispute`, `cmd/seed-pilot` and
+  `cmd/seed-settlement`. Annotated the remaining sandbox-RNG and test-fixture findings with `#nosec`
+  and a reason instead of leaving them to reappear unexplained on every future scan.
+- Ran `npm audit` on the frontend: 0 vulnerabilities.
+- Full regression after all fixes: `go build`, `go vet`, `go test ./...` (all packages),
+  `forge test` (50/50) all clean.
+- Known limits: `gosec`'s SSA-based analyzers panic on several packages under this Go toolchain
+  (AST-based rules still ran); no CI pipeline runs these scans automatically yet (tracked in
+  `STATUS.md`); the independent contract/engine review in `PHASE5_INDEPENDENT_SECURITY_REVIEW.md`
+  is still `PENDING` — none of today's tooling substitutes for it.

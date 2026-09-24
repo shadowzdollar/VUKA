@@ -48,7 +48,8 @@ func (r *SandboxRail) outcome() string {
 	case "success", "fail", "timeout":
 		return r.Mode
 	}
-	if r.FailRate > 0 && rand.Float64() < r.FailRate { //nolint:gosec // simulation only
+	// #nosec G404 -- sandbox failure-rate jitter, not security-sensitive
+	if r.FailRate > 0 && rand.Float64() < r.FailRate {
 		return "fail"
 	}
 	return "success"
@@ -57,7 +58,7 @@ func (r *SandboxRail) outcome() string {
 func (r *SandboxRail) ref(reference string, amount float64) string {
 	now := time.Now()
 	if reference == "" {
-		return fmt.Sprintf("%s-%d-%06x", r.Prefix, now.UnixNano(), rand.Uint32()&0xffffff) //nolint:gosec
+		return fmt.Sprintf("%s-%d-%06x", r.Prefix, now.UnixNano(), rand.Uint32()&0xffffff) // #nosec G404 -- human-readable reference suffix, not a security token
 	}
 	seed := uint32(0)
 	for i := 0; i < len(reference); i++ {

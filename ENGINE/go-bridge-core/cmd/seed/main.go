@@ -47,6 +47,12 @@ func main() {
 		log.Error("config", "err", err)
 		os.Exit(1)
 	}
+	// These are demo accounts with a well-known, publicly documented fallback password
+	// (VUKA_DEMO_TRADER_PASSWORD, default "vuka-demo-2026"); never create them in production.
+	if cfg.Environment == "production" {
+		log.Error("refusing to seed demo traders in production")
+		os.Exit(1)
+	}
 	if cfg.DatabaseURL == "" {
 		log.Error("VUKA_DATABASE_URL is required")
 		os.Exit(1)
@@ -71,7 +77,7 @@ func main() {
 	}
 	demoPassword := os.Getenv("VUKA_DEMO_TRADER_PASSWORD")
 	if demoPassword == "" {
-		demoPassword = "vuka-demo-2026"
+		demoPassword = "vuka-demo-2026" // #nosec G101 -- publicly documented demo-only default; production is refused above
 	}
 
 	for _, d := range demoTraders {

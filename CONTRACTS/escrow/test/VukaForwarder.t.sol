@@ -36,6 +36,14 @@ contract MockTokenMeta {
     }
 }
 
+/// Forces ETH into `target` via SELFDESTRUCT, which bypasses receive/fallback entirely — the only
+/// realistic way to give a contract a balance it never explicitly accepted.
+contract Sacrifice {
+    constructor(address payable target) payable {
+        selfdestruct(target);
+    }
+}
+
 contract VukaForwarderTest is Test {
     VukaForwarder private forwarder;
     MockTokenMeta private token;
@@ -165,6 +173,82 @@ contract VukaForwarderTest is Test {
         vm.prank(relayer);
         vm.expectRevert(VukaForwarder.InvalidSignature.selector);
         forwarder.execute(req, sig);
+    }
+
+    /// A relayer submitting less (or more) ETH than the signer authorised must be rejected outright —
+    /// otherwise a mismatch could let ETH accumulate in the forwarder for a later, unrelated request
+    /// to sweep out. See ValueMismatch in VukaForwarder.execute.
+    function testExecuteRejectsValueMismatch() public {
+        VukaForwarder.ForwardRequest memory req = VukaForwarder.ForwardRequest({
+            from: buyer,
+            to: address(escrow),
+            value: 1 ether,
+            gas: 500000,
+            nonce: forwarder.getNonce(buyer),
+            data: "",
+            deadline: block.timestamp + 1 hours
+        });
+        bytes memory sig = _signRequest(req, buyerPrivateKey);
+
+        vm.deal(relayer, 10 ether);
+        vm.prank(relayer);
+        vm.expectRevert(VukaForwarder.ValueMismatch.selector);
+        forwarder.execute{ value: 0.5 ether }(req, sig);
+
+        // Nothing was accepted or spent, and the signer's nonce did not advance.
+        assertEq(address(forwarder).balance, 0);
+        assertEq(forwarder.getNonce(buyer), 0);
+    }
+
+    /// A resting balance forced into the forwarder (e.g. via selfdestruct, which does not run
+    /// receive/fallback) must never be reachable by an unrelated signed request.
+    function testForcedEthCannotBeSweptByUnrelatedRequest() public {
+        // Force 1 ether into the forwarder without going through execute() — selfdestruct bypasses
+        // receive/fallback, so this is the one way ETH can land here outside a signed request.
+        vm.deal(address(this), 1 ether);
+        new Sacrifice{ value: 1 ether }(payable(address(forwarder)));
+        assertEq(address(forwarder).balance, 1 ether);
+
+        VukaForwarder.ForwardRequest memory req = VukaForwarder.ForwardRequest({
+            from: buyer,
+            to: supplier,
+            value: 1 ether,
+            gas: 100000,
+            nonce: forwarder.getNonce(buyer),
+            data: "",
+            deadline: block.timestamp + 1 hours
+        });
+        bytes memory sig = _signRequest(req, buyerPrivateKey);
+
+        // The buyer signed a request for 1 ether, but never funded it — the relayer sends 0.
+        vm.prank(relayer);
+        vm.expectRevert(VukaForwarder.ValueMismatch.selector);
+        forwarder.execute(req, sig);
+
+        assertEq(address(forwarder).balance, 1 ether);
+    }
+
+    /// The matching-value path (the one legitimate use of `value`) still works after the fix.
+    function testExecuteForwardsMatchingValue() public {
+        vm.deal(relayer, 10 ether);
+        uint256 supplierBefore = supplier.balance;
+
+        VukaForwarder.ForwardRequest memory req = VukaForwarder.ForwardRequest({
+            from: buyer,
+            to: supplier,
+            value: 1 ether,
+            gas: 100000,
+            nonce: forwarder.getNonce(buyer),
+            data: "",
+            deadline: block.timestamp + 1 hours
+        });
+        bytes memory sig = _signRequest(req, buyerPrivateKey);
+
+        vm.prank(relayer);
+        (bool success,) = forwarder.execute{ value: 1 ether }(req, sig);
+        assertTrue(success);
+        assertEq(supplier.balance, supplierBefore + 1 ether);
+        assertEq(address(forwarder).balance, 0);
     }
 
     function testFactoryDeployment() public {

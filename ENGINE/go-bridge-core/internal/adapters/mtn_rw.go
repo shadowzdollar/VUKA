@@ -127,7 +127,8 @@ func (m *MTNAdapter) outcome() string {
 	case "success", "fail", "timeout":
 		return m.Mode
 	}
-	if m.FailRate > 0 && rand.Float64() < m.FailRate { //nolint:gosec // simulation only
+	// #nosec G404 -- sandbox failure-rate jitter, not security-sensitive //nolint:gosec
+	if m.FailRate > 0 && rand.Float64() < m.FailRate {
 		return "fail"
 	}
 	return "success"
@@ -138,7 +139,8 @@ func (m *MTNAdapter) outcome() string {
 func mtnExternalRef(reference string, amount float64) string {
 	now := time.Now()
 	if reference == "" {
-		return fmt.Sprintf("MTN-%d-%06x", now.UnixNano(), rand.Uint32()&0xffffff) //nolint:gosec
+		// #nosec G404 -- human-readable reference suffix, not a security token //nolint:gosec
+		return fmt.Sprintf("MTN-%d-%06x", now.UnixNano(), rand.Uint32()&0xffffff)
 	}
 	seed := uint32(0)
 	for i := 0; i < len(reference); i++ {

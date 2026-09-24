@@ -20,6 +20,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if cfg.Environment == "production" {
+		log.Fatal("refusing to seed a synthetic pilot fixture in production")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)

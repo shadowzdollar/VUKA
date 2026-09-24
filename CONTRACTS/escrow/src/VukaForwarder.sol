@@ -25,6 +25,7 @@ contract VukaForwarder {
     error InvalidSignature();
     error DeadlineExpired();
     error ExecutionFailed(bytes reason);
+    error ValueMismatch();
 
     event TransactionForwarded(
         address indexed from, address indexed to, uint256 nonce, bool success
@@ -86,6 +87,11 @@ contract VukaForwarder {
     {
         if (!verify(req, signature)) revert InvalidSignature();
         if (block.timestamp > req.deadline) revert DeadlineExpired();
+        // The relayer must fund exactly the value the signer authorised. Without this check the
+        // forwarder could accumulate a resting ETH balance (an overpayment, or ETH forced in via
+        // selfdestruct) that a later, unrelated signed request could then sweep to an arbitrary
+        // `req.to` — the signer of that later request never authorised spending someone else's ETH.
+        if (msg.value != req.value) revert ValueMismatch();
 
         _nonces[req.from]++;
 
