@@ -14,50 +14,6 @@ import { Tilt } from "./tilt";
 const W = 600;
 const H = 640;
 
-/** Flags strung on a line, swaying independently. Decorative. */
-function Bunting({ codes }: { codes: string[] }) {
-  const n = codes.length;
-  const span = 1000;
-  const y = (x: number) => 10 + 4 * (((x / span) * 2 - 1) ** 2 * -1 + 1) * 6; // gentle catenary
-  return (
-    <svg viewBox="0 0 1000 96" className="h-auto w-full" aria-hidden="true" focusable="false">
-      <path
-        d={`M0 ${y(0)} ${Array.from({ length: 41 }, (_, i) => `L${i * 25} ${y(i * 25).toFixed(1)}`).join(" ")}`}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
-      {codes.map((c, i) => {
-        const cx = 50 + (i * (span - 100)) / (n - 1);
-        const top = y(cx);
-        return (
-          <g
-            key={c}
-            className="sway"
-            style={{ transformOrigin: `${cx}px ${top}px`, animationDelay: `${i * -0.45}s` }}
-          >
-            <clipPath id={`bunt-${c}`}>
-              <polygon points={`${cx - 34},${top} ${cx + 34},${top} ${cx},${top + 64}`} />
-            </clipPath>
-            <g clipPath={`url(#bunt-${c})`}>
-              <g transform={`translate(${cx - 48} ${top - 6}) scale(${96 / 900})`}>
-                <FlagArt code={c} id={`bunt-${c}-a`} />
-              </g>
-            </g>
-            <polygon
-              points={`${cx - 34},${top} ${cx + 34},${top} ${cx},${top + 64}`}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1"
-              strokeOpacity="0.6"
-            />
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
 /** A circular passport stamp: the flag in the centre, the country and currency set around the rim. */
 function Stamp({ m, active, tilt }: { m: PublicCountry; active: boolean; tilt: number }) {
   const id = `ring-${m.code}`;
@@ -161,15 +117,6 @@ export function Atlas() {
 
   return (
     <section id="atlas" className="scroll-mt-20 overflow-hidden border-t border-border bg-muted/30">
-      <div className="text-foreground/80">
-        <Bunting
-          codes={
-            markets.length
-              ? markets.map((m) => m.code)
-              : ["RW", "KE", "UG", "TZ", "GH", "NG", "SN", "ET", "ZM", "ZA"]
-          }
-        />
-      </div>
       <div className="mx-auto max-w-7xl px-4 pb-20 pt-10 sm:px-6">
         <Reveal>
           <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">

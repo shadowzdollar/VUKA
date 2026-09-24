@@ -183,3 +183,31 @@ limitations, and the next verified step for the long-term VUKA platform.
   (AST-based rules still ran); no CI pipeline runs these scans automatically yet (tracked in
   `STATUS.md`); the independent contract/engine review in `PHASE5_INDEPENDENT_SECURITY_REVIEW.md`
   is still `PENDING` — none of today's tooling substitutes for it.
+
+## 2026-09-24 (landing page: replace flag bunting with an institutions/business gallery)
+
+- Removed the triangular flag bunting (`Bunting` in `landing/atlas.tsx`) — decorative only, no
+  content.
+- Added `landing/network.tsx`: a two-part "network in view" gallery placed between the trust-score
+  lab and the atlas of markets. Left: a regulatory-landscape list (flag, market, the market's actual
+  central bank, factual and sourced from public knowledge) with an explicit independence note (no
+  licence, partnership or endorsement claimed). Right: an 8-category business-sector gallery
+  (agriculture, coffee, textiles, wholesale/retail, logistics, manufacturing, construction
+  materials, electronics) using outline icons, captioned as illustrative categories, not customer
+  logos.
+- Decided **not** to source or reproduce real bank or company logos from the internet: doing so on
+  a page that also carries "sandbox, not a partnership" disclaimers elsewhere would contradict that
+  honesty stance and risks implying an endorsement or partnership that does not exist (the same
+  reasoning already applied to the AU emblem and the framework seals). Used original, labelled
+  illustrative content instead.
+- Added `CENTRAL_BANKS` to `lib/markets.ts` (the ten launch markets' real, public central bank
+  names, for factual context only).
+- Fixed two bugs found while building this: (1) a CSS Grid without an explicit `grid-cols-1` base
+  class was sizing its implicit single-column track to content instead of the container below the
+  `lg:` breakpoint, overflowing 375px viewports by ~10-70px — fixed by adding the explicit class,
+  the general fix for this class of bug wherever an `lg:grid-cols-[...]` grid has no unprefixed
+  column count; (2) replaced a fragile, breakpoint-specific `nth-child` last-in-row border removal
+  scheme with a robust top/left-border grid-line technique that needs no per-breakpoint math.
+- Verified: `tsc`, ESLint (0 errors), `vite build` clean; browser + axe (WCAG 2/2.1 A/AA): bunting
+  gone, gallery content and both independence notes present, 0 violations light/dark/375px, no
+  mobile overflow.

@@ -5,6 +5,7 @@ import { Estimator } from "./landing/estimator";
 import { Hero } from "./landing/hero";
 import { Journey } from "./landing/journey";
 import { MobileSection } from "./landing/mobile";
+import { NetworkGallery } from "./landing/network";
 import {
   CtaBand,
   Comparison,
@@ -39,6 +40,7 @@ export function Landing() {
         <MobileSection />
         <Features />
         <TrustLab />
+        <NetworkGallery />
         <Suspense
           fallback={
             <div className="min-h-[900px] border-t border-border bg-muted/30" aria-hidden="true" />

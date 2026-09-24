@@ -25,3 +25,18 @@ export const REGION_NAMES: Record<string, string> = {
 /** Corridor fee in basis points between two markets, mirroring the engine's rule (same group 0.80%, else 1.20%). */
 export const corridorFeeBps = (regionA: string, regionB: string) =>
   regionA === regionB ? 80 : 120;
+
+/** Each launch market's central bank, for factual context only — VUKA is not licensed, endorsed or
+ * affiliated with any of these institutions. Named by their public, official titles. */
+export const CENTRAL_BANKS: Record<string, string> = {
+  RW: "National Bank of Rwanda",
+  KE: "Central Bank of Kenya",
+  UG: "Bank of Uganda",
+  TZ: "Bank of Tanzania",
+  GH: "Bank of Ghana",
+  NG: "Central Bank of Nigeria",
+  SN: "Central Bank of West African States",
+  ET: "National Bank of Ethiopia",
+  ZM: "Bank of Zambia",
+  ZA: "South African Reserve Bank",
+};
