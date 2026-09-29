@@ -5,6 +5,42 @@ A living hand-off note. Newest day first; each day adds a section at the top. Fo
 
 ---
 
+## 2026-09-29 — day 4: ISO 20022 statements, audit-export fix, then a direction change
+
+**Morning:** asked to work through the agreement-free backlog broadly rather than one item at a
+time. Started on standards/interoperability and found pacs.002 (payment status) was already fully
+built in `ENGINE/python-iso-gateway` — genuinely missing was **camt.053** (account statements).
+
+### What was built and shipped
+
+- `GET /api/accounts/{id}/statement` — an ISO 20022 **camt.053.001.08** Bank-to-Customer Statement
+  (XML by default, `?format=json` for the UI), built server-side from the real ledger. Opening
+  balance = entries before the window; closing = opening + entries in it; both derived from the
+  same double-entry data the ledger already guarantees. 4 new tests (balance reconciliation across
+  adjacent windows, XML well-formedness, range validation).
+- A real bug found and fixed while wiring this up: the operator activity **CSV export was silently
+  capped at 200 rows** — a regulator asking for a full period's audit trail would get a truncated
+  file with no indication it was cut off. Root cause was in `listActivity` itself (any limit outside
+  1–200 fell back to 50, rather than clamping to 200); fixed at the source, and the export now pages
+  through everything up to a documented 100,000-row cap. New regression test proves it.
+- A "Statement" download button on each wallet card, using the ISO calls above.
+- `go test ./...` (all packages), `tsc`, ESLint, both builds — clean.
+
+### Direction change, mid-session
+
+The user left the next instruction **inside this file** (a direct edit to `STATUS.md`, not a chat
+message — worth remembering that this file can double as a channel). Paraphrased: stop treating
+this as a backend checklist to clear in one sweep; the AU submission needs the full product, not an
+MVP; the next 2-3 days are about the **frontend** — many more pages (100+), built deliberately,
+page by page, "as a developer assigned a task", not rushed all at once.
+
+**What this means going forward:** the agreement-free backend backlog (OpenAPI spec, more of the 54
+markets, more languages, service worker, load testing, backup/restore drill, status history) is
+paused, not abandoned — pick it back up after the frontend push, or whenever asked. See the next
+session's entry (added at the top of this file) for what the frontend work actually became.
+
+---
+
 ## 2026-09-29 — day 3: CI pipeline (no-agreement-needed backlog item #1)
 
 **Context:** asked directly whether everything VUKA "needs" was built — answer was no, with an
@@ -187,3 +223,10 @@ Ordered by how much trust each buys from telecoms, regulators and the AU. Nothin
   snapshot (see `git log`). Nothing has been pushed.
 - `FRONTEND/bun.lock` and `bunfig.toml` were removed (they only referenced Lovable packages); the project uses
   npm and `package-lock.json`.
+
+
+
+
+
+
+and now what we gonnad do will take at least, 2-3 days, and that is dealing with the frontend, because AU doesnt need mvp it needs the full projects, so now the time is to think bigger and we upgrade page by page and we make multiple pages(100+). and now we have to change the mindset from building things as assisstant to building as developer assigned task, so think deeper and not all implementation at once we have time please let the remaining time we deal with fronted, friendlyness, attractive and more about it.

@@ -7,6 +7,7 @@
 //	GET    /api/users/{id}/accounts       list a trader's accounts
 //	GET    /api/accounts/{id}             fetch an account
 //	GET    /api/accounts/{id}/balance     derived balance (SUM of ledger entries)
+//	GET    /api/accounts/{id}/statement   ISO 20022 camt.053 (default) or JSON account statement
 //	POST   /api/accounts/{id}/fund        credit account with external cash-in
 //	POST   /api/transfers                 initiate idempotent transfer
 //	POST   /api/transfers/cross-border    initiate idempotent cross-currency transfer
@@ -349,6 +350,7 @@ func (s *Server) handler(corsOrigins []string) http.Handler {
 	s.mux.HandleFunc("GET /api/invoices/{id}", s.handleGetInvoice)
 	s.mux.HandleFunc("GET /api/accounts/{id}", s.handleGetAccount)
 	s.mux.HandleFunc("GET /api/accounts/{id}/balance", s.handleGetBalance)
+	s.mux.HandleFunc("GET /api/accounts/{id}/statement", s.handleAccountStatement)
 	s.mux.HandleFunc("POST /api/accounts/{id}/fund", s.handleFundAccount)
 	s.mux.HandleFunc("POST /api/transfers", s.handleCreateTransfer)
 	s.mux.HandleFunc("POST /api/transfers/cross-border", s.handleCreateCrossBorderTransfer)
@@ -489,6 +491,7 @@ func (s *Server) handler(corsOrigins []string) http.Handler {
 			{"GET", "/api/invoices/{id}", http.HandlerFunc(s.handleGetInvoice)},
 			{"GET", "/api/accounts/{id}", http.HandlerFunc(s.handleGetAccount)},
 			{"GET", "/api/accounts/{id}/balance", http.HandlerFunc(s.handleGetBalance)},
+			{"GET", "/api/accounts/{id}/statement", http.HandlerFunc(s.handleAccountStatement)},
 			{"POST", "/api/accounts/{id}/fund", http.HandlerFunc(s.handleFundAccount)},
 			{"POST", "/api/transfers", http.HandlerFunc(s.handleCreateTransfer)},
 			{"POST", "/api/transfers/cross-border", http.HandlerFunc(s.handleCreateCrossBorderTransfer)},
@@ -841,22 +844,38 @@ func (s *Server) handleExportActivity(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "authentication_required", "operator authentication is required")
 		return
 	}
-	activities, _, err := s.auth.listActivity(r.Context(), 200, 0,
-		r.URL.Query().Get("action"), r.URL.Query().Get("search"),
-		r.URL.Query().Get("from"), r.URL.Query().Get("to"))
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "activity_error", err.Error())
-		return
-	}
+	action := r.URL.Query().Get("action")
+	search := r.URL.Query().Get("search")
+	from := r.URL.Query().Get("from")
+	to := r.URL.Query().Get("to")
+
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="operator-activity.csv"`)
 	writer := csv.NewWriter(w)
 	if err := writer.Write([]string{"id", "actor", "role", "action", "resource", "details", "created_at"}); err != nil {
 		return
 	}
-	for _, item := range activities {
-		if err := writer.Write([]string{item.ID, item.Actor, item.Role, item.Action, item.Resource, item.Details, item.CreatedAt}); err != nil {
+	// A regulator's export can span a period much longer than any single page: fetch every page,
+	// not just the first, up to exportRowCap rows as a sanity limit (that's over an hour of activity
+	// at one event/second, which is far beyond this engine's current traffic).
+	// pageSize must not exceed listActivity's own internal clamp (it silently falls back to 50 for
+	// any limit outside (0, 200], rather than clamping to 200 — so 200 is the real per-page max).
+	const pageSize, exportRowCap = 200, 100_000
+	rows := 0
+	for offset := 0; ; offset += pageSize {
+		page, _, err := s.auth.listActivity(r.Context(), pageSize, offset, action, search, from, to)
+		if err != nil {
+			s.log.Error("activity export", "err", err)
 			return
+		}
+		for _, item := range page {
+			if err := writer.Write([]string{item.ID, item.Actor, item.Role, item.Action, item.Resource, item.Details, item.CreatedAt}); err != nil {
+				return
+			}
+		}
+		rows += len(page)
+		if len(page) < pageSize || rows >= exportRowCap {
+			break
 		}
 	}
 	writer.Flush()
@@ -1102,6 +1121,57 @@ func (s *Server) handleGetBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, balance)
+}
+
+// handleAccountStatement returns an account's ledger activity over a period, as either an ISO
+// 20022 camt.053.001.08 statement (default — the format a bank or auditor expects) or JSON
+// (?format=json, for the trader UI). Query params: from, to (RFC3339; default: the last 30 days).
+func (s *Server) handleAccountStatement(w http.ResponseWriter, r *http.Request) {
+	accountID := r.PathValue("id")
+	if traderID, ok := traderIDFromRequest(r); ok && !s.ownsAccount(r.Context(), traderID, accountID) {
+		writeError(w, http.StatusForbidden, "forbidden", "the authenticated trader cannot access this account")
+		return
+	}
+
+	to := time.Now().UTC()
+	from := to.AddDate(0, 0, -30)
+	if v := r.URL.Query().Get("to"); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_to", "to must be RFC3339, e.g. 2026-09-01T00:00:00Z")
+			return
+		}
+		to = t
+	}
+	if v := r.URL.Query().Get("from"); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_from", "from must be RFC3339, e.g. 2026-08-01T00:00:00Z")
+			return
+		}
+		from = t
+	}
+	if !from.Before(to) {
+		writeError(w, http.StatusBadRequest, "invalid_range", "from must be before to")
+		return
+	}
+
+	stmt, err := s.ledger.Statement(r.Context(), accountID, from, to)
+	if err != nil {
+		s.mapServiceError(w, err)
+		return
+	}
+
+	if r.URL.Query().Get("format") == "json" {
+		writeJSON(w, http.StatusOK, stmt)
+		return
+	}
+
+	xml := buildCamt053(stmt)
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="statement-%s-%s.xml"`,
+		accountID[:8], to.Format("20060102")))
+	_, _ = w.Write(xml)
 }
 
 func (s *Server) handleFundAccount(w http.ResponseWriter, r *http.Request) {

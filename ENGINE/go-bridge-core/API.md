@@ -16,6 +16,23 @@ and `GET /api/events` (SSE). `GET /healthz` is the liveness probe and does not
 consume rate-limit budget. The authoritative route list is in
 `internal/api/server.go`.
 
+### Account statements (ISO 20022 camt.053)
+
+* `GET /api/accounts/{id}/statement?from=&to=&format=` — an account's ledger activity over
+  `[from, to)` (RFC3339 timestamps; default: the last 30 days). Returns an
+  **ISO 20022 camt.053.001.08** Bank-to-Customer Statement XML by default, or JSON with
+  `?format=json`. The opening balance is every entry strictly before `from`; the closing balance is
+  the opening balance plus every entry in the window — always internally consistent, since both are
+  derived from the same `ledger_entries` table the double-entry ledger already guarantees balances
+  from. Subject to the same account-ownership check as `GET /api/accounts/{id}/balance`. This is
+  **not** XSD-validated (see `internal/api/camt053.go`'s `TestAccountStatement_Camt053*` tests for
+  what is checked: well-formedness and the mandatory elements).
+
+Audit export: `GET /api/activity/export` (operator/arbiter only) streams every matching
+`operator_activity` row as CSV, paging internally past `listActivity`'s 200-row-per-call limit (up
+to 100,000 rows per export) rather than returning only the first page — a regulator's export can
+cover a period with more than 200 events without silent truncation.
+
 Provider execution is a separate append-only evidence boundary:
 
 * `POST /api/provider-executions` claims and dispatches a normalized payout or

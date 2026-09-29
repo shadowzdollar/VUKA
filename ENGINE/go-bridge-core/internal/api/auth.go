@@ -288,8 +288,14 @@ func (s *AuthStore) recordActivity(ctx context.Context, operator Operator, actio
 }
 
 func (s *AuthStore) listActivity(ctx context.Context, limit, offset int, action, search, from, to string) ([]Activity, int, error) {
-	if limit <= 0 || limit > 200 {
+	// A request outside the page-size bounds is clamped to the nearest edge (200, or the default
+	// 50 for <= 0), not silently reset past it — a caller asking for more should get the maximum,
+	// not less than what they'd get with no limit at all.
+	switch {
+	case limit <= 0:
 		limit = 50
+	case limit > 200:
+		limit = 200
 	}
 	if offset < 0 {
 		offset = 0

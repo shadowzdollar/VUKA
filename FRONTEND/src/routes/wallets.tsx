@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { FileDown } from "lucide-react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -23,7 +24,7 @@ import {
 import { DataTable } from "@/components/vuka/data-table";
 import { QueryBoundary, Loading, ErrorState } from "@/components/vuka/query-state";
 import { Chip, Metric, PageHeader, Panel, Shell } from "@/components/vuka/shell";
-import { describeError, newIdempotencyKey } from "@/lib/api/client";
+import { describeError, download, newIdempotencyKey } from "@/lib/api/client";
 import { ledger } from "@/lib/api/endpoints";
 import type { Account, Transfer } from "@/lib/api/types";
 import { downloadCsv, money, shortId, when } from "@/lib/format";
@@ -146,7 +147,25 @@ function Wallets() {
                 key={a.id}
                 label={accountLabel(a)}
                 value={money(w.balances[a.id]?.amount ?? 0, a.currency)}
-                sub={<span className="font-mono">acct {shortId(a.id)}</span>}
+                sub={
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono">acct {shortId(a.id)}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void download(
+                          `/api/accounts/${a.id}/statement`,
+                          `vuka-statement-${shortId(a.id)}.xml`,
+                        ).catch((err) => toast.error(describeError(err)))
+                      }
+                      className="inline-flex items-center gap-1 text-foreground underline-offset-4 hover:underline"
+                      aria-label={`Download ${accountLabel(a)} statement (ISO 20022 camt.053)`}
+                    >
+                      <FileDown className="size-3" aria-hidden="true" />
+                      Statement
+                    </button>
+                  </div>
+                }
               />
             ))}
           </div>

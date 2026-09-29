@@ -514,6 +514,83 @@ func (s *Service) ListLedgerEntries(ctx context.Context, transferID string) ([]*
 	return entries, rows.Err()
 }
 
+// StatementEntry is one ledger movement as it appears on an account statement, with just enough
+// context from its parent transfer to be readable (a bare ledger_entries row is just a signed
+// amount and a transaction id).
+type StatementEntry struct {
+	LedgerEntry
+	TransferStatus TransactionStatus `json:"transfer_status"`
+	InvoiceNumber  *string           `json:"invoice_number,omitempty"`
+	Reference      *string           `json:"reference,omitempty"`
+}
+
+// Statement is an account's ledger activity over [From, To): the balance carried in from before
+// the period, every entry within it in order, and the balance carried out. ClosingBalance always
+// equals OpeningBalance plus the sum of Entries — this is checked by TestStatementBalances.
+type Statement struct {
+	Account        *Account         `json:"account"`
+	From           time.Time        `json:"from"`
+	To             time.Time        `json:"to"`
+	OpeningBalance float64          `json:"opening_balance"`
+	ClosingBalance float64          `json:"closing_balance"`
+	Entries        []StatementEntry `json:"entries"`
+}
+
+// Statement builds an account statement for [from, to). The opening balance is every entry
+// strictly before `from`; entries in the window are returned in order; the closing balance is
+// opening plus the sum of those entries — three independent queries that must agree, which is
+// exactly what TestStatementBalances checks against a hand-built ledger.
+func (s *Service) Statement(ctx context.Context, accountID string, from, to time.Time) (*Statement, error) {
+	account, err := s.GetAccount(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+
+	var opening float64
+	if err := s.pool.QueryRow(ctx, `
+		SELECT COALESCE(SUM(amount), 0) FROM ledger_entries
+		WHERE account_id = $1 AND created_at < $2`, accountID, from,
+	).Scan(&opening); err != nil {
+		return nil, fmt.Errorf("ledger: statement opening balance: %w", err)
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT le.id, le.transaction_id, le.account_id, le.amount, le.created_at,
+		       t.status, t.invoice_number, t.external_reference
+		FROM ledger_entries le
+		JOIN transactions t ON t.id = le.transaction_id
+		WHERE le.account_id = $1 AND le.created_at >= $2 AND le.created_at < $3
+		ORDER BY le.created_at, le.id`, accountID, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("ledger: statement entries: %w", err)
+	}
+	defer rows.Close()
+
+	closing := opening
+	entries := []StatementEntry{}
+	for rows.Next() {
+		var e StatementEntry
+		if err := rows.Scan(&e.ID, &e.TransactionID, &e.AccountID, &e.Amount, &e.CreatedAt,
+			&e.TransferStatus, &e.InvoiceNumber, &e.Reference); err != nil {
+			return nil, fmt.Errorf("ledger: statement scan entry: %w", err)
+		}
+		entries = append(entries, e)
+		closing += e.Amount
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("ledger: statement rows: %w", err)
+	}
+
+	return &Statement{
+		Account:        account,
+		From:           from,
+		To:             to,
+		OpeningBalance: opening,
+		ClosingBalance: closing,
+		Entries:        entries,
+	}, nil
+}
+
 // Ping verifies database connectivity. Used by the healthz endpoint.
 func (s *Service) Ping(ctx context.Context) error {
 	return s.pool.Ping(ctx)

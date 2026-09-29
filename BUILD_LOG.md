@@ -256,3 +256,31 @@ limitations, and the next verified step for the long-term VUKA platform.
   audit` 0 findings, `govulncheck`/`gosec`/`slither` all 0.
 - Known limits: the workflow has not yet run on GitHub — everything was verified locally with the
   same commands, but Actions itself only runs after a push, which wasn't done this session.
+
+## 2026-09-29 (ISO 20022 camt.053 account statements; audit-export pagination fix)
+
+- Added `GET /api/accounts/{id}/statement`: an ISO 20022 camt.053.001.08 Bank-to-Customer Statement
+  (XML default, `?format=json`), built server-side from `ledger_entries` — opening balance is every
+  entry before the window, closing is opening plus the window's entries, both derived from the same
+  table the ledger's balance guarantee already covers. New `ledger.Service.Statement` +
+  `internal/api/camt053.go`. 4 tests: balance reconciliation within a window and carried forward
+  into an adjacent one, XML well-formedness + mandatory elements, invalid-range 400.
+  Investigated first whether this duplicated existing work: pacs.002 (payment status) turned out to
+  already be fully implemented in `ENGINE/python-iso-gateway/app/iso20022/serializer.py` — camt.053
+  was the real gap.
+- Found and fixed a real bug while building the above: `GET /api/activity/export` fetched a single
+  200-row page regardless of how much activity matched the filter, silently truncating any export
+  longer than that — exactly the case a regulator asking for a full period would hit. Traced to
+  `AuthStore.listActivity`'s own clamp (`limit > 200` fell back to the *default* 50, not to 200);
+  fixed the clamp at the source and made the export page through results up to a documented
+  100,000-row cap. New regression test (`TestActivityExport_PagesBeyondTheOldTwoHundredRowCap`)
+  proves rows > 200 now come back, using a new `loginOperator` test helper (real login, real session
+  cookie) that other operator-endpoint tests can reuse.
+- `FRONTEND/src/routes/wallets.tsx`: a "Statement" download link on each account card, using the
+  existing `download()` client helper.
+- `API.md` updated with both endpoints.
+- Verified: `go build`, `go vet`, `go test ./...` (all packages), `gofmt` clean; `tsc`, ESLint,
+  `vite build` clean.
+- **Direction change mid-session** (left in `STATUS.md` directly): pausing the backend backlog
+  sweep to spend the next 2-3 days on the frontend — many more pages, built deliberately rather
+  than all at once. See `STATUS.md`'s 2026-09-29 "day 4" entry for the full context.
