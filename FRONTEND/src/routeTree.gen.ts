@@ -29,6 +29,7 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as TrustScoreRouteImport } from './routes/trust-score'
 import { Route as VerificationRouteImport } from './routes/verification'
 import { Route as WalletsRouteImport } from './routes/wallets'
+import { Route as WalletsIdRouteImport } from './routes/wallets.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -130,6 +131,11 @@ const WalletsRoute = WalletsRouteImport.update({
   path: '/wallets',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WalletsIdRoute = WalletsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => WalletsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -151,7 +157,8 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/trust-score': typeof TrustScoreRoute
   '/verification': typeof VerificationRoute
-  '/wallets': typeof WalletsRoute
+  '/wallets': typeof WalletsRouteWithChildren
+  '/wallets/$id': typeof WalletsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -173,7 +180,8 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/trust-score': typeof TrustScoreRoute
   '/verification': typeof VerificationRoute
-  '/wallets': typeof WalletsRoute
+  '/wallets': typeof WalletsRouteWithChildren
+  '/wallets/$id': typeof WalletsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -196,7 +204,8 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/trust-score': typeof TrustScoreRoute
   '/verification': typeof VerificationRoute
-  '/wallets': typeof WalletsRoute
+  '/wallets': typeof WalletsRouteWithChildren
+  '/wallets/$id': typeof WalletsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -221,6 +230,7 @@ export interface FileRouteTypes {
     | '/trust-score'
     | '/verification'
     | '/wallets'
+    | '/wallets/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -243,6 +253,7 @@ export interface FileRouteTypes {
     | '/trust-score'
     | '/verification'
     | '/wallets'
+    | '/wallets/$id'
   id:
     | '__root__'
     | '/'
@@ -265,6 +276,7 @@ export interface FileRouteTypes {
     | '/trust-score'
     | '/verification'
     | '/wallets'
+    | '/wallets/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -287,7 +299,7 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   TrustScoreRoute: typeof TrustScoreRoute
   VerificationRoute: typeof VerificationRoute
-  WalletsRoute: typeof WalletsRoute
+  WalletsRoute: typeof WalletsRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -432,8 +444,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WalletsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/wallets/$id': {
+      id: '/wallets/$id'
+      path: '/$id'
+      fullPath: '/wallets/$id'
+      preLoaderRoute: typeof WalletsIdRouteImport
+      parentRoute: typeof WalletsRoute
+    }
   }
 }
+
+interface WalletsRouteChildren {
+  WalletsIdRoute: typeof WalletsIdRoute
+}
+
+const WalletsRouteChildren: WalletsRouteChildren = {
+  WalletsIdRoute: WalletsIdRoute,
+}
+
+const WalletsRouteWithChildren =
+  WalletsRoute._addFileChildren(WalletsRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -455,7 +485,7 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   TrustScoreRoute: TrustScoreRoute,
   VerificationRoute: VerificationRoute,
-  WalletsRoute: WalletsRoute,
+  WalletsRoute: WalletsRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

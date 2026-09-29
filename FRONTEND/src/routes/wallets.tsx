@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileDown } from "lucide-react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,11 +24,11 @@ import {
 import { DataTable } from "@/components/vuka/data-table";
 import { QueryBoundary, Loading, ErrorState } from "@/components/vuka/query-state";
 import { Chip, Metric, PageHeader, Panel, Shell } from "@/components/vuka/shell";
-import { describeError, download, newIdempotencyKey } from "@/lib/api/client";
+import { describeError, newIdempotencyKey } from "@/lib/api/client";
 import { ledger } from "@/lib/api/endpoints";
 import type { Account, Transfer } from "@/lib/api/types";
 import { downloadCsv, money, shortId, when } from "@/lib/format";
-import { directionFor, useTransfers, useWallet } from "@/lib/trader-data";
+import { accountLabel, directionFor, useTransfers, useWallet } from "@/lib/trader-data";
 
 export const Route = createFileRoute("/wallets")({
   head: () => ({
@@ -47,9 +47,6 @@ export const Route = createFileRoute("/wallets")({
     </Shell>
   ),
 });
-
-const accountLabel = (a: Account) =>
-  `${a.type === "BUSINESS" ? "Business trade wallet" : a.type === "PERSONAL" ? "Personal wallet" : a.type} · ${a.currency}`;
 
 function statusTone(s: Transfer["status"]) {
   if (s === "SUCCESS") return "invert" as const;
@@ -143,30 +140,30 @@ function Wallets() {
         {(w) => (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {w.accounts.map((a) => (
-              <Metric
+              <Link
                 key={a.id}
-                label={accountLabel(a)}
-                value={money(w.balances[a.id]?.amount ?? 0, a.currency)}
-                sub={
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono">acct {shortId(a.id)}</span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void download(
-                          `/api/accounts/${a.id}/statement`,
-                          `vuka-statement-${shortId(a.id)}.xml`,
-                        ).catch((err) => toast.error(describeError(err)))
-                      }
-                      className="inline-flex items-center gap-1 text-foreground underline-offset-4 hover:underline"
-                      aria-label={`Download ${accountLabel(a)} statement (ISO 20022 camt.053)`}
-                    >
-                      <FileDown className="size-3" aria-hidden="true" />
-                      Statement
-                    </button>
-                  </div>
-                }
-              />
+                to="/wallets/$id"
+                params={{ id: a.id }}
+                className="block transition-colors hover:bg-accent/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                aria-label={`${accountLabel(a)}, ${money(w.balances[a.id]?.amount ?? 0, a.currency)}. View statement and history.`}
+              >
+                <Metric
+                  label={accountLabel(a)}
+                  value={money(w.balances[a.id]?.amount ?? 0, a.currency)}
+                  sub={
+                    <span className="flex items-center justify-between gap-2 font-mono">
+                      acct {shortId(a.id)}
+                      <span
+                        className="inline-flex items-center gap-1 text-foreground"
+                        aria-hidden="true"
+                      >
+                        <FileDown className="size-3" />
+                        Statement
+                      </span>
+                    </span>
+                  }
+                />
+              </Link>
             ))}
           </div>
         )}

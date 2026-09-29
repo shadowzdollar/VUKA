@@ -28,6 +28,7 @@ import type {
   ProviderStatus,
   QuoteResponse,
   ReconciliationStatus,
+  Statement,
   Recipient,
   RiskFlag,
   SettlementApproval,
@@ -74,6 +75,11 @@ export const ledger = {
       .get<{ accounts: Account[] | null }>(`/api/users/${userId}/accounts`)
       .then((r) => r.accounts ?? []),
   balance: (accountId: string) => api.get<Balance>(`/api/accounts/${accountId}/balance`),
+  account: (accountId: string) => api.get<Account>(`/api/accounts/${accountId}`),
+  /** JSON view of the same data the camt.053 download (`GET .../statement`, no `format` param)
+   * carries — used for on-page rendering; the XML is for a trader to hand to their bank/auditor. */
+  statement: (accountId: string, range: { from: string; to: string }) =>
+    api.get<Statement>(`/api/accounts/${accountId}/statement`, { ...range, format: "json" }),
   transfers: (userId: string, filter?: { account_id?: string; status?: string }) =>
     api
       .get<{ transfers: Transfer[] | null }>(`/api/users/${userId}/transfers`, filter)

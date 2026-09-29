@@ -72,6 +72,23 @@ export interface LedgerEntry {
   created_at: string;
 }
 
+export interface StatementEntry extends LedgerEntry {
+  transfer_status: string;
+  invoice_number?: string;
+  reference?: string;
+}
+
+/** `GET /api/accounts/{id}/statement?format=json` — see also `ledger.statementXmlUrl` for the
+ * ISO 20022 camt.053 download, which the engine returns by default (no `format` param). */
+export interface Statement {
+  account: Account;
+  from: string;
+  to: string;
+  opening_balance: number;
+  closing_balance: number;
+  entries: StatementEntry[];
+}
+
 export interface InvoiceItem {
   id: string;
   invoice_id: string;

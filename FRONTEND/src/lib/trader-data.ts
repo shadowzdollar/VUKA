@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { invoices, ledger, support } from "@/lib/api/endpoints";
 import type { Account, Balance, Transfer } from "@/lib/api/types";
+
 import { useTrader } from "@/lib/session";
 
 export interface Wallet {
@@ -57,3 +58,7 @@ export function directionFor(t: Transfer, ownAccountIds: Set<string>): "out" | "
   if (src && dst) return "internal";
   return src ? "out" : "in";
 }
+
+/** A human label for an account, consistent everywhere one is shown. */
+export const accountLabel = (a: Account): string =>
+  `${a.type === "BUSINESS" ? "Business trade wallet" : a.type === "PERSONAL" ? "Personal wallet" : a.type} · ${a.currency}`;
