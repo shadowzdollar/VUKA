@@ -59,7 +59,7 @@ export function Hero() {
 
   return (
     <section className="relative overflow-hidden">
-      <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 pb-16 pt-12 sm:px-6 lg:grid-cols-[1.05fr_1fr] lg:pb-24 lg:pt-20">
+      <div className="mx-auto grid items-center gap-10 px-4 pb-16 pt-12 sm:px-6 lg:px-10 2xl:px-16 lg:grid-cols-[1.05fr_1fr] lg:pb-24 lg:pt-20">
         <div>
           <div className="reveal is-in flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             <span aria-hidden="true" className="h-px w-10 bg-foreground" />

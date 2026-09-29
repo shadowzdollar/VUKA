@@ -91,7 +91,7 @@ export function SiteFooter() {
 
   return (
     <footer className="border-t border-border bg-muted/30" data-app-chrome>
-      <div className="mx-auto max-w-7xl px-4 pt-14 sm:px-6">
+      <div className="mx-auto px-4 pt-14 sm:px-6 lg:px-10 2xl:px-16">
         <div className="grid gap-12 lg:grid-cols-[1.3fr_2fr]">
           <div>
             <VukaLogo size="xl" tagline="Rise & Cross Over" />
@@ -202,7 +202,7 @@ export function SiteFooter() {
       <div aria-hidden="true" className="select-none overflow-hidden border-t border-border">
         <div
           data-word="vuka"
-          className="mx-auto max-w-7xl whitespace-nowrap px-4 text-center font-display text-[24vw] leading-[0.8] tracking-tight text-foreground/[0.06] before:content-[attr(data-word)] sm:px-6 lg:text-[15rem]"
+          className="mx-auto whitespace-nowrap px-4 text-center font-display text-[24vw] leading-[0.8] tracking-tight text-foreground/[0.06] before:content-[attr(data-word)] sm:px-6 lg:px-10 2xl:px-16 lg:text-[15rem]"
         />
       </div>
     </footer>

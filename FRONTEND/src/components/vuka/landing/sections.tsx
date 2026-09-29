@@ -25,7 +25,7 @@ export function Principles() {
   ];
   return (
     <div className="border-y border-border bg-muted/30">
-      <ul className="mx-auto grid max-w-7xl gap-px px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-4">
+      <ul className="mx-auto grid gap-px px-4 sm:grid-cols-2 sm:px-6 lg:px-10 2xl:px-16 lg:grid-cols-4">
         {items.map(([h, b]) => (
           <li key={h} className="flex gap-3 py-5 lg:px-4 lg:first:pl-0">
             <Check className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
@@ -44,7 +44,7 @@ export function Features() {
   const cell = "border border-border bg-card p-6 transition-colors hover:bg-accent/40";
   return (
     <section id="features" className="scroll-mt-20 border-t border-border">
-      <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
+      <div className="mx-auto px-4 py-20 sm:px-6 lg:px-10 2xl:px-16">
         <Reveal>
           <div className={kicker}>What is inside</div>
           <h2 className="mt-4 max-w-3xl font-display text-4xl leading-tight sm:text-5xl">
@@ -129,7 +129,7 @@ export function Markets() {
   const groups = Array.from(new Set(rows.map((r) => r.region)));
   return (
     <section id="markets" className="scroll-mt-20 border-t border-border bg-muted/30">
-      <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
+      <div className="mx-auto px-4 py-20 sm:px-6 lg:px-10 2xl:px-16">
         <Reveal>
           <div className={kicker}>Launch markets</div>
           <h2 className="mt-4 max-w-3xl font-display text-4xl leading-tight sm:text-5xl">
@@ -197,7 +197,7 @@ const STORIES = [
 export function Stories() {
   return (
     <section className="scroll-mt-20 border-t border-border">
-      <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
+      <div className="mx-auto px-4 py-20 sm:px-6 lg:px-10 2xl:px-16">
         <Reveal>
           <div className={kicker}>Illustrative stories</div>
           <h2 className="mt-4 max-w-3xl font-display text-4xl leading-tight sm:text-5xl">
@@ -270,7 +270,7 @@ function Mark({ v }: { v: boolean | "partial" }) {
 export function Comparison() {
   return (
     <section className="border-t border-border bg-muted/30">
-      <div className="mx-auto max-w-5xl px-4 py-20 sm:px-6">
+      <div className="mx-auto px-4 py-20 sm:px-6 lg:px-10 2xl:px-16">
         <Reveal>
           <div className={kicker}>How it compares</div>
           <h2 className="mt-4 font-display text-4xl leading-tight sm:text-5xl">
@@ -369,7 +369,7 @@ const FAQ: [string, string][] = [
 export function Faq() {
   return (
     <section id="faq" className="scroll-mt-20 border-t border-border">
-      <div className="mx-auto grid max-w-7xl gap-10 px-4 py-20 sm:px-6 lg:grid-cols-[1fr_1.6fr]">
+      <div className="mx-auto grid gap-10 px-4 py-20 sm:px-6 lg:px-10 2xl:px-16 lg:grid-cols-[1fr_1.6fr]">
         <Reveal>
           <div className={kicker}>Questions</div>
           <h2 className="mt-4 font-display text-4xl leading-tight sm:text-5xl">
@@ -403,7 +403,7 @@ export function Faq() {
 export function CtaBand() {
   return (
     <section className="bg-foreground text-background">
-      <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-8 px-4 py-20 sm:px-6 md:flex-row md:items-end">
+      <div className="mx-auto flex flex-col items-start justify-between gap-8 px-4 py-20 sm:px-6 lg:px-10 2xl:px-16 md:flex-row md:items-end">
         <div>
           <div className="font-mono text-[10px] uppercase tracking-[0.3em] opacity-70">
             Ready when you are

@@ -211,3 +211,21 @@ limitations, and the next verified step for the long-term VUKA platform.
 - Verified: `tsc`, ESLint (0 errors), `vite build` clean; browser + axe (WCAG 2/2.1 A/AA): bunting
   gone, gallery content and both independence notes present, 0 violations light/dark/375px, no
   mobile overflow.
+
+## 2026-09-29 (landing page: fill wide screens, no more full-width containers capped at 1280px)
+
+- Removed the `max-w-7xl`/`max-w-5xl` page-width cap from every landing-page section (hero,
+  principles, journey, estimator, escrow lab, mobile section, features, trust-score lab, network
+  gallery, atlas, markets, frameworks, stories, comparison, FAQ, CTA band) plus the shared site
+  header and footer, so content actually reaches the edges of wide screens instead of sitting in a
+  centred 1280px column with large empty side margins.
+- Added roomier gutters at large breakpoints (`lg:px-10 2xl:px-16`) so content doesn't touch the
+  viewport edge on an ultrawide monitor; prose elements (headings/paragraphs) keep their own inner
+  `max-w-3xl`/`max-w-2xl` caps for readability, so line length stays sane even though the section
+  itself is full width.
+- Left untouched: fixed-size decorative/interactive elements sized deliberately (`max-w-[600px]`
+  globe, `max-w-[560px]` atlas map, `max-w-[520px]` journey paper stack) — these are not page-width
+  containers and widening them would distort the illustration.
+- Verified: `tsc`, ESLint (0 errors), `vite build` clean; browser + axe (WCAG 2/2.1 A/AA) at 375px,
+  1440px, 1920px and 2560px — 0 violations at every width; hero heading now starts ~64px from the
+  edge at 2560px (was previously centred with a ~500px empty margin); no mobile overflow.

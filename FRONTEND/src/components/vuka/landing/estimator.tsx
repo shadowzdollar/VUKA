@@ -68,7 +68,7 @@ export function Estimator() {
 
   return (
     <section id="estimate" className="scroll-mt-20 border-t border-border">
-      <div className="mx-auto grid max-w-7xl gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[1fr_1.1fr]">
+      <div className="mx-auto grid gap-12 px-4 py-20 sm:px-6 lg:px-10 2xl:px-16 lg:grid-cols-[1fr_1.1fr]">
         <Reveal>
           <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             Cost estimator

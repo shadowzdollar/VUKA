@@ -79,7 +79,7 @@ export function TrustLab() {
 
   return (
     <section id="trust" className="scroll-mt-20 border-t border-border bg-muted/30">
-      <div className="mx-auto grid max-w-7xl gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[1fr_1.2fr]">
+      <div className="mx-auto grid gap-12 px-4 py-20 sm:px-6 lg:px-10 2xl:px-16 lg:grid-cols-[1fr_1.2fr]">
         <Reveal>
           <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             Trust score lab

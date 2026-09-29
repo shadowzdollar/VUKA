@@ -117,7 +117,7 @@ export function Atlas() {
 
   return (
     <section id="atlas" className="scroll-mt-20 overflow-hidden border-t border-border bg-muted/30">
-      <div className="mx-auto max-w-7xl px-4 pb-20 pt-10 sm:px-6">
+      <div className="mx-auto px-4 pb-20 pt-10 sm:px-6 lg:px-10 2xl:px-16">
         <Reveal>
           <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             The atlas of markets

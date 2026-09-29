@@ -33,7 +33,7 @@ export function NetworkGallery() {
 
   return (
     <div className="border-b border-border bg-background">
-      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6">
+      <div className="mx-auto px-4 py-16 sm:px-6 lg:px-10 2xl:px-16">
         <Reveal>
           <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             The network in view
