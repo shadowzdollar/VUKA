@@ -175,7 +175,10 @@ function TraderBell() {
   const unread = (q.data ?? []).filter((n) => !n.read_at).length;
   return (
     <Button asChild variant="ghost" size="icon" className="relative size-9 rounded-none">
-      <Link to="/" aria-label={`${t("shell.notifications")}${unread ? ` (${unread})` : ""}`}>
+      <Link
+        to="/notifications"
+        aria-label={`${t("shell.notifications")}${unread ? ` (${unread})` : ""}`}
+      >
         <Bell className="size-4" aria-hidden="true" />
         {unread > 0 ? (
           <span

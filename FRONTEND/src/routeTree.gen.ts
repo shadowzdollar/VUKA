@@ -18,6 +18,7 @@ import { Route as CorridorsRouteImport } from './routes/corridors'
 import { Route as DisputesRouteImport } from './routes/disputes'
 import { Route as EscrowRouteImport } from './routes/escrow'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as SecurityRouteImport } from './routes/security'
@@ -75,6 +76,11 @@ const EscrowRoute = EscrowRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotificationsRoute = NotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -153,6 +159,7 @@ export interface FileRoutesByFullPath {
   '/disputes': typeof DisputesRoute
   '/escrow': typeof EscrowRoute
   '/login': typeof LoginRoute
+  '/notifications': typeof NotificationsRoute
   '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
   '/security': typeof SecurityRoute
@@ -177,6 +184,7 @@ export interface FileRoutesByTo {
   '/disputes': typeof DisputesRoute
   '/escrow': typeof EscrowRoute
   '/login': typeof LoginRoute
+  '/notifications': typeof NotificationsRoute
   '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
   '/security': typeof SecurityRoute
@@ -201,6 +209,7 @@ export interface FileRoutesById {
   '/disputes': typeof DisputesRoute
   '/escrow': typeof EscrowRoute
   '/login': typeof LoginRoute
+  '/notifications': typeof NotificationsRoute
   '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
   '/security': typeof SecurityRoute
@@ -227,6 +236,7 @@ export interface FileRouteTypes {
     | '/disputes'
     | '/escrow'
     | '/login'
+    | '/notifications'
     | '/privacy'
     | '/register'
     | '/security'
@@ -251,6 +261,7 @@ export interface FileRouteTypes {
     | '/disputes'
     | '/escrow'
     | '/login'
+    | '/notifications'
     | '/privacy'
     | '/register'
     | '/security'
@@ -274,6 +285,7 @@ export interface FileRouteTypes {
     | '/disputes'
     | '/escrow'
     | '/login'
+    | '/notifications'
     | '/privacy'
     | '/register'
     | '/security'
@@ -299,6 +311,7 @@ export interface RootRouteChildren {
   DisputesRoute: typeof DisputesRoute
   EscrowRoute: typeof EscrowRoute
   LoginRoute: typeof LoginRoute
+  NotificationsRoute: typeof NotificationsRoute
   PrivacyRoute: typeof PrivacyRoute
   RegisterRoute: typeof RegisterRoute
   SecurityRoute: typeof SecurityRoute
@@ -375,6 +388,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notifications': {
+      id: '/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof NotificationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -494,6 +514,7 @@ const rootRouteChildren: RootRouteChildren = {
   DisputesRoute: DisputesRoute,
   EscrowRoute: EscrowRoute,
   LoginRoute: LoginRoute,
+  NotificationsRoute: NotificationsRoute,
   PrivacyRoute: PrivacyRoute,
   RegisterRoute: RegisterRoute,
   SecurityRoute: SecurityRoute,

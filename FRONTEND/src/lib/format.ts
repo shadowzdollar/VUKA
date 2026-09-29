@@ -28,6 +28,24 @@ export function day(iso?: string | null): string {
   return iso ? iso.slice(0, 10) : "—";
 }
 
+/** "3m ago", "2h ago", "5d ago" — falls back to the absolute date past a week, so an old item
+ * doesn't read as a vague "52w ago". */
+export function relativeTime(iso?: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const seconds = Math.round((Date.now() - d.getTime()) / 1000);
+  if (seconds < 0) return when(iso);
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return when(iso);
+}
+
 export function shortId(id?: string | null, n = 8): string {
   if (!id) return "—";
   return id.length > n ? id.slice(0, n) : id;
