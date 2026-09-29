@@ -228,5 +228,3 @@ Ordered by how much trust each buys from telecoms, regulators and the AU. Nothin
 
 
 
-
-and now what we gonnad do will take at least, 2-3 days, and that is dealing with the frontend, because AU doesnt need mvp it needs the full projects, so now the time is to think bigger and we upgrade page by page and we make multiple pages(100+). and now we have to change the mindset from building things as assisstant to building as developer assigned task, so think deeper and not all implementation at once we have time please let the remaining time we deal with fronted, friendlyness, attractive and more about it.

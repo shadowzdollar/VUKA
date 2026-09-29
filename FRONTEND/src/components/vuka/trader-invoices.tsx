@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ import { Chip, Metric, PageHeader, Panel } from "@/components/vuka/shell";
 import { describeError, isApiError } from "@/lib/api/client";
 import { invoices as invoiceApi, ledger } from "@/lib/api/endpoints";
 import type { Invoice, Recipient } from "@/lib/api/types";
-import { day, money, shortId } from "@/lib/format";
+import { day, money } from "@/lib/format";
 import { useTrader } from "@/lib/session";
 import { useInvoices, useWallet } from "@/lib/trader-data";
 import { cn } from "@/lib/utils";
@@ -47,9 +47,9 @@ function ageing(invoices: Invoice[]) {
 
 export function TraderInvoices() {
   const trader = useTrader();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("received");
   const [createOpen, setCreateOpen] = useState(false);
-  const [active, setActive] = useState<Invoice | null>(null);
   const list = useInvoices(tab);
   const all = useInvoices();
 
@@ -134,7 +134,7 @@ export function TraderInvoices() {
               exportName={`vuka-invoices-${tab}.csv`}
               rows={rows}
               rowKey={(i) => i.id}
-              onRowClick={setActive}
+              onRowClick={(i) => void navigate({ to: "/escrow/$id", params: { id: i.id } })}
               initialSort={{ key: "issued", dir: "desc" }}
               columns={[
                 {
@@ -146,10 +146,10 @@ export function TraderInvoices() {
                 {
                   key: "party",
                   header: tab === "issued" ? "Buyer" : "Supplier",
-                  text: (i) => (tab === "issued" ? i.counterparty_user_id : i.issuer_user_id),
+                  text: (i) => (tab === "issued" ? i.counterparty_name : i.issuer_name),
                   cell: (i) => (
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {shortId(tab === "issued" ? i.counterparty_user_id : i.issuer_user_id)}
+                    <span className="text-xs">
+                      {tab === "issued" ? i.counterparty_name : i.issuer_name}
                     </span>
                   ),
                 },
@@ -196,89 +196,7 @@ export function TraderInvoices() {
       </Panel>
 
       <CreateInvoiceDialog open={createOpen} onOpenChange={setCreateOpen} />
-      <InvoiceDialog invoice={active} onClose={() => setActive(null)} />
     </>
-  );
-}
-
-function InvoiceDialog({ invoice, onClose }: { invoice: Invoice | null; onClose: () => void }) {
-  const trader = useTrader();
-  const iOwe = invoice ? invoice.counterparty_user_id === trader.id : false;
-  return (
-    <Dialog open={invoice !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="rounded-none sm:max-w-2xl">
-        {invoice ? (
-          <>
-            <DialogHeader>
-              <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
-                {invoice.number}
-              </DialogTitle>
-              <DialogDescription>
-                Issued {day(invoice.issue_date)} · due {day(invoice.due_date)} ·{" "}
-                {iOwe ? "you are the buyer" : "you are the supplier"}
-              </DialogDescription>
-            </DialogHeader>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                  <th className="py-2">Item</th>
-                  <th className="py-2 text-right">Qty</th>
-                  <th className="py-2 text-right">Unit</th>
-                  <th className="py-2 text-right">Line</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoice.items.map((it) => (
-                  <tr key={it.id} className="border-b border-border/60 last:border-0">
-                    <td className="py-2">{it.description}</td>
-                    <td className="py-2 text-right font-mono tabular-nums">{it.quantity}</td>
-                    <td className="py-2 text-right font-mono tabular-nums">
-                      {money(it.unit_price)}
-                    </td>
-                    <td className="py-2 text-right font-mono tabular-nums">
-                      {money(it.quantity * it.unit_price)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <dl className="space-y-1.5 border border-border p-3 font-mono text-xs">
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">Subtotal</dt>
-                <dd className="tabular-nums">
-                  {money(invoiceSubtotal(invoice), invoice.currency)}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">VAT {invoice.vat_rate}%</dt>
-                <dd className="tabular-nums">
-                  {money(invoiceTotal(invoice) - invoiceSubtotal(invoice), invoice.currency)}
-                </dd>
-              </div>
-              <div className="flex justify-between border-t border-border pt-2 text-sm">
-                <dt>Total</dt>
-                <dd className="tabular-nums">{money(invoiceTotal(invoice), invoice.currency)}</dd>
-              </div>
-            </dl>
-            {invoice.terms || invoice.notes ? (
-              <p className="text-xs text-muted-foreground">
-                {[invoice.terms, invoice.notes].filter(Boolean).join(" · ")}
-              </p>
-            ) : null}
-            <DialogFooter className="gap-2">
-              <Chip tone={invoice.status === "PAID" ? "invert" : "live"}>{invoice.status}</Chip>
-              {iOwe && invoice.status !== "PAID" ? (
-                <Button asChild className="rounded-none font-mono text-xs uppercase">
-                  <Link to="/send" search={{ invoice: invoice.number }}>
-                    Pay this invoice
-                  </Link>
-                </Button>
-              ) : null}
-            </DialogFooter>
-          </>
-        ) : null}
-      </DialogContent>
-    </Dialog>
   );
 }
 

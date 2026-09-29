@@ -58,6 +58,15 @@ func TestInvoiceAPI_CreateListGet(t *testing.T) {
 	if retrieved.ID != created.ID {
 		t.Errorf("invoice ID mismatch: %s vs %s", retrieved.ID, created.ID)
 	}
+	// Regression: the invoice payload must carry readable issuer/counterparty names, not just ids
+	// (the frontend detail page has nothing else to resolve them from — a trader can only fetch
+	// their own /api/users/{id}, not a counterparty's).
+	if retrieved.IssuerName != "IssuerTrader" {
+		t.Errorf("issuer_name = %q, want %q", retrieved.IssuerName, "IssuerTrader")
+	}
+	if retrieved.CounterpartyName != "ReceiverTrader" {
+		t.Errorf("counterparty_name = %q, want %q", retrieved.CounterpartyName, "ReceiverTrader")
+	}
 
 	// List invoices for User A (issued)
 	rec = doJSON(t, srv, "GET", "/api/users/"+cuA.User.ID+"/invoices?direction=issued", nil, nil)
@@ -87,5 +96,8 @@ func TestInvoiceAPI_CreateListGet(t *testing.T) {
 	}
 	if len(listResp.Invoices) != 1 || listResp.Invoices[0].ID != created.ID {
 		t.Errorf("expected 1 received invoice with ID %s, got %d", created.ID, len(listResp.Invoices))
+	}
+	if len(listResp.Invoices) == 1 && listResp.Invoices[0].IssuerName != "IssuerTrader" {
+		t.Errorf("listed invoice issuer_name = %q, want %q", listResp.Invoices[0].IssuerName, "IssuerTrader")
 	}
 }

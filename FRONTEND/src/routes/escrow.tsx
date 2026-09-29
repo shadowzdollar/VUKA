@@ -1,9 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { OperatorEscrows } from "@/components/vuka/operator-escrows";
+import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { Shell } from "@/components/vuka/shell";
-import { TraderInvoices } from "@/components/vuka/trader-invoices";
-import { useSession } from "@/lib/session";
 
+/**
+ * Layout for /escrow and /escrow/$id: shared Shell chrome, with the role-aware list
+ * (escrow.index.tsx) or an invoice's detail (escrow.$id.tsx) rendered through the outlet.
+ */
 export const Route = createFileRoute("/escrow")({
   head: () => ({
     meta: [
@@ -17,13 +18,7 @@ export const Route = createFileRoute("/escrow")({
   }),
   component: () => (
     <Shell>
-      <ByRole />
+      <Outlet />
     </Shell>
   ),
 });
-
-/** Traders manage invoices; operators observe the on-chain escrow read model. */
-function ByRole() {
-  const { session } = useSession();
-  return session.status === "operator" ? <OperatorEscrows /> : <TraderInvoices />;
-}

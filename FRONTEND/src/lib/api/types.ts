@@ -102,7 +102,9 @@ export interface Invoice {
   id: string;
   number: string;
   issuer_user_id: string;
+  issuer_name: string;
   counterparty_user_id: string;
+  counterparty_name: string;
   currency: string;
   issue_date: string;
   due_date: string;

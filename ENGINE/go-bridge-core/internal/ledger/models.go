@@ -198,7 +198,9 @@ type Invoice struct {
 	ID                 string         `json:"id"`
 	Number             string         `json:"number"`
 	IssuerUserID       string         `json:"issuer_user_id"`
+	IssuerName         string         `json:"issuer_name"`
 	CounterpartyUserID string         `json:"counterparty_user_id"`
+	CounterpartyName   string         `json:"counterparty_name"`
 	Currency           string         `json:"currency"`
 	IssueDate          string         `json:"issue_date"`
 	DueDate            string         `json:"due_date"`

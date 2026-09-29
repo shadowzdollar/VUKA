@@ -30,6 +30,8 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as TrustScoreRouteImport } from './routes/trust-score'
 import { Route as VerificationRouteImport } from './routes/verification'
 import { Route as WalletsRouteImport } from './routes/wallets'
+import { Route as EscrowIndexRouteImport } from './routes/escrow.index'
+import { Route as EscrowIdRouteImport } from './routes/escrow.$id'
 import { Route as WalletsIndexRouteImport } from './routes/wallets.index'
 import { Route as WalletsIdRouteImport } from './routes/wallets.$id'
 
@@ -138,6 +140,16 @@ const WalletsRoute = WalletsRouteImport.update({
   path: '/wallets',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EscrowIndexRoute = EscrowIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => EscrowRoute,
+} as any)
+const EscrowIdRoute = EscrowIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => EscrowRoute,
+} as any)
 const WalletsIndexRoute = WalletsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -157,7 +169,7 @@ export interface FileRoutesByFullPath {
   '/compliance': typeof ComplianceRoute
   '/corridors': typeof CorridorsRoute
   '/disputes': typeof DisputesRoute
-  '/escrow': typeof EscrowRoute
+  '/escrow': typeof EscrowRouteWithChildren
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
   '/privacy': typeof PrivacyRoute
@@ -171,7 +183,9 @@ export interface FileRoutesByFullPath {
   '/trust-score': typeof TrustScoreRoute
   '/verification': typeof VerificationRoute
   '/wallets': typeof WalletsRouteWithChildren
+  '/escrow/$id': typeof EscrowIdRoute
   '/wallets/$id': typeof WalletsIdRoute
+  '/escrow/': typeof EscrowIndexRoute
   '/wallets/': typeof WalletsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -182,7 +196,6 @@ export interface FileRoutesByTo {
   '/compliance': typeof ComplianceRoute
   '/corridors': typeof CorridorsRoute
   '/disputes': typeof DisputesRoute
-  '/escrow': typeof EscrowRoute
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
   '/privacy': typeof PrivacyRoute
@@ -195,7 +208,9 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/trust-score': typeof TrustScoreRoute
   '/verification': typeof VerificationRoute
+  '/escrow/$id': typeof EscrowIdRoute
   '/wallets/$id': typeof WalletsIdRoute
+  '/escrow': typeof EscrowIndexRoute
   '/wallets': typeof WalletsIndexRoute
 }
 export interface FileRoutesById {
@@ -207,7 +222,7 @@ export interface FileRoutesById {
   '/compliance': typeof ComplianceRoute
   '/corridors': typeof CorridorsRoute
   '/disputes': typeof DisputesRoute
-  '/escrow': typeof EscrowRoute
+  '/escrow': typeof EscrowRouteWithChildren
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
   '/privacy': typeof PrivacyRoute
@@ -221,7 +236,9 @@ export interface FileRoutesById {
   '/trust-score': typeof TrustScoreRoute
   '/verification': typeof VerificationRoute
   '/wallets': typeof WalletsRouteWithChildren
+  '/escrow/$id': typeof EscrowIdRoute
   '/wallets/$id': typeof WalletsIdRoute
+  '/escrow/': typeof EscrowIndexRoute
   '/wallets/': typeof WalletsIndexRoute
 }
 export interface FileRouteTypes {
@@ -248,7 +265,9 @@ export interface FileRouteTypes {
     | '/trust-score'
     | '/verification'
     | '/wallets'
+    | '/escrow/$id'
     | '/wallets/$id'
+    | '/escrow/'
     | '/wallets/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -259,7 +278,6 @@ export interface FileRouteTypes {
     | '/compliance'
     | '/corridors'
     | '/disputes'
-    | '/escrow'
     | '/login'
     | '/notifications'
     | '/privacy'
@@ -272,7 +290,9 @@ export interface FileRouteTypes {
     | '/terms'
     | '/trust-score'
     | '/verification'
+    | '/escrow/$id'
     | '/wallets/$id'
+    | '/escrow'
     | '/wallets'
   id:
     | '__root__'
@@ -297,7 +317,9 @@ export interface FileRouteTypes {
     | '/trust-score'
     | '/verification'
     | '/wallets'
+    | '/escrow/$id'
     | '/wallets/$id'
+    | '/escrow/'
     | '/wallets/'
   fileRoutesById: FileRoutesById
 }
@@ -309,7 +331,7 @@ export interface RootRouteChildren {
   ComplianceRoute: typeof ComplianceRoute
   CorridorsRoute: typeof CorridorsRoute
   DisputesRoute: typeof DisputesRoute
-  EscrowRoute: typeof EscrowRoute
+  EscrowRoute: typeof EscrowRouteWithChildren
   LoginRoute: typeof LoginRoute
   NotificationsRoute: typeof NotificationsRoute
   PrivacyRoute: typeof PrivacyRoute
@@ -474,6 +496,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WalletsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/escrow/': {
+      id: '/escrow/'
+      path: '/'
+      fullPath: '/escrow/'
+      preLoaderRoute: typeof EscrowIndexRouteImport
+      parentRoute: typeof EscrowRoute
+    }
+    '/escrow/$id': {
+      id: '/escrow/$id'
+      path: '/$id'
+      fullPath: '/escrow/$id'
+      preLoaderRoute: typeof EscrowIdRouteImport
+      parentRoute: typeof EscrowRoute
+    }
     '/wallets/': {
       id: '/wallets/'
       path: '/'
@@ -490,6 +526,19 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface EscrowRouteChildren {
+  EscrowIdRoute: typeof EscrowIdRoute
+  EscrowIndexRoute: typeof EscrowIndexRoute
+}
+
+const EscrowRouteChildren: EscrowRouteChildren = {
+  EscrowIdRoute: EscrowIdRoute,
+  EscrowIndexRoute: EscrowIndexRoute,
+}
+
+const EscrowRouteWithChildren =
+  EscrowRoute._addFileChildren(EscrowRouteChildren)
 
 interface WalletsRouteChildren {
   WalletsIdRoute: typeof WalletsIdRoute
@@ -512,7 +561,7 @@ const rootRouteChildren: RootRouteChildren = {
   ComplianceRoute: ComplianceRoute,
   CorridorsRoute: CorridorsRoute,
   DisputesRoute: DisputesRoute,
-  EscrowRoute: EscrowRoute,
+  EscrowRoute: EscrowRouteWithChildren,
   LoginRoute: LoginRoute,
   NotificationsRoute: NotificationsRoute,
   PrivacyRoute: PrivacyRoute,

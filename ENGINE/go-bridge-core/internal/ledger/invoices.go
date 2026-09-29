@@ -203,12 +203,15 @@ func (s *Service) ListInvoices(ctx context.Context, userID string, direction str
 		where = "WHERE i.issuer_user_id = $1 OR i.counterparty_user_id = $1"
 	}
 	query := fmt.Sprintf(`
-		SELECT i.id, i.number, i.issuer_user_id, i.counterparty_user_id, i.currency,
+		SELECT i.id, i.number, i.issuer_user_id, issuer.full_name, i.counterparty_user_id,
+		       counterparty.full_name, i.currency,
 		       to_char(i.issue_date, 'YYYY-MM-DD'), to_char(i.due_date, 'YYYY-MM-DD'),
 		       i.vat_rate, i.terms, i.notes, i.created_at, i.updated_at,
 		       EXISTS(SELECT 1 FROM transactions t
 		              WHERE t.invoice_number = i.number AND t.status = 'SUCCESS') AS paid
 		FROM invoices i
+		JOIN users issuer ON issuer.id = i.issuer_user_id
+		JOIN users counterparty ON counterparty.id = i.counterparty_user_id
 		%s
 		ORDER BY i.created_at DESC, i.id DESC`, where)
 
@@ -238,12 +241,15 @@ func (s *Service) ListInvoices(ctx context.Context, userID string, direction str
 // scanInvoice runs a full invoice query with the given WHERE clause/args.
 func (s *Service) scanInvoice(ctx context.Context, where string, args ...any) (*Invoice, error) {
 	query := fmt.Sprintf(`
-		SELECT i.id, i.number, i.issuer_user_id, i.counterparty_user_id, i.currency,
+		SELECT i.id, i.number, i.issuer_user_id, issuer.full_name, i.counterparty_user_id,
+		       counterparty.full_name, i.currency,
 		       to_char(i.issue_date, 'YYYY-MM-DD'), to_char(i.due_date, 'YYYY-MM-DD'),
 		       i.vat_rate, i.terms, i.notes, i.created_at, i.updated_at,
 		       EXISTS(SELECT 1 FROM transactions t
 		              WHERE t.invoice_number = i.number AND t.status = 'SUCCESS') AS paid
 		FROM invoices i
+		JOIN users issuer ON issuer.id = i.issuer_user_id
+		JOIN users counterparty ON counterparty.id = i.counterparty_user_id
 		%s`, where)
 
 	row := s.pool.QueryRow(ctx, query, args...)
@@ -291,7 +297,8 @@ func scanInvoiceRow(row rowScanner) (*Invoice, error) {
 	var inv Invoice
 	var terms, notes *string
 	var paid bool
-	if err := row.Scan(&inv.ID, &inv.Number, &inv.IssuerUserID, &inv.CounterpartyUserID,
+	if err := row.Scan(&inv.ID, &inv.Number, &inv.IssuerUserID, &inv.IssuerName,
+		&inv.CounterpartyUserID, &inv.CounterpartyName,
 		&inv.Currency, &inv.IssueDate, &inv.DueDate, &inv.VATRate,
 		&terms, &notes, &inv.CreatedAt, &inv.UpdatedAt, &paid); err != nil {
 		return nil, err
