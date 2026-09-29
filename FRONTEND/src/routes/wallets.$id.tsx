@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/vuka/data-table";
 import { Loading, QueryBoundary } from "@/components/vuka/query-state";
-import { Chip, Metric, Panel, Shell } from "@/components/vuka/shell";
+import { Chip, Metric, Panel } from "@/components/vuka/shell";
 import { describeError, download } from "@/lib/api/client";
 import { ledger } from "@/lib/api/endpoints";
 import type { StatementEntry } from "@/lib/api/types";
@@ -17,11 +17,7 @@ export const Route = createFileRoute("/wallets/$id")({
   head: () => ({
     meta: [{ title: "Wallet statement — VUKA" }],
   }),
-  component: () => (
-    <Shell role="trader">
-      <WalletDetail />
-    </Shell>
-  ),
+  component: WalletDetail,
 });
 
 /** ISO date (YYYY-MM-DD), for the plain HTML date inputs below. */

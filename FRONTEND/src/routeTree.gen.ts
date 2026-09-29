@@ -29,6 +29,7 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as TrustScoreRouteImport } from './routes/trust-score'
 import { Route as VerificationRouteImport } from './routes/verification'
 import { Route as WalletsRouteImport } from './routes/wallets'
+import { Route as WalletsIndexRouteImport } from './routes/wallets.index'
 import { Route as WalletsIdRouteImport } from './routes/wallets.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -131,6 +132,11 @@ const WalletsRoute = WalletsRouteImport.update({
   path: '/wallets',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WalletsIndexRoute = WalletsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => WalletsRoute,
+} as any)
 const WalletsIdRoute = WalletsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -159,6 +165,7 @@ export interface FileRoutesByFullPath {
   '/verification': typeof VerificationRoute
   '/wallets': typeof WalletsRouteWithChildren
   '/wallets/$id': typeof WalletsIdRoute
+  '/wallets/': typeof WalletsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -180,8 +187,8 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/trust-score': typeof TrustScoreRoute
   '/verification': typeof VerificationRoute
-  '/wallets': typeof WalletsRouteWithChildren
   '/wallets/$id': typeof WalletsIdRoute
+  '/wallets': typeof WalletsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -206,6 +213,7 @@ export interface FileRoutesById {
   '/verification': typeof VerificationRoute
   '/wallets': typeof WalletsRouteWithChildren
   '/wallets/$id': typeof WalletsIdRoute
+  '/wallets/': typeof WalletsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -231,6 +239,7 @@ export interface FileRouteTypes {
     | '/verification'
     | '/wallets'
     | '/wallets/$id'
+    | '/wallets/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -252,8 +261,8 @@ export interface FileRouteTypes {
     | '/terms'
     | '/trust-score'
     | '/verification'
-    | '/wallets'
     | '/wallets/$id'
+    | '/wallets'
   id:
     | '__root__'
     | '/'
@@ -277,6 +286,7 @@ export interface FileRouteTypes {
     | '/verification'
     | '/wallets'
     | '/wallets/$id'
+    | '/wallets/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -444,6 +454,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WalletsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/wallets/': {
+      id: '/wallets/'
+      path: '/'
+      fullPath: '/wallets/'
+      preLoaderRoute: typeof WalletsIndexRouteImport
+      parentRoute: typeof WalletsRoute
+    }
     '/wallets/$id': {
       id: '/wallets/$id'
       path: '/$id'
@@ -456,10 +473,12 @@ declare module '@tanstack/react-router' {
 
 interface WalletsRouteChildren {
   WalletsIdRoute: typeof WalletsIdRoute
+  WalletsIndexRoute: typeof WalletsIndexRoute
 }
 
 const WalletsRouteChildren: WalletsRouteChildren = {
   WalletsIdRoute: WalletsIdRoute,
+  WalletsIndexRoute: WalletsIndexRoute,
 }
 
 const WalletsRouteWithChildren =
