@@ -163,7 +163,9 @@ contract VukaEscrowV2 {
         uint256 disputeWindowSeconds,
         uint256 minTimeoutSeconds
     ) {
-        if (token == address(0) || token.code.length == 0) revert InvalidAddress();
+        if (token == address(0) || token.code.length == 0) {
+            revert InvalidAddress();
+        }
         if (initialAdmin == address(0) || initialGuardian == address(0)) revert InvalidAddress();
         if (initialArbiter == address(0)) revert InvalidAddress();
         if (initialFeeBps > MAX_FEE_BPS) revert InvalidFee();
@@ -301,6 +303,9 @@ contract VukaEscrowV2 {
         emit EscrowCreated(escrowId, sender, supplier, amount, timeoutAt, invoiceRef);
     }
 
+    // Intended fee-on-transfer detector, not a reentrancy bug: state is already LOCKED (CEI)
+    // below and this function is nonReentrant, so a reentrant token cannot double-spend the check.
+    // slither-disable-next-line reentrancy-balance
     function lockFunds(uint256 escrowId) external whenNotPaused nonReentrant {
         address sender = _msgSender();
         Escrow storage escrow = _escrow(escrowId);
@@ -402,8 +407,15 @@ contract VukaEscrowV2 {
     // ---- Internals --------------------------------------------------------------------------
     /// @dev State first, external calls last (checks-effects-interactions). Pure outcomes emit the
     ///      V1 events; partial outcomes emit EscrowSplit. The fee is taken from the supplier's share only.
+    /// @dev Every public entry point that reaches this is nonReentrant and finalises `escrow.state`
+    ///      before calling _payout; a reentrant token re-entering any nonReentrant function reverts.
+    // slither-disable-next-line reentrancy-no-eth
     function _settle(uint256 escrowId, Escrow storage escrow, uint256 supplierBps) private {
         uint256 amount = escrow.amount;
+        // Bounded bps-math rounding dust (both divisors are BPS=10000, and `fee` below multiplies
+        // this division's result); not exploitable at realistic amounts, not worth a fixed-point
+        // redesign for this.
+        // slither-disable-next-line divide-before-multiply
         uint256 supplierGross = (amount * supplierBps) / BPS;
         uint256 buyerAmount = amount - supplierGross;
         uint256 fee = (supplierGross * escrow.feeBps) / BPS;
@@ -434,8 +446,8 @@ contract VukaEscrowV2 {
     /// @dev Never reverts on a token refusal: an unpayable recipient must not be able to block the
     ///      counterparty's settlement. The amount is credited for pull-withdrawal instead.
     function _payout(uint256 escrowId, address to, uint256 amount) private {
-        (bool ok, bytes memory data) =
-            address(settlementToken).call(abi.encodeWithSelector(IERC20V2.transfer.selector, to, amount));
+        (bool ok, bytes memory data) = address(settlementToken)
+            .call(abi.encodeWithSelector(IERC20V2.transfer.selector, to, amount));
         bool success = ok && (data.length == 0 || (data.length >= 32 && abi.decode(data, (bool))));
         if (!success) {
             claimable[to] += amount;
@@ -445,8 +457,8 @@ contract VukaEscrowV2 {
     }
 
     function _safeTransfer(address to, uint256 amount) private {
-        (bool ok, bytes memory data) =
-            address(settlementToken).call(abi.encodeWithSelector(IERC20V2.transfer.selector, to, amount));
+        (bool ok, bytes memory data) = address(settlementToken)
+            .call(abi.encodeWithSelector(IERC20V2.transfer.selector, to, amount));
         if (!ok || (data.length != 0 && (data.length < 32 || !abi.decode(data, (bool))))) {
             revert TransferFailed();
         }

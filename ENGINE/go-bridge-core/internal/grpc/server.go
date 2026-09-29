@@ -165,19 +165,19 @@ func accountProto(a *ledger.Account) *grpcpb.Account {
 // transferProto converts a ledger.Transfer to its protobuf form.
 func transferProto(t *ledger.Transfer, replayed bool) *grpcpb.TransferResponse {
 	resp := &grpcpb.TransferResponse{
-		Id:                  t.ID,
-		IdempotencyKey:      t.IdempotencyKey,
-		InvoiceNumber:       deref(t.InvoiceNumber),
-		SourceAccountId:     t.SourceAccountID,
+		Id:                   t.ID,
+		IdempotencyKey:       t.IdempotencyKey,
+		InvoiceNumber:        deref(t.InvoiceNumber),
+		SourceAccountId:      t.SourceAccountID,
 		DestinationAccountId: t.DestinationAccountID,
-		Amount:              t.Amount,
-		Currency:            t.Currency,
-		Status:              string(t.Status),
-		ExternalReference:   deref(t.ExternalReference),
-		FailureReason:       deref(t.FailureReason),
-		CreatedAt:           t.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
-		UpdatedAt:           t.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
-		Replayed:            replayed,
+		Amount:               t.Amount,
+		Currency:             t.Currency,
+		Status:               string(t.Status),
+		ExternalReference:    deref(t.ExternalReference),
+		FailureReason:        deref(t.FailureReason),
+		CreatedAt:            t.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		UpdatedAt:            t.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		Replayed:             replayed,
 	}
 	if t.FxRate != nil {
 		resp.FxRate = *t.FxRate

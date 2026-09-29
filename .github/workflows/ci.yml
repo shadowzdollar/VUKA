@@ -1,0 +1,168 @@
+name: CI
+
+# Runs the same checks documented in SECURITY.md, BUILD_LOG.md and each component's README on every
+# push and pull request, so the local, manual passes recorded there stay true instead of drifting.
+# Three independent jobs (engine / contracts / frontend) so a change in one area doesn't block
+# review of an unrelated one; each only needs its own directory to be checked out.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  engine:
+    name: Engine (Go)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ENGINE/go-bridge-core
+    services:
+      # TEST_DATABASE_URL below points at this service. Tests call each package's own EnsureSchema
+      # at run time (idempotent CREATE TABLE IF NOT EXISTS), so only the database itself, not its
+      # tables, needs to exist beforehand.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vuka
+          POSTGRES_PASSWORD: vuka-ci-only
+          POSTGRES_DB: vuka_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U vuka"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      TEST_DATABASE_URL: postgres://vuka:vuka-ci-only@localhost:5432/vuka_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ENGINE/go-bridge-core/go.mod
+          cache-dependency-path: ENGINE/go-bridge-core/go.sum
+
+      - name: gofmt
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "$out"
+            echo "::error::gofmt found unformatted files (run 'gofmt -w .')"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test
+        run: go test ./...
+
+      # Vulnerabilities VUKA's own code actually calls into — see SECURITY.md's scan log for the
+      # ones already reviewed and fixed. A new finding here is a real dependency to upgrade.
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      # -exclude-generated skips protoc-generated files (internal/grpcpb/*.pb.go), which are
+      # regenerated, not hand-edited — see SECURITY.md. Findings already reviewed and accepted as
+      # safe are annotated inline with #nosec and a reason, so this fails only on something new.
+      #
+      # gosec is built from a scratch module with x/tools bumped past what it requires: its
+      # released binaries pin an x/tools too old for some Go toolchain versions, whose SSA analysis
+      # then panics on a handful of packages (internal error, not a real finding — the simpler
+      # AST-based rules, which is what actually caught a real bug during the 2026-09-24 scan, still
+      # run to completion either way). See SECURITY.md's scan log for the full explanation.
+      - name: gosec
+        run: |
+          mkdir -p /tmp/gosec-build && cd /tmp/gosec-build
+          go mod init gosecbuild
+          go get github.com/securego/gosec/v2/cmd/gosec@v2.22.4
+          go get golang.org/x/tools@latest
+          go build -o /tmp/gosec github.com/securego/gosec/v2/cmd/gosec
+          cd "$GITHUB_WORKSPACE/ENGINE/go-bridge-core"
+          /tmp/gosec -exclude-generated ./...
+
+  contracts:
+    name: Contracts (Foundry)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: CONTRACTS/escrow
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+
+      - name: forge fmt --check
+        run: forge fmt --check
+
+      - name: forge build
+        run: forge build
+
+      - name: forge test
+        run: forge test
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Findings already reviewed and accepted (e.g. the fee-on-transfer balance check, the bps
+      # rounding dust, the forwarder's signature+value-matched call) are suppressed inline with
+      # `// slither-disable-next-line <check>` and a reason — see SECURITY.md's scan log. Low and
+      # Informational findings are excluded from the failure gate; they're tracked, not blocking.
+      - name: Install slither
+        run: |
+          pip install slither-analyzer solc-select
+          solc-select install 0.8.24
+          solc-select use 0.8.24
+
+      - name: Slither (fails on any new Medium+ finding)
+        run: |
+          slither . --compile-force-framework foundry --filter-paths "lib/" \
+            --exclude-dependencies --exclude-informational --exclude-low
+
+  frontend:
+    name: Frontend (TanStack Start)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FRONTEND
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: FRONTEND/package-lock.json
+
+      - run: npm ci
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      # --audit-level=high: don't fail the build on every moderate advisory in a transitive
+      # dependency outside our control; do fail on anything high/critical.
+      - name: npm audit
+        run: npm audit --audit-level=high

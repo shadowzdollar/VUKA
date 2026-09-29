@@ -23,7 +23,11 @@ contract Token {
         return true;
     }
 
-    function transferFrom(address from, address to, uint256 amount) external virtual returns (bool) {
+    function transferFrom(address from, address to, uint256 amount)
+        external
+        virtual
+        returns (bool)
+    {
         require(allowance[from][msg.sender] >= amount, "allowance");
         require(balanceOf[from] >= amount, "balance");
         allowance[from][msg.sender] -= amount;
@@ -44,7 +48,11 @@ contract Token {
 
 /// Burns 1% on transferFrom: the escrow would receive less than it promises.
 contract FeeOnTransferToken is Token {
-    function transferFrom(address from, address to, uint256 amount) external override returns (bool) {
+    function transferFrom(address from, address to, uint256 amount)
+        external
+        override
+        returns (bool)
+    {
         require(allowance[from][msg.sender] >= amount, "allowance");
         allowance[from][msg.sender] -= amount;
         balanceOf[from] -= amount;
@@ -105,7 +113,9 @@ contract VukaEscrowV2Test is Test {
     }
 
     function _deploy(address tok, uint16 fee) internal returns (VukaEscrowV2) {
-        return new VukaEscrowV2(tok, admin, guardian, treasury, forwarder, arbiter, fee, 14 days, 1 hours);
+        return new VukaEscrowV2(
+            tok, admin, guardian, treasury, forwarder, arbiter, fee, 14 days, 1 hours
+        );
     }
 
     function _locked() internal returns (uint256 id) {
@@ -363,18 +373,30 @@ contract VukaEscrowV2Test is Test {
         escrow.confirmCompletion(id);
         vm.prank(supplier);
         escrow.confirmCompletion(id);
-        assertEq(token.balanceOf(treasury), (AMOUNT * FEE) / 10_000, "in-flight escrow keeps its original fee");
+        assertEq(
+            token.balanceOf(treasury),
+            (AMOUNT * FEE) / 10_000,
+            "in-flight escrow keeps its original fee"
+        );
     }
 
     function test_constructorRejectsUnsafeConfiguration() public {
         vm.expectRevert(VukaEscrowV2.InvalidFee.selector);
-        new VukaEscrowV2(address(token), admin, guardian, treasury, forwarder, arbiter, 101, 14 days, 1 hours);
+        new VukaEscrowV2(
+            address(token), admin, guardian, treasury, forwarder, arbiter, 101, 14 days, 1 hours
+        );
         vm.expectRevert(VukaEscrowV2.InvalidTimeout.selector);
-        new VukaEscrowV2(address(token), admin, guardian, treasury, forwarder, arbiter, 50, 1 days, 1 hours);
+        new VukaEscrowV2(
+            address(token), admin, guardian, treasury, forwarder, arbiter, 50, 1 days, 1 hours
+        );
         vm.expectRevert(VukaEscrowV2.InvalidAddress.selector);
-        new VukaEscrowV2(address(0x1234), admin, guardian, treasury, forwarder, arbiter, 50, 14 days, 1 hours); // not a contract
+        new VukaEscrowV2(
+            address(0x1234), admin, guardian, treasury, forwarder, arbiter, 50, 14 days, 1 hours
+        ); // not a contract
         vm.expectRevert(VukaEscrowV2.InvalidAddress.selector);
-        new VukaEscrowV2(address(token), admin, guardian, address(0), forwarder, arbiter, 50, 14 days, 1 hours); // fee needs a treasury
+        new VukaEscrowV2(
+            address(token), admin, guardian, address(0), forwarder, arbiter, 50, 14 days, 1 hours
+        ); // fee needs a treasury
     }
 
     // ---------------------------------------------------------------- hostile tokens
@@ -402,7 +424,9 @@ contract VukaEscrowV2Test is Test {
         assertEq(uint256(_state(id)), uint256(VukaEscrowV2.State.RELEASED));
         assertEq(escrow.claimable(supplier), AMOUNT - fee);
         assertEq(escrow.totalClaimable(), AMOUNT - fee);
-        assertEq(token.balanceOf(treasury), fee, "the counterparty leg of the settlement still paid out");
+        assertEq(
+            token.balanceOf(treasury), fee, "the counterparty leg of the settlement still paid out"
+        );
 
         vm.prank(stranger);
         vm.expectRevert(VukaEscrowV2.NothingToWithdraw.selector);
@@ -447,11 +471,15 @@ contract VukaEscrowV2Test is Test {
         vm.prank(stranger);
         (ok,) = address(escrow).call(abi.encodePacked(call, buyer));
         assertTrue(ok);
-        assertEq(escrow.getEscrow(1).buyer, stranger, "suffix ignored unless the caller is the forwarder");
+        assertEq(
+            escrow.getEscrow(1).buyer, stranger, "suffix ignored unless the caller is the forwarder"
+        );
     }
 
     // ---------------------------------------------------------------- fuzz: funds are conserved
-    function testFuzz_splitConservesEveryUnit(uint96 amountRaw, uint16 bpsRaw, uint16 feeRaw) public {
+    function testFuzz_splitConservesEveryUnit(uint96 amountRaw, uint16 bpsRaw, uint16 feeRaw)
+        public
+    {
         uint256 amount = bound(uint256(amountRaw), 1, 1e15);
         uint256 supplierBps = bound(uint256(bpsRaw), 0, 10_000);
         uint16 fee = uint16(bound(uint256(feeRaw), 0, 100));
@@ -470,12 +498,16 @@ contract VukaEscrowV2Test is Test {
         vm.prank(arbiter);
         e.arbitrate(id, supplierBps);
 
-        uint256 paidOut = (token.balanceOf(supplier) - supplierBefore) + (token.balanceOf(buyer) - buyerBefore)
-            + (token.balanceOf(treasury) - treasuryBefore);
+        uint256 paidOut = (token.balanceOf(supplier) - supplierBefore)
+            + (token.balanceOf(buyer) - buyerBefore) + (token.balanceOf(treasury) - treasuryBefore);
         assertEq(paidOut, amount, "every unit is paid to exactly one party");
         assertEq(token.balanceOf(address(e)), 0, "escrow retains nothing");
         uint256 gross = (amount * supplierBps) / 10_000;
-        assertLe(token.balanceOf(treasury) - treasuryBefore, (gross * 100) / 10_000 + 1, "fee never exceeds the 1% cap of the supplier share");
+        assertLe(
+            token.balanceOf(treasury) - treasuryBefore,
+            (gross * 100) / 10_000 + 1,
+            "fee never exceeds the 1% cap of the supplier share"
+        );
     }
 }
 
@@ -520,7 +552,10 @@ contract EscrowHandler is Test {
         VukaEscrowV2.Escrow memory e = escrow.getEscrow(id);
         if (e.state != VukaEscrowV2.State.LOCKED || block.timestamp >= e.timeoutAt) return;
         vm.prank(buyer);
-        try escrow.confirmCompletion(id) { } catch { return; }
+        try escrow.confirmCompletion(id) { }
+        catch {
+            return;
+        }
         vm.prank(supplier);
         try escrow.confirmCompletion(id) {
             outstanding -= e.amount;
@@ -554,7 +589,10 @@ contract EscrowHandler is Test {
         if (e.state == VukaEscrowV2.State.LOCKED && block.timestamp >= e.timeoutAt) {
             escrow.checkTimeout(id);
             outstanding -= e.amount;
-        } else if (e.state == VukaEscrowV2.State.DISPUTED && block.timestamp >= e.disputedAt + escrow.disputeWindow()) {
+        } else if (
+            e.state == VukaEscrowV2.State.DISPUTED
+                && block.timestamp >= e.disputedAt + escrow.disputeWindow()
+        ) {
             escrow.resolveExpiredDispute(id);
             outstanding -= e.amount;
         }
@@ -569,7 +607,15 @@ contract VukaEscrowV2InvariantTest is StdInvariant, Test {
     function setUp() public {
         token = new Token();
         escrow = new VukaEscrowV2(
-            address(token), address(0xA11CE), address(0xB0B), address(0x7E45), address(0), address(0xA2B1), 50, 14 days, 1 hours
+            address(token),
+            address(0xA11CE),
+            address(0xB0B),
+            address(0x7E45),
+            address(0),
+            address(0xA2B1),
+            50,
+            14 days,
+            1 hours
         );
         handler = new EscrowHandler(escrow, token);
         targetContract(address(handler));

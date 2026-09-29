@@ -61,8 +61,10 @@ These are implemented and covered by tests, independent of the scans above:
 - FX rates are sandbox reference values, not market data.
 - The sanctions/PEP screener is a sandbox implementation, not a licensed vendor.
 - No public bug-bounty program (pre-launch).
-- Dependency scanning here is point-in-time, run by hand; there is no CI pipeline running it on
-  every push yet (tracked in `STATUS.md`).
+- CI (`.github/workflows/ci.yml`) runs `govulncheck`, `gosec`, `slither` and `npm audit` — plus
+  `go build`/`vet`/`test`, `forge test`, `tsc`, ESLint and both builds — on every push and pull
+  request to `main`. It has not yet had a chance to actually run on GitHub (needs a push); until
+  then, the results below remain the manually re-run source of truth.
 
 The frontend's [`/security`](FRONTEND/src/components/vuka/pages/security-page.tsx) page mirrors this
 for site visitors in plainer language.
@@ -78,6 +80,41 @@ a report is resolved.
 ---
 
 ## Scan log
+
+### 2026-09-29
+
+- Wired `govulncheck`, `gosec`, `slither` and `npm audit` — plus `go build`/`vet`/`test`,
+  `forge test`, `tsc`, ESLint and both builds — into `.github/workflows/ci.yml` (three jobs: engine,
+  contracts, frontend), so the manual passes above run on every push and pull request instead of
+  only when someone remembers to run them.
+- Getting there required fixing pre-existing drift so the new gates start clean rather than red on
+  day one:
+  - `gofmt` found 4 files with stale formatting (a numbered-list doc-comment style an older `gofmt`
+    had produced) unrelated to any recent change — reformatted.
+  - `forge fmt --check` found unformatted lines in `VukaEscrowV2.sol`, its deploy script and its
+    test file — reformatted (two passes; `forge fmt` needed a second run to fully converge).
+  - Slither's Medium/High findings reviewed and accepted on 2026-09-24 were not actually
+    suppressed — the `slither-disable-next-line` comments were misplaced (put *after* the
+    justification prose, and inside the function body rather than immediately before the function
+    declaration slither anchors reentrancy/interface findings to). Corrected placement for:
+    `reentrancy-balance` (`VukaEscrowV2.lockFunds`), `reentrancy-no-eth` (`VukaEscrowV2._settle`),
+    `erc20-interface` (`VukaEscrow.sol`'s `IERC20`) — all three now suppress correctly.
+    `divide-before-multiply` was anchored to the *division* statement, not the multiplication as
+    assumed — moved accordingly.
+  - The forwarder's `arbitrary-send-eth` (the one real High, fixed on 2026-09-24 with the
+    `ValueMismatch` check) still fires because Slither's pattern-matcher doesn't reason about the
+    guard — annotated `slither-disable-next-line` with the guard and the regression tests as the
+    justification, rather than leaving it unexplained.
+  - `gosec`'s released binary still panics its SSA analyzer on this environment's Go toolchain (see
+    2026-09-24's entry); the CI step builds `gosec` from a scratch module with `x/tools` bumped, the
+    same workaround validated locally, rather than assume a real runner won't hit it.
+  - Result: `slither --exclude-informational --exclude-low` now reports **0** findings (was 3
+    remaining after the placement bugs above); `gosec -exclude-generated` reports **0** findings.
+- `go test ./...` (all packages), `forge test` (50/50), `tsc`, ESLint (0 errors) and both builds
+  re-run clean after every fix above.
+- **Not yet verified**: the workflow has not actually run on GitHub — every step was reproduced
+  locally with the exact command CI uses, but GitHub Actions itself needs a push to `main` (not done
+  as part of this session; ask before pushing).
 
 ### 2026-09-24
 

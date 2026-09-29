@@ -5,6 +5,47 @@ A living hand-off note. Newest day first; each day adds a section at the top. Fo
 
 ---
 
+## 2026-09-29 — day 3: CI pipeline (no-agreement-needed backlog item #1)
+
+**Context:** asked directly whether everything VUKA "needs" was built — answer was no, with an
+honest gap list (independent audit, real rail licensing, compliance vendors, full 54-market
+coverage, etc.). Split that list into what needs a signed agreement (can't do) vs. what doesn't
+(CI, standards work, reach, resilience, testnet trust evidence). Picked CI first: cheapest, fastest,
+and it makes day 2's security work durable instead of a one-off.
+
+### What happened
+
+- New `.github/workflows/ci.yml`: three jobs (engine, contracts, frontend) that run every check from
+  `SECURITY.md` — `govulncheck`, `gosec`, `slither`, `npm audit`, plus the full build/test/lint
+  suite for each component — on every push and pull request to `main`.
+- Found and fixed a real problem in day 2's own work while preparing this: several of the
+  `slither-disable-next-line` suppression comments added on 2026-09-24 were **misplaced and not
+  actually suppressing anything** — re-running Slither today still showed all three "accepted"
+  Medium/High findings. Fixed the placement (Slither anchors each detector to a different exact
+  line than intuition suggests) and confirmed 0 findings at Medium+ severity, for real this time.
+- Fixed pre-existing `gofmt`/`forge fmt` drift (unrelated to recent work) so the new CI gates start
+  green instead of immediately red.
+- Every job's steps were run locally, verbatim, before calling this done — see `BUILD_LOG.md` and
+  `SECURITY.md`'s 2026-09-29 entry for the full detail.
+
+### What this does *not* claim
+
+- **The workflow has not run on GitHub yet.** Everything above was verified by running the exact
+  same commands locally; GitHub Actions itself only executes after a push to the repo, and that
+  wasn't done this session (pushing is a call for the user, not something to do unprompted).
+- This doesn't touch any of the backlog items that genuinely need a signed agreement (real rail
+  licensing, compliance vendors, a USSD shortcode) — those are unchanged from day 1/2.
+
+### Next candidates (agreement-free, not started)
+
+From the same backlog, still ranked by trust-per-effort: standards/interoperability (ISO 20022
+pacs.002/camt.053, OpenAPI spec), reach (more of the 54 AU markets as sandbox country packs, more
+languages), resilience (service worker, load test, backup/restore drill, public status history), and
+testnet trust evidence (deploy `VukaEscrowV2` to Polygon Amoy — free, but needs a funded wallet and
+the user's go-ahead per `CONTRACTS/escrow/PHASE2_TESTNET_EVIDENCE.md`'s own approval requirement).
+
+---
+
 ## 2026-09-24 — day 2: security hardening & evidence
 
 **Chosen focus for today** (of four options put to the user: security, standards/interoperability,

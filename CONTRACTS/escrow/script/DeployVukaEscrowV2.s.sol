@@ -32,10 +32,14 @@ contract DeployVukaEscrowV2 is Script {
 
         // Refuse the classic misconfiguration: the deploying key holding every power.
         require(admin != msg.sender, "admin must not be the deployer key");
-        require(admin != arbiter && admin != guardian, "admin, guardian and arbiter must be distinct");
+        require(
+            admin != arbiter && admin != guardian, "admin, guardian and arbiter must be distinct"
+        );
 
         vm.startBroadcast();
-        deployed = new VukaEscrowV2(token, admin, guardian, treasury, forwarder, arbiter, feeBps, window, minTimeout);
+        deployed = new VukaEscrowV2(
+            token, admin, guardian, treasury, forwarder, arbiter, feeBps, window, minTimeout
+        );
         vm.stopBroadcast();
 
         console.log("VukaEscrowV2 deployed at", address(deployed));

@@ -80,6 +80,11 @@ contract VukaForwarder {
         return signer == req.from && signer != address(0);
     }
 
+    // `req.to`/`req.value` are attacker-influenced but bound by two checks below: `verify()`
+    // requires an EIP-712 signature from `req.from` over this exact (to, value, ...) tuple, and
+    // `msg.value != req.value` reverts (ValueMismatch), so the forwarder never holds or forwards
+    // ETH the signer did not authorise for this exact call. See test/VukaForwarder.t.sol.
+    // slither-disable-next-line arbitrary-send-eth
     function execute(ForwardRequest calldata req, bytes calldata signature)
         external
         payable

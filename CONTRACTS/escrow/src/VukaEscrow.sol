@@ -4,7 +4,11 @@ pragma solidity ^0.8.24;
 /// @title VUKA Escrow
 /// @notice Holds an ERC-20 settlement asset until confirmation, timeout, or
 ///         arbitration decides the supplier's outcome. Supports EIP-2771 meta-transactions for gasless UX.
+// slither-disable-next-line erc20-interface
 interface IERC20 {
+    // Deliberately non-standard: every call goes through a low-level `.call` with manual, tolerant
+    // ABI decoding (see _safeTransfer/_safeTransferFrom below) so both bool-returning and
+    // void-returning tokens work. This interface is only a selector source, never called typed.
     function transferFrom(address from, address to, uint256 amount) external;
     function transfer(address to, uint256 amount) external;
 }

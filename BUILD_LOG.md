@@ -229,3 +229,30 @@ limitations, and the next verified step for the long-term VUKA platform.
 - Verified: `tsc`, ESLint (0 errors), `vite build` clean; browser + axe (WCAG 2/2.1 A/AA) at 375px,
   1440px, 1920px and 2560px — 0 violations at every width; hero heading now starts ~64px from the
   edge at 2560px (was previously centred with a ~500px empty margin); no mobile overflow.
+
+## 2026-09-29 (CI pipeline: govulncheck/gosec/slither/npm audit on every push)
+
+- Added `.github/workflows/ci.yml`: three jobs (engine, contracts, frontend) running the checks
+  documented in `SECURITY.md` — `go build`/`vet`/`test` (with a Postgres service container),
+  `govulncheck`, `gosec`; `forge fmt --check`/`build`/`test`, `slither`; `tsc`, ESLint, `vite build`,
+  `npm audit` — on every push and pull request to `main`.
+- Fixed pre-existing formatting drift so the new gates start clean: 4 Go files (`gofmt`, stale
+  numbered-list doc comments) and 3 Solidity files (`forge fmt`, two passes to converge).
+- Found and fixed a real bug in the 2026-09-24 security work itself: several `slither-disable-
+  next-line` suppression comments were misplaced (after the justification text, or inside a
+  function body rather than immediately before the line/declaration Slither actually anchors the
+  finding to) and were not suppressing anything — confirmed by re-running Slither, which still
+  reported all of them. Corrected placement for `reentrancy-balance`, `reentrancy-no-eth`,
+  `erc20-interface` and `divide-before-multiply` (each anchors differently — the last to the
+  *division* statement, not the multiplication); added a new one for the forwarder's
+  `arbitrary-send-eth` (the already-fixed real bug, which Slither's pattern-matcher still flags
+  since it can't reason about the `ValueMismatch` guard). `slither --exclude-informational
+  --exclude-low` now genuinely reports 0, not 3.
+- `gosec`'s released binary panics its SSA analyzer under this environment's Go toolchain (logged
+  2026-09-24); the CI step routes around it by building `gosec` from a scratch module with
+  `x/tools` bumped — the same fix validated locally, reproduced end-to-end again here.
+- Verified every job's steps locally, exactly as written in the workflow, before considering this
+  done: `go test ./...` all packages, `forge test` 50/50, `tsc`/ESLint/`vite build` clean, `npm
+  audit` 0 findings, `govulncheck`/`gosec`/`slither` all 0.
+- Known limits: the workflow has not yet run on GitHub — everything was verified locally with the
+  same commands, but Actions itself only runs after a push, which wasn't done this session.

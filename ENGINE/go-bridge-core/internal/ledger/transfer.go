@@ -1,19 +1,19 @@
 // Transfer execution — the heart of the VUKA engine.
 //
 // A transfer is a single database transaction that guarantees:
-//   1. Idempotency  — the Idempotency-Key is claimed atomically; replays
-//      return the original transfer instead of charging twice.
-//   2. Isolation    — the source account row is locked FOR UPDATE so
-//      concurrent transfers serialize per account and can never corrupt a
-//      balance.
-//   3. Validation   — BUSINESS-only source (spec §4.1), same currency,
-//      positive amount, distinct accounts, sufficient derived balance.
-//   4. Two-phase    — the telecom adapter is dispatched inside the tx;
-//      ledger entries are written ONLY on adapter SUCCESS. A provider
-//      failure or timeout rolls the whole transfer back (no partial state).
-//   5. Double-entry — exactly two ledger entries per transfer, summing to
-//      zero: debit the source BUSINESS account, credit the destination
-//      SETTLEMENT account.
+//  1. Idempotency  — the Idempotency-Key is claimed atomically; replays
+//     return the original transfer instead of charging twice.
+//  2. Isolation    — the source account row is locked FOR UPDATE so
+//     concurrent transfers serialize per account and can never corrupt a
+//     balance.
+//  3. Validation   — BUSINESS-only source (spec §4.1), same currency,
+//     positive amount, distinct accounts, sufficient derived balance.
+//  4. Two-phase    — the telecom adapter is dispatched inside the tx;
+//     ledger entries are written ONLY on adapter SUCCESS. A provider
+//     failure or timeout rolls the whole transfer back (no partial state).
+//  5. Double-entry — exactly two ledger entries per transfer, summing to
+//     zero: debit the source BUSINESS account, credit the destination
+//     SETTLEMENT account.
 package ledger
 
 import (
