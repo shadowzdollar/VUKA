@@ -182,3 +182,33 @@ a report is resolved.
     mismatch); the AST-based rules above still ran to completion. Re-check with the panics resolved
     once a compatible `gosec`/`x/tools` pairing is available.
   - `go build ./...`, `go vet ./...` and `go test ./...` re-run clean after all fixes.
+
+
+
+
+
+
+
+
+
+
+
+
+internal
+
+
+
+postgresql://vuka:mLapUSStCfDIgXIVO2fk4PL6UBL8kaPa@dpg-db2bhj0ae00c739oprt0-a/vuka_ekng
+
+
+external
+
+
+postgresql://vuka:mLapUSStCfDIgXIVO2fk4PL6UBL8kaPa@dpg-db2bhj0ae00c739oprt0-a.oregon-postgres.render.com/vuka_ekng
+
+
+external ps command
+
+
+render psql dpg-db2bhj0ae00c739oprt0-a
+
