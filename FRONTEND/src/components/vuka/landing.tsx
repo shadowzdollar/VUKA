@@ -6,6 +6,7 @@ import { Hero } from "./landing/hero";
 import { Journey } from "./landing/journey";
 import { MobileSection } from "./landing/mobile";
 import { NetworkGallery } from "./landing/network";
+import { Scenes } from "./landing/scenes";
 import {
   CtaBand,
   Comparison,
@@ -34,6 +35,7 @@ export function Landing() {
       <main id="main">
         <Hero />
         <Principles />
+        <Scenes />
         <Journey />
         <Estimator />
         <EscrowLab />

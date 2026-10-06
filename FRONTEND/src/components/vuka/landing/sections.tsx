@@ -61,16 +61,9 @@ export function Features() {
               Hold balances in the ten launch currencies, top up from mobile money, and see a
               real-time statement of every movement, each one traceable to a balanced ledger entry.
             </p>
-            <ul
-              className="mt-6 grid grid-cols-5 gap-1.5 font-mono text-[11px]"
-              aria-label="Launch currencies"
-            >
-              {["RWF", "KES", "UGX", "TZS", "GHS", "NGN", "XOF", "ETB", "ZMW", "ZAR"].map((c) => (
-                <li key={c} className="border border-border px-1 py-2 text-center">
-                  {c}
-                </li>
-              ))}
-            </ul>
+            <p className="mt-6 font-mono text-xs tracking-[0.08em] text-muted-foreground">
+              RWF · KES · UGX · TZS · GHS · NGN · XOF · ETB · ZMW · ZAR
+            </p>
           </Reveal>
           <Reveal className={`${cell} md:col-span-3`} delay={60}>
             <div className={kicker}>Invoices</div>

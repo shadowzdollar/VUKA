@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Photo, type PhotoCredit } from "./landing/photo";
 import { SiteFooter } from "./site-footer";
 import { SiteHeader } from "./site-header";
 
@@ -25,6 +26,7 @@ export function PublicPage({
   lead,
   draft,
   toc,
+  photo,
   children,
 }: {
   kicker: string;
@@ -32,6 +34,7 @@ export function PublicPage({
   lead?: string;
   draft?: boolean;
   toc?: { id: string; label: string }[];
+  photo?: { src: string; alt: string; credit: PhotoCredit };
   children: ReactNode;
 }) {
   return (
@@ -45,23 +48,39 @@ export function PublicPage({
       <SiteHeader />
       <main id="main">
         <header className="border-b border-border bg-muted/30">
-          <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6 sm:py-24">
-            <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-              <span aria-hidden="true" className="h-px w-10 bg-foreground" />
-              {kicker}
+          <div
+            className={`mx-auto max-w-5xl px-4 py-16 sm:px-6 sm:py-24 ${photo ? "grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center" : ""}`}
+          >
+            <div>
+              <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                <span aria-hidden="true" className="h-px w-10 bg-foreground" />
+                {kicker}
+              </div>
+              <h1 className="mt-5 max-w-3xl font-display text-5xl font-normal leading-[1.05] tracking-tight sm:text-6xl">
+                {title}
+              </h1>
+              {lead ? (
+                <p className="mt-6 max-w-2xl text-lg text-muted-foreground">{lead}</p>
+              ) : null}
+              {draft ? (
+                <p role="note" className="mt-8 max-w-2xl border-2 border-foreground p-4 text-sm">
+                  <strong className="font-mono text-[10px] uppercase tracking-[0.2em]">
+                    Draft — pending legal review.{" "}
+                  </strong>
+                  This document describes how the platform is designed to behave. It has not yet
+                  been reviewed by counsel and is not a binding agreement.
+                </p>
+              ) : null}
             </div>
-            <h1 className="mt-5 max-w-3xl font-display text-5xl font-normal leading-[1.05] tracking-tight sm:text-6xl">
-              {title}
-            </h1>
-            {lead ? <p className="mt-6 max-w-2xl text-lg text-muted-foreground">{lead}</p> : null}
-            {draft ? (
-              <p role="note" className="mt-8 max-w-2xl border-2 border-foreground p-4 text-sm">
-                <strong className="font-mono text-[10px] uppercase tracking-[0.2em]">
-                  Draft — pending legal review.{" "}
-                </strong>
-                This document describes how the platform is designed to behave. It has not yet been
-                reviewed by counsel and is not a binding agreement.
-              </p>
+            {photo ? (
+              <Photo
+                src={photo.src}
+                alt={photo.alt}
+                width={1200}
+                height={900}
+                credit={photo.credit}
+                imgClassName="aspect-[4/3]"
+              />
             ) : null}
           </div>
         </header>

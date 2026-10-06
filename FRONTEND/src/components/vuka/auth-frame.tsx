@@ -22,6 +22,27 @@ const FOOT = [
   ["/support", "Help"],
 ] as const;
 
+const PANEL_PHOTO = {
+  login: {
+    src: "/images/landing/mombasa-port.webp",
+    alt: "",
+    location: "Mombasa, Kenya",
+    credit: "Ian Kiptoo",
+    license: "CC BY 4.0",
+    sourceUrl:
+      "https://commons.wikimedia.org/wiki/File:Container_ship_exiting_Mombasa_port,_Kenya_01.jpg",
+  },
+  register: {
+    src: "/images/landing/mpesa-agent.webp",
+    alt: "",
+    location: "Nairobi, Kenya",
+    credit: "Fiona Graham",
+    license: "CC BY-SA 2.0",
+    sourceUrl:
+      "https://commons.wikimedia.org/wiki/File:M-PESA_mobile_money_and_Equity_agent,_Nairobi,_Kenya.jpg",
+  },
+} as const;
+
 /**
  * Split-screen frame shared by /login and /register. The left column is the form; the right panel
  * shows an illustrative receipt on a 3D paper stack, the launch markets, and what the platform enforces.
@@ -94,12 +115,22 @@ export function AuthFrame({
       </div>
 
       <aside className="relative hidden flex-col justify-between overflow-hidden bg-foreground p-12 text-background lg:flex">
-        <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.3em] opacity-70">
+        <img
+          src={PANEL_PHOTO[isReg ? "register" : "login"].src}
+          alt=""
+          aria-hidden="true"
+          loading="eager"
+          decoding="async"
+          className="absolute inset-0 size-full object-cover opacity-45 grayscale contrast-[1.08]"
+        />
+        <div aria-hidden="true" className="absolute inset-0 bg-foreground/80" />
+
+        <div className="relative flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.3em] opacity-70">
           <span aria-hidden="true" className="h-px w-10 bg-background" />
           Continental cross-border payments
         </div>
 
-        <div>
+        <div className="relative">
           <h2 className="max-w-lg font-display text-5xl font-normal leading-[1.05] tracking-tight">
             {isReg ? (
               <>
@@ -153,7 +184,7 @@ export function AuthFrame({
           </ul>
         </div>
 
-        <div>
+        <div className="relative">
           <ul className="flex flex-wrap gap-x-3 gap-y-2 font-mono text-[10px] uppercase tracking-[0.18em] opacity-80">
             {markets.map((m) => (
               <li key={m.code} className="flex items-center gap-1.5">
@@ -162,8 +193,18 @@ export function AuthFrame({
               </li>
             ))}
           </ul>
-          <div className="mt-3 font-mono text-[10px] uppercase tracking-[0.2em] opacity-75">
-            Sandbox environment
+          <div className="mt-3 flex items-baseline justify-between font-mono text-[10px] uppercase tracking-[0.2em] opacity-75">
+            <span>Sandbox environment</span>
+            <a
+              href={PANEL_PHOTO[isReg ? "register" : "login"].sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer nofollow"
+              className="opacity-70 hover:opacity-100 hover:underline"
+            >
+              {PANEL_PHOTO[isReg ? "register" : "login"].location} ·{" "}
+              {PANEL_PHOTO[isReg ? "register" : "login"].credit} ·{" "}
+              {PANEL_PHOTO[isReg ? "register" : "login"].license}
+            </a>
           </div>
         </div>
       </aside>

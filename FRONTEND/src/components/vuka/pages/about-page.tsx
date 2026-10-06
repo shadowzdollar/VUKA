@@ -77,6 +77,17 @@ export function AboutPage() {
         </>
       }
       lead="VUKA is a cross-border payment platform for African small and medium businesses. It combines mobile-money payouts, a transparent double-entry ledger and smart-contract escrow so that a trader in one country can pay a supplier in another without hoping the other side keeps their word."
+      photo={{
+        src: "/images/landing/lagos-market.webp",
+        alt: "Aerial view of a busy produce market in Lagos, Nigeria",
+        credit: {
+          location: "Lagos, Nigeria",
+          credit: "Ayorinde Ogundele",
+          license: "CC BY-SA 4.0",
+          sourceUrl:
+            "https://commons.wikimedia.org/wiki/File:Aerial_view_of_a_busy_tomato_market_in_Lagos_Nigeria.jpg",
+        },
+      }}
       toc={[
         { id: "problem", label: "The problem" },
         { id: "principles", label: "Principles" },
