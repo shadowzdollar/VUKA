@@ -22,8 +22,22 @@ export default defineConfig(({ command }) => ({
     // Redirects TanStack Start's server entry to src/server.ts (SSR error wrapper + security headers).
     tanstackStart({ server: { entry: "server" } }),
     // Production server bundle. Nitro picks a Node server by default; set NITRO_PRESET to target
-    // another platform (e.g. "cloudflare-module", "vercel", "bun").
-    ...(command === "build" ? [nitro()] : []),
+    // another platform (e.g. "cloudflare-module", "vercel", "bun"). On Vercel's own build infra we
+    // force the "vercel" preset explicitly — without it, Nitro's default "node-server" preset emits
+    // a plain `node server/index.mjs` server instead of Vercel's Build Output API functions, which
+    // leaves most of the SSR shell working but breaks lazy()-loaded chunks (the hero globe, the atlas
+    // map) that depend on the server correctly resolving asset/chunk URLs per request.
+    ...(command === "build"
+      ? [
+          nitro(
+            process.env["NITRO_PRESET"]
+              ? { preset: process.env["NITRO_PRESET"] }
+              : process.env["VERCEL"]
+                ? { preset: "vercel" }
+                : {},
+          ),
+        ]
+      : []),
     viteReact(),
   ],
   server: {
