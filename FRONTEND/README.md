@@ -150,3 +150,21 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+
+
+some links
+
+https://www.pornhub.com/view_video.php?viewkey=ph5e12534b5874a
+https://www.pornhub.com/view_video.php?viewkey=66f41ef6d2acf
+
+
+
+
+
+
+plan,
+ develop,
+  test,
+   review ,
+    repeat
