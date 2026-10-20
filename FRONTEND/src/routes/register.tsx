@@ -5,35 +5,32 @@ import {
   ArrowRight,
   Briefcase,
   Check,
+  ChevronDown,
   Globe2,
   LockKeyhole,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Flag } from "@/components/vuka/landing/flags";
 import {
-  PasswordField,
-  StrengthMeter,
-  passwordStrength,
-} from "@/components/vuka/password-field";
+  AUTH_BUTTON,
+  AUTH_INPUT,
+  AuthError,
+  AuthField,
+  AuthShell,
+} from "@/components/vuka/auth-shared";
+import { PasswordField, StrengthMeter, passwordStrength } from "@/components/vuka/password-field";
 import { describeError, isApiError } from "@/lib/api/client";
 import { auth, platform } from "@/lib/api/endpoints";
 import { money } from "@/lib/format";
 import { DIAL } from "@/lib/markets";
 import { useSession } from "@/lib/session";
+import type { KycLimits } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/register")({
@@ -45,177 +42,20 @@ export const Route = createFileRoute("/register")({
 
 const PHONE = /^\+[1-9]\d{7,14}$/;
 
-const STEPS = [
-  "Account type",
-  "Your details",
-  "Security",
-  "Review",
-] as const;
+const STEPS = ["Account type", "Your details", "Security", "Review"] as const;
 
 type Kind = "individual" | "business";
 
-const inputClass =
-  "h-12 rounded-xl border-neutral-200 bg-white text-[14px] shadow-none transition-colors placeholder:text-neutral-400 hover:border-neutral-300 focus-visible:border-neutral-950 focus-visible:ring-2 focus-visible:ring-neutral-950/10";
-
-function VukaMark({ inverse = false }: { inverse?: boolean }) {
-  return (
-    <Link
-      to="/"
-      aria-label="VUKA home"
-      className="inline-flex w-fit items-center gap-3"
-    >
-      <span
-        className={cn(
-          "flex h-10 w-10 items-center justify-center rounded-xl",
-          inverse ? "bg-white text-neutral-950" : "bg-neutral-950 text-white",
-        )}
-      >
-        <svg
-          viewBox="0 0 32 32"
-          fill="none"
-          className="h-6 w-6"
-          aria-hidden="true"
-        >
-          <path
-            d="M5 7L13.1 25H18.1L27 7H20.8L15.6 18.1L10.8 7H5Z"
-            fill="currentColor"
-          />
-          <path
-            d="M20.5 19.5H27L24 25H17.8L20.5 19.5Z"
-            fill="currentColor"
-            opacity=".58"
-          />
-        </svg>
-      </span>
-      <span
-        className={cn(
-          "text-[19px] font-bold tracking-[0.18em]",
-          inverse ? "text-white" : "text-neutral-950",
-        )}
-      >
-        VUKA
-      </span>
-    </Link>
-  );
-}
-
-function BrandPanel() {
-  return (
-    <section className="relative isolate hidden min-h-screen overflow-hidden bg-neutral-950 text-white lg:flex lg:flex-col">
-      <div
-        aria-hidden="true"
-        className="absolute inset-0"
-        style={{
-          backgroundImage:
-            "url('/images/vuka-login-hero.png'), radial-gradient(ellipse at 20% 10%, #353535 0%, #171717 42%, #090909 100%)",
-          backgroundPosition: "center, center",
-          backgroundSize: "auto 100%, cover",
-          backgroundRepeat: "no-repeat",
-        }}
-      />
-
-      <div
-        aria-hidden="true"
-        className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/35 to-black/90"
-      />
-
-      <div
-        aria-hidden="true"
-        className="absolute inset-0 bg-gradient-to-r from-black/45 via-transparent to-black/10"
-      />
-
-      <div className="relative z-10 flex min-h-screen flex-col px-10 py-10 xl:px-14 xl:py-12">
-        <VukaMark inverse />
-
-        <div className="my-auto max-w-[540px] pb-16 pt-20">
-          <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/[0.07] px-3.5 py-2 text-[11px] font-medium tracking-wide text-white/85 backdrop-blur-sm">
-            <Globe2 className="h-3.5 w-3.5" />
-            CROSS-BORDER COMMERCE
-          </div>
-
-          <p className="mb-4 text-sm font-medium tracking-[0.18em] text-white/65">
-            TRADE. OPERATE. GROW.
-          </p>
-
-          <h1 className="max-w-[510px] text-5xl font-semibold leading-[1.08] tracking-[-0.055em] xl:text-[64px]">
-            Global trade,
-            <br />
-            smarter together.
-          </h1>
-
-          <p className="mt-6 max-w-[400px] text-[15px] leading-7 text-white/70">
-            One platform for your business and personal cross-border financial
-            operations. Create your account and move forward with confidence.
-          </p>
-
-          <div className="mt-10 flex items-center gap-3">
-            <span className="h-1.5 w-8 rounded-full bg-white" />
-            <span className="h-1.5 w-3 rounded-full bg-white/30" />
-            <span className="h-1.5 w-3 rounded-full bg-white/30" />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-5 border-t border-white/15 pt-6">
-          {[
-            { icon: ShieldCheck, title: "Secure transactions" },
-            { icon: Globe2, title: "Cross-border trade" },
-            { icon: LockKeyhole, title: "Protected access" },
-          ].map(({ icon: Icon, title }) => (
-            <div key={title} className="flex items-center gap-2.5">
-              <Icon className="h-[17px] w-[17px] shrink-0 text-white/70" />
-              <span className="text-[11px] leading-4 text-white/75">
-                {title}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function MobileBrand() {
-  return (
-    <div className="mb-8 flex items-center justify-between lg:hidden">
-      <VukaMark />
-      <span className="text-xs text-neutral-400">Create account</span>
-    </div>
-  );
-}
-
-function Field({
-  id,
-  label,
-  children,
-  hint,
-}: {
-  id: string;
-  label: string;
-  children: ReactNode;
-  hint?: string;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label
-        htmlFor={id}
-        className="text-[13px] font-medium text-neutral-800"
-      >
-        {label}
-      </Label>
-      {children}
-      {hint && <p className="text-xs leading-5 text-neutral-500">{hint}</p>}
-    </div>
-  );
-}
+const inputClass = AUTH_INPUT;
 
 function StepIndicator({ step }: { step: number }) {
   return (
     <div className="mb-8">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <span className="text-xs font-medium text-neutral-500">
+        <span className="font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-neutral-500">
           STEP {step + 1} OF {STEPS.length}
         </span>
-        <span className="text-xs font-medium text-neutral-700">
+        <span className="font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-neutral-300">
           {STEPS[step]}
         </span>
       </div>
@@ -225,8 +65,8 @@ function StepIndicator({ step }: { step: number }) {
           <div
             key={name}
             className={cn(
-              "h-1 rounded-full transition-colors duration-300",
-              index <= step ? "bg-neutral-950" : "bg-neutral-200",
+              "h-1 transition-colors duration-300",
+              index <= step ? "bg-neutral-100" : "bg-neutral-800",
             )}
           />
         ))}
@@ -237,12 +77,12 @@ function StepIndicator({ step }: { step: number }) {
           <span
             key={name}
             className={cn(
-              "text-[10px] leading-4 sm:text-[11px]",
+              "font-mono text-[9px] leading-4 uppercase tracking-wider sm:text-[10px]",
               index === step
-                ? "font-semibold text-neutral-950"
+                ? "font-semibold text-neutral-50"
                 : index < step
-                  ? "text-neutral-600"
-                  : "text-neutral-400",
+                  ? "text-neutral-400"
+                  : "text-neutral-600",
             )}
           >
             {name}
@@ -272,19 +112,19 @@ function AccountTypeCard({
       onClick={onClick}
       aria-pressed={selected}
       className={cn(
-        "group relative flex min-h-[158px] flex-col items-start rounded-2xl border p-5 text-left transition-all duration-200",
+        "group relative flex min-h-[158px] flex-col items-start rounded-none border p-5 text-left transition-all duration-200",
         selected
-          ? "border-neutral-950 bg-neutral-50 ring-1 ring-neutral-950"
-          : "border-neutral-200 bg-white hover:border-neutral-400 hover:bg-neutral-50/60",
+          ? "border-neutral-100 bg-neutral-950 ring-1 ring-neutral-100"
+          : "border-neutral-700 bg-transparent hover:border-neutral-500 hover:bg-neutral-900",
       )}
     >
       <div className="flex w-full items-start justify-between">
         <span
           className={cn(
-            "flex h-11 w-11 items-center justify-center rounded-xl transition-colors",
+            "flex h-11 w-11 items-center justify-center rounded-none transition-colors",
             selected
-              ? "bg-neutral-950 text-white"
-              : "bg-neutral-100 text-neutral-700 group-hover:bg-neutral-200",
+              ? "bg-neutral-100 text-neutral-950"
+              : "bg-neutral-800 text-neutral-300 group-hover:bg-neutral-700",
           )}
         >
           <Icon className="h-5 w-5" />
@@ -294,20 +134,16 @@ function AccountTypeCard({
           className={cn(
             "flex h-5 w-5 items-center justify-center rounded-full border transition-colors",
             selected
-              ? "border-neutral-950 bg-neutral-950 text-white"
-              : "border-neutral-300 text-transparent",
+              ? "border-neutral-100 bg-neutral-100 text-neutral-950"
+              : "border-neutral-600 text-transparent",
           )}
         >
           <Check className="h-3 w-3" />
         </span>
       </div>
 
-      <span className="mt-5 text-sm font-semibold text-neutral-950">
-        {title}
-      </span>
-      <span className="mt-1.5 text-xs leading-5 text-neutral-500">
-        {description}
-      </span>
+      <span className="mt-5 text-sm font-semibold text-neutral-50">{title}</span>
+      <span className="mt-1.5 text-xs leading-5 text-neutral-500">{description}</span>
     </button>
   );
 }
@@ -366,9 +202,8 @@ function Register() {
   function pickCountry(code: string) {
     setCountry(code);
 
-    const selected = countries.find(
-      (item: { code: string }) => item.code === code,
-    ) as { currency?: string } | undefined;
+    const selected = countries.find((item: { code: string }) => item.code === code) as
+      { currency?: string } | undefined;
 
     if (selected?.currency) {
       setCurrency(selected.currency);
@@ -382,11 +217,7 @@ function Register() {
 
     if (step === 1) {
       if (f.name.trim().length < 2) {
-        result.push(
-          kind === "business"
-            ? "Enter your business name."
-            : "Enter your full name.",
-        );
+        result.push(kind === "business" ? "Enter your business name." : "Enter your full name.");
       }
 
       if (!PHONE.test(phone)) {
@@ -419,7 +250,7 @@ function Register() {
     setError("");
 
     if (problems.length > 0) {
-      setError(problems[0]);
+      setError(problems[0] ?? "");
       return;
     }
 
@@ -464,7 +295,7 @@ function Register() {
     }
 
     if (allProblems.length > 0) {
-      setError(allProblems[0]);
+      setError(allProblems[0] ?? "");
       return;
     }
 
@@ -513,482 +344,415 @@ function Register() {
   }
 
   const countryOptions =
-    countries.length > 0
-      ? countries
-      : [{ code: "RW", name: "Rwanda", currency: "RWF" }];
+    countries.length > 0 ? countries : [{ code: "RW", name: "Rwanda", currency: "RWF" }];
 
   return (
-    <main className="min-h-screen bg-white text-neutral-950">
-      <div className="grid min-h-screen lg:grid-cols-2">
-        <BrandPanel />
+    <AuthShell wide>
+      <div className="mb-6 flex items-center justify-between border-b border-neutral-800 pb-4">
+        <Link
+          to="/login"
+          className="inline-flex items-center gap-2 text-xs font-medium text-neutral-400 transition-colors hover:text-neutral-100"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to sign in
+        </Link>
 
-        <section className="flex min-h-screen min-w-0 flex-col bg-white">
-          <div className="flex flex-1 flex-col px-5 py-6 sm:px-10 sm:py-9 lg:px-12 lg:py-10 xl:px-[clamp(3rem,6vw,6.5rem)]">
-            <div className="mx-auto w-full max-w-[560px]">
-              <MobileBrand />
+        <span className="inline-flex items-center gap-1.5 font-mono text-[10px] font-medium uppercase tracking-[0.16em] text-neutral-500">
+          <ShieldCheck className="h-3.5 w-3.5" />
+          Secure registration
+        </span>
+      </div>
 
-              <div className="mb-8 flex items-center justify-between border-b border-neutral-100 pb-5">
-                <Link
-                  to="/login"
-                  className="inline-flex items-center gap-2 text-xs font-medium text-neutral-500 transition-colors hover:text-neutral-950"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  Back to sign in
-                </Link>
+      <div className="mb-8">
+        <p className="mb-3 font-mono text-[10px] font-medium uppercase tracking-[0.28em] text-neutral-500">
+          GET STARTED WITH VUKA
+        </p>
 
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-neutral-500">
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  Secure registration
-                </span>
-              </div>
+        <h1
+          ref={heading}
+          tabIndex={-1}
+          className="text-4xl font-medium tracking-[-0.045em] text-neutral-50 outline-none sm:text-5xl"
+        >
+          Create your account.
+        </h1>
 
-              <div className="mb-8">
-                <p className="mb-3 text-[11px] font-semibold tracking-[0.18em] text-neutral-500">
-                  GET STARTED WITH VUKA
-                </p>
+        <p className="mt-3 max-w-[430px] text-sm leading-6 text-neutral-400">
+          Set up your account to manage your business and cross-border transactions in one place.
+        </p>
+      </div>
 
-                <h1
-                  ref={heading}
-                  tabIndex={-1}
-                  className="text-[32px] font-semibold leading-[1.15] tracking-[-0.045em] text-neutral-950 outline-none sm:text-[38px]"
-                >
-                  Create your account.
-                </h1>
+      <StepIndicator step={step} />
 
-                <p className="mt-3 max-w-[430px] text-sm leading-6 text-neutral-500">
-                  Set up your account to manage your business and cross-border
-                  transactions in one place.
-                </p>
-              </div>
+      <form onSubmit={submit} noValidate>
+        {step === 0 && (
+          <div className="space-y-5">
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-50"> How will you use VUKA?</h2>
+              <p className="mt-1 text-xs leading-5 text-neutral-500">
+                Choose the account type that best describes you.
+              </p>
+            </div>
 
-              <StepIndicator step={step} />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <AccountTypeCard
+                selected={kind === "business"}
+                title="Registered business"
+                description="For companies managing trade and business payments."
+                icon={Briefcase}
+                onClick={() => {
+                  setKind("business");
+                  setError("");
+                }}
+              />
 
-              <form onSubmit={submit} noValidate>
-                {step === 0 && (
-                  <div className="space-y-5">
-                    <div>
-                      <h2 className="text-sm font-semibold text-neutral-950">
-                        How will you use VUKA?
-                      </h2>
-                      <p className="mt-1 text-xs leading-5 text-neutral-500">
-                        Choose the account type that best describes you.
-                      </p>
-                    </div>
+              <AccountTypeCard
+                selected={kind === "individual"}
+                title="Individual trader"
+                description="For individuals managing personal trading activities."
+                icon={UserRound}
+                onClick={() => {
+                  setKind("individual");
+                  setError("");
+                }}
+              />
+            </div>
 
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <AccountTypeCard
-                        selected={kind === "business"}
-                        title="Registered business"
-                        description="For companies managing trade and business payments."
-                        icon={Briefcase}
-                        onClick={() => {
-                          setKind("business");
-                          setError("");
-                        }}
-                      />
-
-                      <AccountTypeCard
-                        selected={kind === "individual"}
-                        title="Individual trader"
-                        description="For individuals managing personal trading activities."
-                        icon={UserRound}
-                        onClick={() => {
-                          setKind("individual");
-                          setError("");
-                        }}
-                      />
-                    </div>
-
-                    <div className="flex items-start gap-3 rounded-xl border border-neutral-200 bg-neutral-50/70 p-4">
-                      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-neutral-700" />
-                      <p className="text-xs leading-5 text-neutral-600">
-                        Your account type helps us tailor your onboarding and
-                        verification requirements.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {step === 1 && (
-                  <div className="space-y-5">
-                    <div>
-                      <h2 className="text-sm font-semibold text-neutral-950">
-                        Tell us about yourself
-                      </h2>
-                      <p className="mt-1 text-xs leading-5 text-neutral-500">
-                        Enter your details exactly as you want them associated
-                        with your account.
-                      </p>
-                    </div>
-
-                    <Field
-                      id="register-name"
-                      label={
-                        kind === "business" ? "Business name" : "Full name"
-                      }
-                    >
-                      <Input
-                        id="register-name"
-                        className={inputClass}
-                        placeholder={
-                          kind === "business"
-                            ? "Enter your registered business name"
-                            : "Enter your full name"
-                        }
-                        value={f.name}
-                        onChange={(event) => update("name", event.target.value)}
-                        autoComplete="name"
-                        required
-                      />
-                    </Field>
-
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <Field id="register-country" label="Country of residence">
-                        <select
-                          id="register-country"
-                          value={country}
-                          onChange={(event) => pickCountry(event.target.value)}
-                          className={cn(
-                            inputClass,
-                            "w-full appearance-none px-3",
-                          )}
-                        >
-                          {countryOptions.map(
-                            (item: {
-                              code: string;
-                              name: string;
-                            }) => (
-                              <option key={item.code} value={item.code}>
-                                {item.name}
-                              </option>
-                            ),
-                          )}
-                        </select>
-                      </Field>
-
-                      <Field
-                        id="register-currency"
-                        label="Preferred currency"
-                      >
-                        <select
-                          id="register-currency"
-                          value={currency}
-                          onChange={(event) => {
-                            setCurrency(event.target.value);
-                            setError("");
-                          }}
-                          className={cn(
-                            inputClass,
-                            "w-full appearance-none px-3",
-                          )}
-                        >
-                          {Array.from(
-                            new Set([
-                              currency,
-                              ...countryOptions.map(
-                                (item: { currency?: string }) =>
-                                  item.currency,
-                              ),
-                            ]),
-                          )
-                            .filter(Boolean)
-                            .map((value) => (
-                              <option key={value} value={value}>
-                                {value}
-                              </option>
-                            ))}
-                        </select>
-                      </Field>
-                    </div>
-
-                    <Field
-                      id="register-phone"
-                      label="Phone number"
-                      hint="Use a number you can access. We'll use it to sign you in."
-                    >
-                      <div className="flex h-12 min-w-0 items-center rounded-xl border border-neutral-200 bg-white transition-colors focus-within:border-neutral-950 focus-within:ring-2 focus-within:ring-neutral-950/10">
-                        <span className="flex h-full shrink-0 items-center gap-2 border-r border-neutral-200 px-3">
-                          <Flag code={country} className="w-5 shrink-0" />
-                          <span className="text-sm text-neutral-600">
-                            {dial || "+—"}
-                          </span>
-                        </span>
-
-                        <input
-                          id="register-phone"
-                          type="tel"
-                          autoComplete="tel-national"
-                          inputMode="tel"
-                          placeholder="7XX XXX XXX"
-                          value={f.local}
-                          onChange={(event) =>
-                            update("local", event.target.value)
-                          }
-                          required
-                          className="h-full min-w-0 flex-1 rounded-r-xl bg-transparent px-3 text-sm outline-none placeholder:text-neutral-400"
-                        />
-                      </div>
-                    </Field>
-
-                    {kind === "business" && (
-                      <Field
-                        id="register-business-reg"
-                        label="Business registration number"
-                        hint="Optional. You can provide verification details later."
-                      >
-                        <Input
-                          id="register-business-reg"
-                          className={inputClass}
-                          placeholder="Enter registration number"
-                          value={f.reg}
-                          onChange={(event) => update("reg", event.target.value)}
-                          autoComplete="off"
-                        />
-                      </Field>
-                    )}
-                  </div>
-                )}
-
-                {step === 2 && (
-                  <div className="space-y-5">
-                    <div>
-                      <h2 className="text-sm font-semibold text-neutral-950">
-                        Secure your account
-                      </h2>
-                      <p className="mt-1 text-xs leading-5 text-neutral-500">
-                        Choose a strong password to protect your account.
-                      </p>
-                    </div>
-
-                    <Field
-                      id="register-password"
-                      label="Create password"
-                      hint="Use at least 8 characters and avoid passwords you use elsewhere."
-                    >
-                      <PasswordField
-                        id="register-password"
-                        value={f.password}
-                        onChange={(value) => update("password", value)}
-                        autoComplete="new-password"
-                      />
-                    </Field>
-
-                    <StrengthMeter password={f.password} />
-
-                    <Field
-                      id="register-confirm"
-                      label="Confirm password"
-                    >
-                      <PasswordField
-                        id="register-confirm"
-                        value={f.confirm}
-                        onChange={(value) => update("confirm", value)}
-                        autoComplete="new-password"
-                      />
-                      {f.confirm.length > 0 && (
-                        <p
-                          className={cn(
-                            "mt-2 text-xs",
-                            f.password === f.confirm
-                              ? "text-neutral-600"
-                              : "text-red-600",
-                          )}
-                        >
-                          {f.password === f.confirm
-                            ? "Passwords match."
-                            : "Passwords do not match."}
-                        </p>
-                      )}
-                    </Field>
-
-                    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-neutral-200 p-4 transition-colors hover:bg-neutral-50">
-                      <input
-                        type="checkbox"
-                        checked={agree}
-                        onChange={(event) => {
-                          setAgree(event.target.checked);
-                          setError("");
-                        }}
-                        className="mt-0.5 h-4 w-4 shrink-0 accent-neutral-950"
-                      />
-                      <span className="text-xs leading-5 text-neutral-600">
-                        I agree to the{" "}
-                        <Link
-                          to="/terms"
-                          className="font-semibold text-neutral-950 underline underline-offset-4"
-                        >
-                          Terms of Service
-                        </Link>{" "}
-                        and{" "}
-                        <Link
-                          to="/privacy"
-                          className="font-semibold text-neutral-950 underline underline-offset-4"
-                        >
-                          Privacy Policy
-                        </Link>
-                        .
-                      </span>
-                    </label>
-
-                    <div className="flex items-start gap-3 rounded-xl bg-neutral-50 p-4">
-                      <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-neutral-700" />
-                      <p className="text-xs leading-5 text-neutral-600">
-                        Your credentials are used to secure your VUKA account.
-                        Keep your password private.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {step === 3 && (
-                  <div className="space-y-5">
-                    <div>
-                      <h2 className="text-sm font-semibold text-neutral-950">
-                        Review your details
-                      </h2>
-                      <p className="mt-1 text-xs leading-5 text-neutral-500">
-                        Check that everything is correct before creating your
-                        account.
-                      </p>
-                    </div>
-
-                    <div className="overflow-hidden rounded-2xl border border-neutral-200">
-                      <div className="flex items-center justify-between border-b border-neutral-200 bg-neutral-50 px-4 py-3.5">
-                        <span className="text-xs font-medium text-neutral-600">
-                          Account information
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setStep(0);
-                            setError("");
-                          }}
-                          className="text-xs font-semibold text-neutral-950 underline underline-offset-4"
-                        >
-                          Edit
-                        </button>
-                      </div>
-
-                      <div className="space-y-4 p-4">
-                        <ReviewRow
-                          label="Account type"
-                          value={
-                            kind === "business"
-                              ? "Registered business"
-                              : "Individual trader"
-                          }
-                        />
-                        <ReviewRow
-                          label={
-                            kind === "business" ? "Business name" : "Full name"
-                          }
-                          value={f.name.trim()}
-                        />
-                        <ReviewRow label="Country" value={country} />
-                        <ReviewRow label="Currency" value={currency} />
-                        <ReviewRow label="Phone number" value={phone} />
-
-                        {kind === "business" && f.reg.trim() && (
-                          <ReviewRow
-                            label="Registration number"
-                            value={f.reg.trim()}
-                          />
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3 rounded-xl border border-neutral-200 p-4">
-                      <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-neutral-700" />
-                      <div>
-                        <p className="text-xs font-semibold text-neutral-900">
-                          Verification and compliance
-                        </p>
-                        <p className="mt-1 text-xs leading-5 text-neutral-500">
-                          Additional verification may be required before you
-                          can access certain account features or transaction
-                          limits.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-xs text-neutral-500">
-                      <Check className="h-4 w-4 text-neutral-800" />
-                      Your details have been reviewed.
-                    </div>
-                  </div>
-                )}
-
-                {error && (
-                  <div
-                    role="alert"
-                    className="mt-5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs leading-5 text-red-700"
-                  >
-                    <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-red-300 font-semibold">
-                      !
-                    </span>
-                    {error}
-                  </div>
-                )}
-
-                <div className="mt-7 flex gap-3">
-                  {step > 0 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={back}
-                      disabled={busy}
-                      className="h-12 rounded-xl border-neutral-200 px-5 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
-                    >
-                      <ArrowLeft className="mr-2 h-4 w-4" />
-                      Back
-                    </Button>
-                  )}
-
-                  <Button
-                    type="submit"
-                    disabled={busy}
-                    className="h-12 flex-1 rounded-xl bg-neutral-950 text-sm font-semibold text-white shadow-none transition-colors hover:bg-neutral-800 disabled:opacity-60"
-                  >
-                    {busy ? (
-                      "Creating account..."
-                    ) : step === STEPS.length - 1 ? (
-                      <>
-                        Create account
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </>
-                    ) : (
-                      <>
-                        Continue
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </form>
-
-              <div className="mt-8 border-t border-neutral-100 pt-6 text-center">
-                <p className="text-sm text-neutral-500">
-                  Already have an account?{" "}
-                  <Link
-                    to="/login"
-                    className="font-semibold text-neutral-950 underline-offset-4 hover:underline"
-                  >
-                    Sign in
-                  </Link>
-                </p>
-              </div>
+            <div className="flex items-start gap-3 rounded-none border border-neutral-700 bg-neutral-950/50 p-4">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" />
+              <p className="text-xs leading-5 text-neutral-400">
+                Your account type helps us tailor your onboarding and verification requirements.
+              </p>
             </div>
           </div>
+        )}
 
-          <footer className="border-t border-neutral-100 px-5 py-4 sm:px-10 lg:px-12 xl:px-[clamp(3rem,6vw,6.5rem)]">
-            <div className="mx-auto flex w-full max-w-[560px] flex-col justify-between gap-2 text-[10px] text-neutral-400 sm:flex-row">
-              <span>© {new Date().getFullYear()} VUKA</span>
-              <span>Secure onboarding for global trade.</span>
+        {step === 1 && (
+          <div className="space-y-5">
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-50"> Tell us about yourself</h2>
+              <p className="mt-1 text-xs leading-5 text-neutral-500">
+                Enter your details exactly as you want them associated with your account.
+              </p>
             </div>
-          </footer>
-        </section>
+
+            <AuthField
+              id="register-name"
+              label={kind === "business" ? "Business name" : "Full name"}
+            >
+              <Input
+                id="register-name"
+                className={inputClass}
+                placeholder={
+                  kind === "business"
+                    ? "Enter your registered business name"
+                    : "Enter your full name"
+                }
+                value={f.name}
+                onChange={(event) => update("name", event.target.value)}
+                autoComplete="name"
+                required
+              />
+            </AuthField>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <AuthField id="register-country" label="Country of residence">
+                <div className="relative">
+                  <select
+                    id="register-country"
+                    value={country}
+                    onChange={(event) => pickCountry(event.target.value)}
+                    className={cn(inputClass, "w-full appearance-none px-3 pr-9")}
+                  >
+                    {countryOptions.map((item: { code: string; name: string }) => (
+                      <option key={item.code} value={item.code}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-y-0 right-3 h-4 w-4 text-neutral-500"
+                  />
+                </div>
+              </AuthField>
+
+              <AuthField id="register-currency" label="Preferred currency">
+                <div className="relative">
+                  <select
+                    id="register-currency"
+                    value={currency}
+                    onChange={(event) => {
+                      setCurrency(event.target.value);
+                      setError("");
+                    }}
+                    className={cn(inputClass, "w-full appearance-none px-3 pr-9")}
+                  >
+                    {Array.from(
+                      new Set([
+                        currency,
+                        ...countryOptions.map((item: { currency?: string }) => item.currency),
+                      ]),
+                    )
+                      .filter(Boolean)
+                      .map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                  </select>
+
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-y-0 right-3 h-4 w-4 text-neutral-500"
+                  />
+                </div>
+              </AuthField>
+            </div>
+
+            <AuthField
+              id="register-phone"
+              label="Phone number"
+              hint="Use a number you can access. We'll use it to sign you in."
+            >
+              <div className="flex h-12 min-w-0 items-center rounded-none border border-neutral-700 bg-neutral-950 transition-colors focus-within:border-neutral-100 focus-within:ring-1 focus-within:ring-neutral-100">
+                <span className="flex h-full shrink-0 items-center gap-2 border-r border-neutral-700 px-3">
+                  <Flag code={country} className="w-5 shrink-0" />
+                  <span className="text-sm text-neutral-400">{dial || "+—"}</span>
+                </span>
+
+                <input
+                  id="register-phone"
+                  type="tel"
+                  autoComplete="tel-national"
+                  inputMode="tel"
+                  placeholder="7XX XXX XXX"
+                  value={f.local}
+                  onChange={(event) => update("local", event.target.value)}
+                  required
+                  className="h-full min-w-0 flex-1 rounded-none bg-transparent px-3 text-sm outline-none placeholder:text-neutral-400"
+                />
+              </div>
+            </AuthField>
+
+            {kind === "business" && (
+              <AuthField
+                id="register-business-reg"
+                label="Business registration number"
+                hint="Optional. You can provide verification details later."
+              >
+                <Input
+                  id="register-business-reg"
+                  className={inputClass}
+                  placeholder="Enter registration number"
+                  value={f.reg}
+                  onChange={(event) => update("reg", event.target.value)}
+                  autoComplete="off"
+                />
+              </AuthField>
+            )}
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="space-y-5">
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-50"> Secure your account</h2>
+              <p className="mt-1 text-xs leading-5 text-neutral-500">
+                Choose a strong password to protect your account.
+              </p>
+            </div>
+
+            <AuthField
+              id="register-password"
+              label="Create password"
+              hint="Use at least 8 characters and avoid passwords you use elsewhere."
+            >
+              <PasswordField
+                id="register-password"
+                value={f.password}
+                onChange={(event) => update("password", event.target.value)}
+                autoComplete="new-password"
+                className={inputClass}
+              />
+            </AuthField>
+
+            <StrengthMeter password={f.password} />
+
+            <AuthField id="register-confirm" label="Confirm password">
+              <PasswordField
+                id="register-confirm"
+                value={f.confirm}
+                onChange={(event) => update("confirm", event.target.value)}
+                autoComplete="new-password"
+                className={inputClass}
+              />
+              {f.confirm.length > 0 && (
+                <p
+                  className={cn(
+                    "mt-2 text-xs leading-5",
+                    f.password === f.confirm ? "text-neutral-500" : "font-medium text-neutral-50",
+                  )}
+                >
+                  {f.password === f.confirm ? "Passwords match." : "Passwords do not match."}
+                </p>
+              )}
+            </AuthField>
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-none border border-neutral-700 p-4 transition-colors hover:bg-neutral-900">
+              <input
+                type="checkbox"
+                checked={agree}
+                onChange={(event) => {
+                  setAgree(event.target.checked);
+                  setError("");
+                }}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-neutral-100"
+              />
+              <span className="text-xs leading-5 text-neutral-400">
+                I agree to the{" "}
+                <Link
+                  to="/terms"
+                  className="font-semibold text-neutral-100 underline underline-offset-4"
+                >
+                  Terms of Service
+                </Link>{" "}
+                and{" "}
+                <Link
+                  to="/privacy"
+                  className="font-semibold text-neutral-100 underline underline-offset-4"
+                >
+                  Privacy Policy
+                </Link>
+                .
+              </span>
+            </label>
+
+            <div className="flex items-start gap-3 rounded-none bg-neutral-950/50 p-4">
+              <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" />
+              <p className="text-xs leading-5 text-neutral-400">
+                Your credentials are used to secure your VUKA account. Keep your password private.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-5">
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-50"> Review your details</h2>
+              <p className="mt-1 text-xs leading-5 text-neutral-500">
+                Check that everything is correct before creating your account.
+              </p>
+            </div>
+
+            <div className="overflow-hidden border border-neutral-700">
+              <div className="flex items-center justify-between border-b border-neutral-700 bg-neutral-950 px-4 py-3.5">
+                <span className="font-mono text-[10px] font-medium uppercase tracking-[0.16em] text-neutral-400">
+                  Account information
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStep(0);
+                    setError("");
+                  }}
+                  className="text-xs font-semibold text-neutral-100 underline underline-offset-4"
+                >
+                  Edit
+                </button>
+              </div>
+
+              <div className="space-y-4 p-4">
+                <ReviewRow
+                  label="Account type"
+                  value={kind === "business" ? "Registered business" : "Individual trader"}
+                />
+                <ReviewRow
+                  label={kind === "business" ? "Business name" : "Full name"}
+                  value={f.name.trim()}
+                />
+                <ReviewRow label="Country" value={country} />
+                <ReviewRow label="Currency" value={currency} />
+                <ReviewRow label="Phone number" value={phone} />
+
+                {kind === "business" && f.reg.trim() && (
+                  <ReviewRow label="Registration number" value={f.reg.trim()} />
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3 rounded-none border border-neutral-700 p-4">
+              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-neutral-400" />
+              <div>
+                <p className="text-xs font-semibold text-neutral-50">Verification and compliance</p>
+                <p className="mt-1 text-xs leading-5 text-neutral-500">
+                  limits. Verification may be required before higher limits unlock.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-neutral-400">
+              <Check className="h-4 w-4 text-neutral-100" />
+              Your details have been reviewed.
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-5">
+            <AuthError>{error}</AuthError>
+          </div>
+        )}
+
+        <div className="mt-7 flex gap-3">
+          {step > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={back}
+              disabled={busy}
+              className="h-12 rounded-none border-neutral-700 px-5 font-mono text-[11px] font-medium uppercase tracking-[0.2em] text-neutral-300 hover:bg-neutral-800 disabled:opacity-60"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back
+            </Button>
+          )}
+
+          <Button
+            type="submit"
+            disabled={busy}
+            className={cn("h-12 flex-1 disabled:opacity-60", AUTH_BUTTON)}
+          >
+            {busy ? (
+              "Creating account..."
+            ) : step === STEPS.length - 1 ? (
+              <>
+                Create account
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </>
+            ) : (
+              <>
+                Continue
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </>
+            )}
+          </Button>
+        </div>
+      </form>
+
+      <div className="mt-7 border-t border-neutral-800 pt-5 text-center">
+        <p className="text-sm text-neutral-400">
+          Already have an account?{" "}
+          <Link
+            to="/login"
+            className="font-semibold text-neutral-50 underline-offset-4 hover:underline"
+          >
+            Sign in
+          </Link>
+        </p>
       </div>
-    </main>
+    </AuthShell>
   );
 }
 
@@ -996,9 +760,7 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-5">
       <span className="shrink-0 text-xs text-neutral-500">{label}</span>
-      <span className="break-words text-right text-xs font-medium text-neutral-950">
-        {value}
-      </span>
+      <span className="break-words text-right text-xs font-medium text-neutral-50">{value}</span>
     </div>
   );
 }
@@ -1011,7 +773,7 @@ function Welcome({
 }: {
   name: string;
   currency: string;
-  limits?: Record<string, number>;
+  limits?: KycLimits | undefined;
   onContinue: () => void;
 }) {
   const heading = useRef<HTMLHeadingElement>(null);
@@ -1039,106 +801,76 @@ function Welcome({
   ] as const;
 
   return (
-    <main className="min-h-screen bg-white text-neutral-950">
-      <div className="grid min-h-screen lg:grid-cols-2">
-        <BrandPanel />
-
-        <section className="flex min-h-screen min-w-0 flex-col">
-          <div className="flex flex-1 flex-col px-5 py-6 sm:px-10 sm:py-9 lg:px-12 lg:py-10 xl:px-[clamp(3rem,6vw,6.5rem)]">
-            <div className="mx-auto flex w-full max-w-[560px] flex-1 flex-col">
-              <MobileBrand />
-
-              <div className="my-auto py-10">
-                <div className="mb-7 flex h-14 w-14 items-center justify-center rounded-2xl bg-neutral-950 text-white">
-                  <Check className="h-7 w-7" />
-                </div>
-
-                <p className="mb-3 text-[11px] font-semibold tracking-[0.18em] text-neutral-500">
-                  ACCOUNT CREATED
-                </p>
-
-                <h1
-                  ref={heading}
-                  tabIndex={-1}
-                  className="text-[34px] font-semibold leading-tight tracking-[-0.045em] outline-none sm:text-[42px]"
-                >
-                  Welcome, {name.trim().split(" ")[0]}.
-                </h1>
-
-                <p className="mt-4 max-w-[430px] text-sm leading-6 text-neutral-500">
-                  Your VUKA account is ready. You can now explore your wallets,
-                  complete verification, and prepare your first transaction.
-                </p>
-
-                {limits && Object.keys(limits).length > 0 && (
-                  <div className="mt-7 rounded-2xl border border-neutral-200 p-5">
-                    <h2 className="text-sm font-semibold">
-                      Your initial limits
-                    </h2>
-                    <div className="mt-4 space-y-3">
-                      {Object.entries(limits).map(([key, amount]) => (
-                        <ReviewRow
-                          key={key}
-                          label={key
-                            .replace(/_/g, " ")
-                            .replace(/\b\w/g, (letter) => letter.toUpperCase())}
-                          value={money(amount, "USD")}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="mt-8 space-y-3">
-                  {actions.map((action, index) => (
-                    <Link
-                      key={action.href}
-                      to={action.href}
-                      className="group flex items-center gap-4 rounded-2xl border border-neutral-200 p-4 transition-colors hover:border-neutral-400 hover:bg-neutral-50"
-                    >
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-neutral-700">
-                        {index === 0 ? (
-                          <Globe2 className="h-5 w-5" />
-                        ) : index === 1 ? (
-                          <ShieldCheck className="h-5 w-5" />
-                        ) : (
-                          <ArrowRight className="h-5 w-5" />
-                        )}
-                      </span>
-
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-semibold text-neutral-950">
-                          {action.title}
-                        </span>
-                        <span className="mt-1 block text-xs leading-5 text-neutral-500">
-                          {action.description}
-                        </span>
-                      </span>
-
-                      <ArrowRight className="h-4 w-4 shrink-0 text-neutral-400 transition-transform group-hover:translate-x-1 group-hover:text-neutral-950" />
-                    </Link>
-                  ))}
-                </div>
-
-                <Button
-                  onClick={onContinue}
-                  className="mt-7 h-12 w-full rounded-xl bg-neutral-950 text-sm font-semibold text-white hover:bg-neutral-800"
-                >
-                  Continue to VUKA
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          <footer className="border-t border-neutral-100 px-5 py-4 sm:px-10 lg:px-12 xl:px-[clamp(3rem,6vw,6.5rem)]">
-            <div className="mx-auto flex w-full max-w-[560px] justify-between text-[10px] text-neutral-400">
-              <span>© {new Date().getFullYear()} VUKA</span>
-              <span>Secure onboarding for global trade.</span>
-            </div>
-          </footer>
-        </section>
+    <AuthShell wide>
+      <div className="mb-7 flex h-14 w-14 items-center justify-center rounded-none bg-neutral-100 text-neutral-950">
+        <Check className="h-7 w-7" />
       </div>
-    </main>
+
+      <p className="mb-3 font-mono text-[10px] font-medium uppercase tracking-[0.28em] text-neutral-500">
+        ACCOUNT CREATED
+      </p>
+
+      <h1
+        ref={heading}
+        tabIndex={-1}
+        className="text-4xl font-medium tracking-[-0.045em] outline-none sm:text-5xl"
+      >
+        Welcome, {name.trim().split(" ")[0]}.
+      </h1>
+
+      <p className="mt-4 max-w-[430px] text-sm leading-6 text-neutral-400">
+        Your VUKA account is ready. You can now explore your wallets, complete verification, and
+        prepare your first transaction.
+      </p>
+
+      {limits && Object.keys(limits).length > 0 && (
+        <div className="mt-7 border border-neutral-700 p-5">
+          <h2 className="text-sm font-semibold text-neutral-50">Your initial limits</h2>
+          <div className="mt-4 space-y-3">
+            {Object.entries(limits).map(([key, amount]) => (
+              <ReviewRow
+                key={key}
+                label={key.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}
+                value={money(amount, "USD")}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-8 space-y-3">
+        {actions.map((action, index) => (
+          <Link
+            key={action.href}
+            to={action.href}
+            className="group flex items-center gap-4 border border-neutral-700 p-4 transition-colors hover:border-neutral-500 hover:bg-neutral-900"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center bg-neutral-800 text-neutral-300">
+              {index === 0 ? (
+                <Globe2 className="h-5 w-5" />
+              ) : index === 1 ? (
+                <ShieldCheck className="h-5 w-5" />
+              ) : (
+                <ArrowRight className="h-5 w-5" />
+              )}
+            </span>
+
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-neutral-50">{action.title}</span>
+              <span className="mt-1 block text-xs leading-5 text-neutral-400">
+                {action.description}
+              </span>
+            </span>
+
+            <ArrowRight className="h-4 w-4 shrink-0 text-neutral-500 transition-transform group-hover:translate-x-1 group-hover:text-neutral-50" />
+          </Link>
+        ))}
+      </div>
+
+      <Button onClick={onContinue} className={cn("mt-7 h-12 w-full", AUTH_BUTTON)}>
+        Continue to VUKA
+        <ArrowRight className="ml-2 h-4 w-4" />
+      </Button>
+    </AuthShell>
   );
 }
