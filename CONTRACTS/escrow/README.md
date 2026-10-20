@@ -62,3 +62,48 @@ Record the emitted token and escrow addresses locally. The test token starts
 with its supply assigned to the deployer and can mint only from that deployer
 address. It is not backed by fiat, is not USDC, and must never be used for a
 production deployment.
+
+## Deploying VukaEscrowV2 (the current target)
+
+`DeployVukaEscrow.s.sol` above deploys the original V1 contract. The roadmap
+target is **V2** (`VukaEscrowV2`), which adds distinct admin/guardian/
+treasury roles instead of one key holding every power. Deploy in two steps:
+
+```bash
+# 1. Get a settlement token address on Amoy. If you don't have one yet, the
+#    AmoyTestnet script above deploys VukaTestToken alongside a V1 escrow you
+#    can ignore — copy the printed "VukaTestToken deployed at" address.
+
+# 2. Deploy V2 against that token. VUKA_ESCROW_ADMIN, _GUARDIAN and _ARBITER
+#    must be three DISTINCT addresses, and none may equal the deployer key —
+#    the script refuses to deploy otherwise (see script/DeployVukaEscrowV2.s.sol).
+#    Use separate testnet wallets for each; a multisig for admin/arbiter is
+#    the real-world recommendation but any distinct funded EOA works for a
+#    sandbox/demo deployment.
+export VUKA_SETTLEMENT_TOKEN=0x...   # from step 1
+export VUKA_ESCROW_ADMIN=0x...
+export VUKA_ESCROW_GUARDIAN=0x...
+export VUKA_ESCROW_ARBITER=0x...
+export VUKA_ESCROW_TREASURY=0x...    # may equal admin; zero only if FEE_BPS=0
+
+forge script script/DeployVukaEscrowV2.s.sol:DeployVukaEscrowV2 \
+  --rpc-url "$POLYGON_AMOY_RPC_URL" \
+  --broadcast
+```
+
+The script logs the deployed address. Wire it up:
+
+- **Frontend (Vercel):** set `VITE_ESCROW_CONTRACT` to this address and
+  `VITE_ESCROW_CHAIN_ID=80002` — see `FRONTEND/VERCEL_DEPLOY.md`.
+- **Engine (Render), optional:** set `VUKA_RECONCILIATION_ENABLED=true`,
+  `VUKA_RECONCILIATION_CONTRACT` to this address, and
+  `VUKA_RECONCILIATION_RPC_URL` to an Amoy RPC endpoint, so the engine
+  reconciles on-chain escrow events into the off-chain ledger — see
+  `ENGINE/deploy/RENDER_DEPLOY_RUNBOOK.md`. The platform works without this
+  (traders can still create escrows on-chain through their own wallet), but
+  the engine won't reflect on-chain state until reconciliation is on.
+
+Fund the deployer (and the admin/guardian/arbiter wallets you plan to use
+for day-to-day operation) with Amoy test POL from a public faucet before
+running either script — a real transaction, costs real testnet gas, cannot
+be done on the user's behalf without their own wallet/key.
