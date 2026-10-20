@@ -310,7 +310,8 @@ func run(log *slog.Logger) error {
 			Environment: cfg.Environment, ChainID: cfg.ReconciliationChainID, EscrowContract: cfg.ReconciliationContract,
 			ReconciliationEnabled: cfg.ReconciliationEnabled, LiveProviders: len(liveProviders) > 0, SettlementExecution: cfg.SettlementExecutionEnabled,
 		}),
-		api.WithMetricsToken(cfg.MetricsToken))
+		api.WithMetricsToken(cfg.MetricsToken),
+		api.WithCrossSiteCookies(cfg.CrossSiteCookies))
 	if cfg.WebDir != "" {
 		handler = api.WithWebDir(handler, cfg.WebDir)
 		log.Info("serving web dashboard", "dir", cfg.WebDir)
