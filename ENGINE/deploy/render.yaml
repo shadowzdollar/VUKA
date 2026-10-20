@@ -2,20 +2,28 @@
 # VUKA — Render Blueprint (deploy from this repo with one click)
 #
 #   New Blueprint -> select this repo -> Render provisions:
-#     1.  a Web Service  (Docker image, single port 8080)
+#     1.  a Web Service  (Docker image, API-only, single port 8080)
 #     2.  a Postgres database  (free tier, expires after 90 days — swap to
 #         Neon/Supabase free if you want a non-expiring DB)
-#   Environment variables marked "sync: false" must be filled after creation.
+#
+#   The frontend (FRONTEND/) is NOT served by this image — it deploys
+#   separately to Vercel and calls this service cross-origin via
+#   VITE_API_BASE_URL. See FRONTEND/.env.example and
+#   ENGINE/deploy/RENDER_DEPLOY_RUNBOOK.md for the full wiring.
+#
+#   Environment variables marked "sync: false" must be filled in after
+#   creation (Render dashboard -> service -> Environment).
 # ============================================================================
 
 services:
   - type: web
-    name: vuka
+    name: vuka-engine
     runtime: docker
     plan: free
     region: oregon
     dockerfilePath: ENGINE/deploy/Dockerfile
     dockerContext: .
+    healthCheckPath: /healthz
     envVars:
       - key: VUKA_DATABASE_URL
         fromDatabase:
@@ -23,25 +31,42 @@ services:
           property: connectionString
       - key: VUKA_FX_RWF_KES
         value: "9.5"
+      # "development" is intentional, not a mistake: VUKA_ENV=production hard-disables
+      # the local synthetic ledger (the config loader refuses to boot with both
+      # production and synthetic execution set — see internal/config/config.go). This
+      # platform has no licensed payout rails, so "production" here would only ever
+      # mean a read-only shell with registration/payments/invoices all disabled. Running
+      # as "development" is what keeps the sandbox genuinely interactive, and the UI
+      # already labels it a sandbox everywhere (frontend_color_guidelines.md / AGENTS.md:
+      # never claim licensing, audits, live rails, or endorsement).
       - key: VUKA_ENV
-        value: "production"
+        value: "development"
       - key: VUKA_READ_ONLY
+        value: "false"
+      - key: VUKA_LOCAL_SYNTHETIC_EXECUTION_ENABLED
         value: "true"
+      - key: VUKA_QUOTE_SIGNING_KEY
+        sync: false
+        # Generate with: openssl rand -hex 32  (must be >= 32 chars)
       - key: VUKA_CORS_ORIGINS
-        value: "https://vuka.onrender.com"
-        # ⚠️ After Render creates the service, replace this with the real URL
-        # Render assigns (Settings -> Service URL). Same-origin API calls don't
-        # need CORS, so this only matters for direct cross-origin requests.
-      - key: VUKA_WEB_DIR
-        value: "/app/dist"
+        value: "https://REPLACE-WITH-VERCEL-DOMAIN"
+        # ⚠️ After the Vercel deploy exists, replace with its real origin(s),
+        # comma-separated if you have both a preview and production domain.
+      - key: VUKA_CROSS_SITE_COOKIES
+        value: "true"
+        # Required: the frontend's origin (Vercel) differs from this service's
+        # origin (Render), so session cookies must be SameSite=None to be sent.
       - key: VUKA_OPERATOR_EMAIL
         sync: false
       - key: VUKA_OPERATOR_PASSWORD
         sync: false
+        # >= 12 chars, required in any VUKA_ENV — this is a real login, not a demo seed.
       - key: VUKA_OPERATOR_ROLE
         value: "operator"
       - key: VUKA_RECONCILIATION_ENABLED
         value: "false"
+        # Flip to "true" + set VUKA_RECONCILIATION_RPC_URL/_CONTRACT once the escrow
+        # contract is deployed on Amoy and you want the engine watching it on-chain.
 
 databases:
   - name: vuka-db
