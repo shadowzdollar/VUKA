@@ -59,9 +59,7 @@ export function PublicPage({
               <h1 className="mt-5 max-w-3xl font-display text-5xl font-normal leading-[1.05] tracking-tight sm:text-6xl">
                 {title}
               </h1>
-              {lead ? (
-                <p className="mt-6 max-w-2xl text-lg text-muted-foreground">{lead}</p>
-              ) : null}
+              {lead ? <p className="mt-6 max-w-2xl text-lg text-muted-foreground">{lead}</p> : null}
               {draft ? (
                 <p role="note" className="mt-8 max-w-2xl border-2 border-foreground p-4 text-sm">
                   <strong className="font-mono text-[10px] uppercase tracking-[0.2em]">
