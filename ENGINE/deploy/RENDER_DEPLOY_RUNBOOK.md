@@ -1,84 +1,101 @@
-# VUKA — Deploy to Render (working-platform link for the Stage 2 form)
+# VUKA — Deploy the engine to Render
 
-**Goal:** a permanent public URL for field 8 (working platform) that survives
-this laptop being closed. The temporary `trycloudflare.com` tunnel is NOT the
-submission link — it dies with this machine.
+**Current architecture (supersedes the single-service hackathon-era version of
+this doc):** the frontend (`FRONTEND/`, TanStack Start) deploys separately to
+**Vercel** and calls this engine **cross-origin**. This Render service is
+API-only — it does not build or serve the SPA. See
+`FRONTEND/VERCEL_DEPLOY.md` for the frontend half, and deploy the engine
+first: the frontend's `VITE_API_BASE_URL` needs this service's URL.
 
-**Verified already (2026-08-11):**
-- `ENGINE/deploy/Dockerfile` — multi-stage: Node builds the SPA → Go builds a
-  static engine binary → alpine runtime serves SPA + `/deck` + `/api` on ONE port.
-- All three stages proven locally: `npm run build` (dist/), `go build` (binary),
-  `VUKA_WEB_DIR=dist` single-port serving live on :8080 + via tunnel.
-- `ENGINE/deploy/render.yaml` — Render Blueprint: Web Service (Docker, free) +
-  Postgres (free, 90-day expiry).
+## Why `VUKA_ENV=development` in a public deployment
 
----
+This is intentional, not a mistake. `internal/config/config.go` refuses to
+boot with `VUKA_ENV=production` unless `VUKA_READ_ONLY=true` and local
+synthetic execution is **off** — because "production" in this codebase means
+real licensed payout rails, which VUKA does not have (see `AGENTS.md`:
+never claim licensing, audits, live rails, or endorsement). Setting
+`VUKA_ENV=production` on a public demo would make every registration,
+payment, and invoice fail with a read-only error. Running as `development`
+with `VUKA_LOCAL_SYNTHETIC_EXECUTION_ENABLED=true` is what keeps the sandbox
+genuinely interactive — and the UI already labels it a sandbox everywhere, so
+this is honest, not a workaround.
 
-## Options — pick ONE
+## 1. Deploy the Blueprint
 
-### Option A — Render Blueprint (recommended, one click)
-1. Push this project to a **public GitHub/GitLab repo** (no git repo exists
-   yet — `git init` + first commit required; secrets are NOT in the repo).
-2. On Render: **New → Blueprint** → select the repo.
-3. Render provisions `vuka` web service + `vuka-db` postgres automatically.
-4. After creation, copy the **Service URL** (e.g. `https://vuka-xxxx.onrender.com`)
-   and put it into `VUKA_CORS_ORIGINS` (Settings → Environment) — replace the
-   placeholder `https://vuka.onrender.com`.
-5. Set `VUKA_OPERATOR_EMAIL` and `VUKA_OPERATOR_PASSWORD` to strong, unique
-   credentials in Render before exposing the service. Do not leave them blank:
-   blank credentials disable the protected operations console.
-6. Seed the demo data (see below) and verify: `{SERVICE_URL}/`, `{SERVICE_URL}/deck`,
-   `{SERVICE_URL}/api/fx` should all return 200. The ledger starts EMPTY on a
-   fresh DB — run the seed.
+1. Push this repo to GitHub/GitLab (public or Render-connected private repo).
+2. Render → **New → Blueprint** → select the repo → it reads
+   `ENGINE/deploy/render.yaml` and provisions:
+   - `vuka-engine` — a Docker web service (`ENGINE/deploy/Dockerfile`)
+   - `vuka-db` — a free Postgres (90-day expiry; swap to Neon/Supabase for a
+     non-expiring DB — see Option B below)
+3. Render builds and deploys. First build takes a few minutes (Go compile).
 
-The production blueprint intentionally sets `VUKA_READ_ONLY=true`. Ledger
-funding, transfers, reversals, and invoice creation remain disabled until a
-separate settlement-execution phase is explicitly approved.
+## 2. Fill in the `sync: false` secrets
 
-### Option B — Render Blueprint with existing DB
-If you already have a Postgres (Render, Neon, Supabase — Neon is recommended:
-perpetual free tier, no expiry):
-1. Create the repo + Blueprint as in Option A.
-2. Delete the `databases:` block from `render.yaml`, remove the
-   `fromDatabase` line, and set `VUKA_DATABASE_URL` directly to your external
-   DSN (must be a `postgres://` URL, `sslmode=disable` works).
+In the Render dashboard → `vuka-engine` → **Environment**, set:
 
----
+| Key | Value |
+|---|---|
+| `VUKA_QUOTE_SIGNING_KEY` | `openssl rand -hex 32` (≥ 32 chars, same value on every replica) |
+| `VUKA_OPERATOR_EMAIL` | a real address you control, e.g. `operator@yourdomain.example` |
+| `VUKA_OPERATOR_PASSWORD` | a strong password, ≥ 12 chars — this is a real login, not a demo seed |
 
-## Seeding the demo data on a fresh Render DB
+## 3. Point it at the Vercel frontend
 
-The engine creates settlement accounts on boot, but demo users/transactions
-come from the seed:
+Once the Vercel deploy exists (step requires this engine's URL first — do
+this after both are up, then redeploy if needed):
 
-```
-# from ENGINE/go-bridge-core (local machine, pointing at the Render DB URL)
+- `VUKA_CORS_ORIGINS` → the Vercel production URL (and preview URL if you
+  want previews to work too), comma-separated, no trailing slash.
+- `VUKA_CROSS_SITE_COOKIES` is already `true` in the blueprint — required
+  because Vercel and Render are different sites, so session cookies must be
+  `SameSite=None` to survive the cross-origin `fetch`. Leaving this `false`
+  (the engine's default) makes login *appear* to succeed — the cookie is set —
+  but silently drops on every following request, so the app looks logged out.
+
+## 4. Seed demo data (optional, recommended for evaluators)
+
+```bash
+# from ENGINE/go-bridge-core, pointing at the Render DB's external connection string
 export VUKA_DATABASE_URL="postgres://vuka:***@<render-host>/vuka?sslmode=disable"
 go run ./cmd/seed
 ```
 
-Then reset to the pristine 10-transaction register:
-```
-bash scripts/build_demo_register.sh   # 10 txns Aug 1–9, Aug 10 empty, FX 9.5
-```
+Other seeders in `cmd/seed-*` add disputes, settlements, analytics history,
+identity/KYC cases, and a supervised pilot trail — run the ones relevant to
+what you want an evaluator to see. The "development demo access" quick-login
+panel on `/login` only appears when `config.environment == "development"`,
+which it will be with the settings above.
 
-⚠️ Use the exact demo phones from the seed — the frontend matches them
-byte-for-byte. Never retype from memory.
+## 5. Verify
 
----
+- `{SERVICE_URL}/healthz` → 200
+- `{SERVICE_URL}/api/public/config` → 200, JSON with `countries`/`environment`
+- From the deployed Vercel frontend: register a trader, log in, confirm the
+  session persists across a page reload (this specifically exercises the
+  cross-site cookie fix — if it silently logs you out after one request,
+  re-check `VUKA_CROSS_SITE_COOKIES` and `VUKA_CORS_ORIGINS`).
 
-## Post-deploy checklist (before pasting into the form)
+## Option B — bring your own Postgres (avoids the 90-day free-tier expiry)
 
-- [ ] `{SERVICE_URL}/` → 200, SPA loads, `● LIVE` badge appears (FX from engine)
-- [ ] `{SERVICE_URL}/deck` → 200, pitch deck page
-- [ ] `{SERVICE_URL}/api/fx` → 200, `{"rate":9.5}`
-- [ ] Open the platform in an **incognito window** (no login wall)
-- [ ] Paste `{SERVICE_URL}/` into form field 8
-- [ ] Keep the local tunnel as a backup until Render is confirmed
+1. Create a Neon (recommended, perpetual free tier) or Supabase project.
+2. In `render.yaml`, delete the `databases:` block and the `fromDatabase`
+   stanza under `VUKA_DATABASE_URL`; set `VUKA_DATABASE_URL` directly in the
+   dashboard to the external DSN (`sslmode=require` for Neon).
 
-## Render free-tier caveats (checked 2026-08-11)
+## Render free-tier caveats
 
-- Web service spins down after ~15 min idle → first click takes ~1 min to wake.
-  Acceptable for a demo; set a "Keep alive" cron ping if you want it always-hot.
-- Free Postgres **expires after ~90 days** — fine for the evaluation window,
-  or use Neon's perpetual free tier instead.
-- 750 free instance-hours/month — plenty for a demo.
+- The web service spins down after ~15 min idle; first request after that
+  takes ~30–60s to wake. Fine for a reviewed demo, not for a timed live
+  walkthrough — consider a paid instance or a keep-alive ping before a
+  scheduled presentation.
+- Free Postgres expires after ~90 days (see Option B).
+- 750 free instance-hours/month.
+
+## Optional: the Python ISO 20022 gateway
+
+`ENGINE/python-iso-gateway` is a pacs.008 → pacs.002 translator for bank/
+telecom-side integration testing — it is a separate interoperability surface,
+not something the trader/operator web app calls. It is not required for the
+live site to work. Deploy it only if you have an external system that needs
+to exchange real ISO 20022 messages against this engine's gRPC port.
