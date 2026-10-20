@@ -77,6 +77,7 @@ type Server struct {
 	pilot                     *pilot.Service
 	support                   *support.Service
 	providerExecution         *providerexec.Service
+	crossSiteCookies          bool
 	workflow                  *transactionworkflow.Service
 	risk                      *risk.Service
 	analytics                 *analytics.Service
@@ -98,6 +99,30 @@ func WithProviderCatalog(c *providers.Catalog) Option {
 			s.providerCatalog = c
 		}
 	}
+}
+
+// WithCrossSiteCookies marks session cookies SameSite=None (instead of the
+// default Lax) so they are still sent when the frontend is deployed on a
+// different site than this engine, e.g. Vercel calling a Render-hosted API.
+func WithCrossSiteCookies(v bool) Option {
+	return func(s *Server) { s.crossSiteCookies = v }
+}
+
+// isHTTPS reports whether the original client request was HTTPS, accounting
+// for TLS terminating at a reverse proxy (Render, and most PaaS hosts, present
+// the Go process with plain HTTP and the original scheme in this header).
+func isHTTPS(r *http.Request) bool {
+	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
+// sessionCookieSameSite returns the engine-wide SameSite mode for session
+// cookies: None when the frontend is cross-site (requires Secure, enforced by
+// the caller using isHTTPS), Lax otherwise.
+func (s *Server) sessionCookieSameSite() http.SameSite {
+	if s.crossSiteCookies {
+		return http.SameSiteNoneMode
+	}
+	return http.SameSiteLaxMode
 }
 
 func reconciliationActivityResource(chainID int64, contract string) string {
@@ -249,7 +274,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: sessionCookie, Value: token, Path: "/", HttpOnly: true,
-		SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil, MaxAge: 12 * 60 * 60,
+		SameSite: s.sessionCookieSameSite(), Secure: isHTTPS(r), MaxAge: 12 * 60 * 60,
 	})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "authenticated"})
 }
@@ -271,7 +296,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "authentication_error", "unable to end session")
 			return
 		}
-		http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+		http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: isHTTPS(r), SameSite: s.sessionCookieSameSite()})
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "signed_out"})
 }
@@ -311,7 +336,7 @@ func (s *Server) handleTraderLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: traderSessionCookie, Value: token, Path: "/", HttpOnly: true,
-		SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil, MaxAge: 12 * 60 * 60})
+		SameSite: s.sessionCookieSameSite(), Secure: isHTTPS(r), MaxAge: 12 * 60 * 60})
 	writeJSON(w, http.StatusOK, trader)
 }
 
@@ -326,7 +351,7 @@ func (s *Server) handleTraderLogout(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	http.SetCookie(w, &http.Cookie{Name: traderSessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	http.SetCookie(w, &http.Cookie{Name: traderSessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: isHTTPS(r), SameSite: s.sessionCookieSameSite()})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "signed_out"})
 }
 
