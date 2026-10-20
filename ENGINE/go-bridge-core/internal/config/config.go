@@ -32,6 +32,14 @@ type Config struct {
 	// then provide a rate).
 	FxRateRWFKES float64
 
+	// CrossSiteCookies marks session cookies SameSite=None instead of Lax, required
+	// when the frontend and this engine are deployed on different sites (e.g. a
+	// Vercel-hosted UI calling a Render-hosted engine). Browsers refuse to send a
+	// Lax cookie on a cross-site fetch, which otherwise makes login appear to
+	// succeed while every following request is silently unauthenticated. Only
+	// meaningful over HTTPS — SameSite=None without Secure is rejected outright.
+	CrossSiteCookies bool
+
 	// CORSOrigins is the allow-list of browser origins for the trader
 	// dashboard, e.g. "http://localhost:5173". Comma-separated in the env.
 	// Empty allows any origin (dev only).
@@ -124,6 +132,7 @@ func Load() (*Config, error) {
 		Environment:                 getEnv("VUKA_ENV", "development"),
 		ReadOnly:                    getBool("VUKA_READ_ONLY", false),
 		LocalSyntheticExecution:     getBool("VUKA_LOCAL_SYNTHETIC_EXECUTION_ENABLED", false),
+		CrossSiteCookies:            getBool("VUKA_CROSS_SITE_COOKIES", false),
 		HTTPAddr:                    getEnv("VUKA_HTTP_ADDR", ":8080"),
 		GRPCAddr:                    getEnv("VUKA_GRPC_ADDR", ":50051"),
 		DatabaseURL:                 os.Getenv("VUKA_DATABASE_URL"),
