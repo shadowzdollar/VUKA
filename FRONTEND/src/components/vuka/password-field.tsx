@@ -29,7 +29,7 @@ export function PasswordField({
           onClick={() => setShown((s) => !s)}
           aria-pressed={shown}
           aria-label={shown ? "Hide password" : "Show password"}
-          className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+          className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
         >
           {shown ? (
             <EyeOff className="size-4" aria-hidden="true" />
@@ -39,7 +39,7 @@ export function PasswordField({
         </button>
       </div>
       {warnCaps && caps ? (
-        <p role="status" className="mt-1.5 font-mono text-[11px]">
+        <p role="status" className="mt-1.5 font-mono text-[11px] text-neutral-400">
           Caps Lock is on.
         </p>
       ) : null}
@@ -80,12 +80,12 @@ export function StrengthMeter({ password }: { password: string }) {
         {[1, 2, 3, 4].map((n) => (
           <span
             key={n}
-            className={`h-1.5 flex-1 border border-foreground ${n <= score ? "bg-foreground" : ""}`}
+            className={`h-1.5 flex-1 border border-neutral-600 ${n <= score ? "bg-neutral-100" : ""}`}
           />
         ))}
       </div>
-      <p className="mt-1.5 text-xs text-muted-foreground">
-        <span className="font-mono uppercase tracking-[0.12em] text-foreground">{label}</span> ·{" "}
+      <p className="mt-1.5 text-xs text-neutral-500">
+        <span className="font-mono uppercase tracking-[0.12em] text-neutral-100">{label}</span> ·{" "}
         {hint}
       </p>
     </div>
