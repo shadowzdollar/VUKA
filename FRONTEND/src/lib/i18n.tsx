@@ -96,6 +96,7 @@ const en = {
     "VUKA turns mobile-money rails into a trade-grade settlement layer for African SMEs: every payment is bound to an invoice, backed by escrow, priced with a firm quote and recorded in a double-entry ledger.",
   "landing.cta.signin": "Sign in",
   "landing.cta.register": "Open a trader account",
+  "landing.cta.hero": "Start trading",
   "landing.how.title": "How a payment works",
   "landing.markets.title": "Markets and corridors",
   "landing.security.title": "Built for regulators and auditors",
