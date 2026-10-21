@@ -4,24 +4,25 @@ import { useEffect, useState, type FormEvent } from "react";
 import {
   ArrowRight,
   BriefcaseBusiness,
-  Clock3,
+  Eye,
+  EyeOff,
   Globe2,
-  LockKeyhole,
+  Lock,
+  Mail,
   Phone,
-  ShieldCheck,
   UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PasswordField } from "@/components/vuka/password-field";
 import {
   AUTH_BUTTON,
   AUTH_INPUT,
   AuthError,
   AuthField,
   AuthShell,
+  GoogleIcon,
 } from "@/components/vuka/auth-shared";
 import { describeError, isApiError } from "@/lib/api/client";
 import { auth, platform } from "@/lib/api/endpoints";
@@ -30,7 +31,7 @@ import { useSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/login")({
-  head: () => ({ meta: [{ title: "Sign in — VUKA" }] }),
+  head: () => ({ meta: [{ title: "Sign in — VUKA Global Trade" }] }),
   component: Login,
 });
 
@@ -71,6 +72,8 @@ function Login() {
   const [mode, setMode] = useState<Mode>("trader");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,7 +105,7 @@ function Login() {
       }
 
       await refresh();
-      toast.success("Signed in");
+      toast.success("Signed in successfully");
     } catch (err) {
       setError(
         isApiError(err) && err.code === "too_many_attempts"
@@ -126,222 +129,231 @@ function Login() {
   }
 
   return (
-    <AuthShell>
-      {/* Intro */}
-      <div className="mb-7">
-        <p className="mb-3 font-mono text-[10px] font-medium uppercase tracking-[0.28em] text-neutral-500">
-          Sign in
-        </p>
-
-        <h1 className="text-3xl font-medium tracking-[-0.045em] text-neutral-50 sm:text-4xl">
-          {t("auth.welcome")}
-        </h1>
-
-        <p className="mt-3 text-sm leading-6 text-neutral-400">{t("auth.welcome.sub")}</p>
-      </div>
-
-      {/* Account type selector */}
-      <div
-        role="tablist"
-        aria-label="Account type"
-        className="mb-7 grid grid-cols-2 border border-neutral-700"
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "trader"}
-          onClick={() => changeMode("trader")}
-          className={cn(
-            "flex min-h-[52px] items-center justify-center gap-3 px-3",
-            "font-mono text-[10px] font-medium uppercase tracking-[0.2em]",
-            "transition-colors duration-200 focus-visible:outline-none",
-            "focus-visible:ring-2 focus-visible:ring-neutral-100 focus-visible:ring-inset",
-            mode === "trader"
-              ? "bg-neutral-100 text-neutral-950"
-              : "bg-transparent text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300",
-          )}
-        >
-          <UserRound className="h-5 w-5" strokeWidth={1.5} />
-          Trader
-        </button>
-
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "operator"}
-          onClick={() => changeMode("operator")}
-          className={cn(
-            "flex min-h-[52px] items-center justify-center gap-3 border-l border-neutral-700 px-3",
-            "font-mono text-[10px] font-medium uppercase tracking-[0.2em]",
-            "transition-colors duration-200 focus-visible:outline-none",
-            "focus-visible:ring-2 focus-visible:ring-neutral-100 focus-visible:ring-inset",
-            mode === "operator"
-              ? "bg-neutral-100 text-neutral-950"
-              : "bg-transparent text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300",
-          )}
-        >
-          <BriefcaseBusiness className="h-5 w-5" strokeWidth={1.5} />
-          Operator
-        </button>
-      </div>
-
-      {/* Login form */}
-      <form onSubmit={submit} className="space-y-5">
-        <AuthField id="identifier" label={mode === "trader" ? t("auth.phone") : t("auth.email")}>
-          <div className="relative">
-            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-neutral-500">
-              {mode === "trader" ? (
-                <Phone className="h-[17px] w-[17px]" strokeWidth={1.5} />
-              ) : (
-                <Globe2 className="h-[17px] w-[17px]" strokeWidth={1.5} />
-              )}
+    <AuthShell page="login">
+      <div className="flex flex-col h-full justify-between">
+        {/* Top Header Block matching the reference */}
+        <div>
+          <div className="mb-6">
+            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-[#787870] block mb-2">
+              Welcome back
             </span>
-
-            <Input
-              id="identifier"
-              name="username"
-              className={cn("pl-10", AUTH_INPUT)}
-              autoComplete={mode === "trader" ? "tel" : "username"}
-              inputMode={mode === "trader" ? "tel" : "email"}
-              placeholder={mode === "trader" ? "+250700000000" : "operator@company.com"}
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              required
-            />
-          </div>
-        </AuthField>
-
-        <AuthField id="password" label={t("auth.password")}>
-          <div className="relative">
-            <span className="pointer-events-none absolute inset-y-0 left-3 z-10 flex items-center text-neutral-500">
-              <LockKeyhole className="h-[17px] w-[17px]" strokeWidth={1.5} />
-            </span>
-
-            <PasswordField
-              id="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className={cn("pl-10", AUTH_INPUT)}
-            />
-          </div>
-        </AuthField>
-
-        {error && <AuthError>{error}</AuthError>}
-
-        <Button
-          type="submit"
-          disabled={busy || !identifier.trim() || !password}
-          className={cn("group h-12 w-full disabled:opacity-50", AUTH_BUTTON)}
-        >
-          {busy ? t("auth.signingIn") : t("auth.signIn")}
-          {!busy && (
-            <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-          )}
-        </Button>
-      </form>
-
-      {/* Password assistance */}
-      <details className="group mt-5 border border-neutral-800 px-4 py-3">
-        <summary className="cursor-pointer list-none font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-neutral-300 marker:hidden">
-          <span className="flex items-center justify-between gap-3">
-            Forgot your password?
-            <span className="text-base transition-transform group-open:rotate-45">+</span>
-          </span>
-        </summary>
-
-        <p className="mt-3 text-xs leading-5 text-neutral-500">
-          Self-service reset is not yet available. Trader passwords are reset by support after
-          identity confirmation; operator credentials are re-issued by the platform administrator.
-          Contact{" "}
-          <Link to="/support" className="font-medium text-neutral-100 underline underline-offset-4">
-            Help and support
-          </Link>
-          .
-        </p>
-      </details>
-
-      {/* Development-only demo accounts */}
-      {showDemo && (
-        <section
-          aria-label="Development demo accounts"
-          className="mt-5 border border-dashed border-neutral-700 p-4"
-        >
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 text-neutral-500">
-              <Globe2 className="h-4 w-4" />
-            </span>
-
-            <div className="min-w-0">
-              <h2 className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-300">
-                Development demo access
-              </h2>
-              <p className="mt-1 text-xs leading-5 text-neutral-500">
-                Seeded accounts are available only in development mode.
-              </p>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#0A0D12] leading-tight">
+              Sign in to your
+              <br />
+              <span className="font-extrabold">VUKA account.</span>
+            </h1>
+            <div className="flex items-center gap-2 mt-2 font-mono text-[10px] font-medium tracking-[0.18em] text-[#787870] uppercase">
+              <span>Secure</span>
+              <span className="h-1 w-1 rounded-full bg-[#A8A8A2]" />
+              <span>Fast</span>
+              <span className="h-1 w-1 rounded-full bg-[#A8A8A2]" />
+              <span>Global</span>
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            {demoAccounts.map((account) => (
-              <button
-                key={account.label}
-                type="button"
-                className="border border-neutral-700 px-2.5 py-2 font-mono text-[9px] uppercase tracking-wider text-neutral-400 transition-colors hover:border-neutral-100 hover:bg-neutral-800 hover:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-100"
-                onClick={() => {
-                  changeMode(account.mode);
-                  setIdentifier(account.identifier);
-                  setPassword(account.password);
-                }}
-              >
-                {account.label}
-              </button>
-            ))}
+          {/* Account type switcher: Trader vs Operator */}
+          <div
+            role="tablist"
+            aria-label="Account type"
+            className="mb-5 grid grid-cols-2 rounded-lg bg-[#F0F0EC] p-1 border border-[#E4E4E0]"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "trader"}
+              onClick={() => changeMode("trader")}
+              className={cn(
+                "flex h-9 items-center justify-center gap-2 rounded-md font-mono text-[10px] font-semibold uppercase tracking-[0.16em] transition-all",
+                mode === "trader"
+                  ? "bg-white text-[#0A0D12] shadow-sm font-bold"
+                  : "text-[#6B6B64] hover:text-[#0A0D12]",
+              )}
+            >
+              <UserRound className="h-3.5 w-3.5" />
+              Trader
+            </button>
+
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "operator"}
+              onClick={() => changeMode("operator")}
+              className={cn(
+                "flex h-9 items-center justify-center gap-2 rounded-md font-mono text-[10px] font-semibold uppercase tracking-[0.16em] transition-all",
+                mode === "operator"
+                  ? "bg-white text-[#0A0D12] shadow-sm font-bold"
+                  : "text-[#6B6B64] hover:text-[#0A0D12]",
+              )}
+            >
+              <BriefcaseBusiness className="h-3.5 w-3.5" />
+              Operator
+            </button>
           </div>
-        </section>
-      )}
 
-      {/* Security notes */}
-      <div className="mt-7 grid grid-cols-3 border-t border-neutral-800 pt-5">
-        <div className="flex items-start gap-2 pr-3">
-          <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" strokeWidth={1.5} />
-          <p className="text-[10px] leading-4 text-neutral-500">Sessions end after inactivity.</p>
+          {/* Form */}
+          <form onSubmit={submit} className="space-y-4">
+            <AuthField
+              id="identifier"
+              label={mode === "trader" ? "Phone number" : "Email address"}
+            >
+              <div className="relative">
+                <Input
+                  id="identifier"
+                  name="username"
+                  className={cn("pr-10", AUTH_INPUT)}
+                  autoComplete={mode === "trader" ? "tel" : "username"}
+                  inputMode={mode === "trader" ? "tel" : "email"}
+                  placeholder={mode === "trader" ? "+250 700 000 000" : "you@example.com"}
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  required
+                />
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[#9B9B94]">
+                  {mode === "trader" ? (
+                    <Phone className="h-4 w-4" />
+                  ) : (
+                    <Mail className="h-4 w-4" />
+                  )}
+                </span>
+              </div>
+            </AuthField>
+
+            <AuthField id="password" label="Password">
+              <div className="relative">
+                <Input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  className={cn("pr-10", AUTH_INPUT)}
+                  autoComplete="current-password"
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute inset-y-0 right-3 flex items-center text-[#9B9B94] hover:text-[#0A0D12] transition-colors focus:outline-none"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </AuthField>
+
+            {/* Remember me & Forgot password row */}
+            <div className="flex items-center justify-between pt-1">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 rounded border-[#D0D0CA] text-[#0A0D12] accent-[#0A0D12] focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                />
+                <span className="text-xs text-[#52524D]">Remember me</span>
+              </label>
+
+              <details className="group inline-block text-right">
+                <summary className="cursor-pointer list-none text-xs font-medium text-[#52524D] hover:text-[#0A0D12] hover:underline underline-offset-4 marker:hidden">
+                  Forgot password?
+                </summary>
+                <div className="absolute right-6 left-6 mt-2 p-3 bg-[#F4F4F2] border border-[#E0E0DC] rounded-lg shadow-lg text-[11px] leading-relaxed text-[#555550] z-30">
+                  <p>
+                    Self-service reset is managed by support. Trader passwords require identity confirmation; operator credentials are reset by your platform administrator.
+                  </p>
+                  <Link
+                    to="/support"
+                    className="mt-1.5 inline-block font-semibold text-[#0A0D12] underline underline-offset-2"
+                  >
+                    Contact Help and Support →
+                  </Link>
+                </div>
+              </details>
+            </div>
+
+            {error && <AuthError>{error}</AuthError>}
+
+            {/* Primary Sign In Button */}
+            <Button
+              type="submit"
+              disabled={busy || !identifier.trim() || !password}
+              className={cn("w-full group", AUTH_BUTTON)}
+            >
+              {busy ? "Signing in..." : "Sign in"}
+              {!busy && (
+                <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
+              )}
+            </Button>
+          </form>
+
+          {/* Divider with centered 'or' */}
+          <div className="relative my-4 text-center">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-[#E7E7E3]" />
+            </div>
+            <span className="relative bg-white px-3 font-mono text-[10px] uppercase tracking-widest text-[#94948E]">
+              or
+            </span>
+          </div>
+
+          {/* Google SSO Button */}
+          <button
+            type="button"
+            onClick={() => toast.info("Google authentication is available on production domains")}
+            className="w-full h-11 rounded-lg border border-[#E4E4E0] bg-white hover:bg-[#FAFAF9] text-xs font-semibold text-[#18181B] flex items-center justify-center gap-2.5 transition-colors shadow-none active:scale-[0.99]"
+          >
+            <GoogleIcon className="h-4 w-4" />
+            <span>Continue with Google</span>
+          </button>
+
+          {/* Development Demo Accounts */}
+          {showDemo && (
+            <div className="mt-4 rounded-lg border border-dashed border-[#D2D2CC] bg-[#FAFAF9] p-3 text-left">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-[#7A7A72]">
+                  Demo Credentials
+                </span>
+                <span className="font-mono text-[8px] uppercase tracking-wider text-[#A0A09A]">
+                  Dev Only
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {demoAccounts.map((account) => (
+                  <button
+                    key={account.label}
+                    type="button"
+                    className="rounded border border-[#DCDCD6] bg-white px-2 py-1 font-mono text-[9px] text-[#4A4A44] transition-colors hover:border-[#0A0D12] hover:text-[#0A0D12]"
+                    onClick={() => {
+                      changeMode(account.mode);
+                      setIdentifier(account.identifier);
+                      setPassword(account.password);
+                    }}
+                  >
+                    {account.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="flex items-start gap-2 border-l border-neutral-800 px-3">
-          <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" strokeWidth={1.5} />
-          <p className="text-[10px] leading-4 text-neutral-500">
-            Failed sign-ins are temporarily blocked.
-          </p>
-        </div>
-
-        <div className="flex items-start gap-2 border-l border-neutral-800 pl-3">
-          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" strokeWidth={1.5} />
-          <p className="text-[10px] leading-4 text-neutral-500">
-            Staff will never ask for your password.
-          </p>
-        </div>
-      </div>
-
-      {/* Registration */}
-      <div className="mt-7 border-t border-neutral-800 pt-5">
-        {mode === "trader" ? (
-          <p className="flex flex-wrap items-center gap-2 text-sm text-neutral-400">
-            {t("auth.newHere")}
+        {/* Bottom register link matching reference */}
+        <div className="pt-6 border-t border-[#F0F0EB] text-center">
+          <p className="text-xs text-[#6B6B64]">
+            New to VUKA?{" "}
             <Link
               to="/register"
-              className="inline-flex items-center gap-1 font-medium text-neutral-50 underline underline-offset-4 decoration-neutral-600 hover:text-neutral-100"
+              className="font-semibold text-[#0A0D12] underline underline-offset-4 hover:text-black transition-colors"
             >
-              {t("auth.createAccount")}
-              <ArrowRight className="h-3.5 w-3.5" />
+              Create an account
             </Link>
           </p>
-        ) : (
-          <p className="text-xs leading-5 text-neutral-500">
-            Operator accounts are provisioned by the platform team and cannot be self-registered.
-          </p>
-        )}
+        </div>
       </div>
     </AuthShell>
   );
