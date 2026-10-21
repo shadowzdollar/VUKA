@@ -58,19 +58,23 @@ export function Hero() {
   const current = markets.find((m) => m.code === active);
 
   return (
-    <section className="relative overflow-hidden">
-      <div className="mx-auto grid items-center gap-10 px-4 pb-16 pt-12 sm:px-6 lg:px-10 2xl:px-16 lg:grid-cols-[1.05fr_1fr] lg:pb-24 lg:pt-20">
-        <div>
+    <section className="overflow-hidden bg-[#081014] px-3 py-3 sm:px-5 sm:py-5">
+      <div className="mx-auto grid max-w-[1600px] overflow-hidden rounded-md bg-[#f7f7f4] lg:grid-cols-[0.95fr_1.05fr]">
+        <div className="px-7 py-12 sm:px-10 lg:px-12 lg:py-16 xl:px-16 xl:py-20">
           <div className="reveal is-in flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             <span aria-hidden="true" className="h-px w-10 bg-foreground" />
             {t("landing.eyebrow")}
           </div>
-          <h1 className="mt-6 font-display text-5xl font-normal leading-[1.02] tracking-tight sm:text-6xl xl:text-7xl">
-            Trade across borders on trust that is <em className="italic">enforced</em>, not just
-            displayed.
+          <h1 className="mt-6 max-w-[620px] font-display text-5xl font-normal leading-[0.94] tracking-tight sm:text-6xl xl:text-7xl">
+            Cross borders.
+            <br />
+            Move business
+            <br />
+            <em className="italic">forward.</em>
           </h1>
-          <p className="mt-7 max-w-xl text-base text-muted-foreground sm:text-lg">
-            {t("landing.lead")}
+          <p className="mt-7 max-w-md text-sm leading-relaxed text-muted-foreground sm:text-base">
+            {t("landing.lead")} Clear terms, a visible trail, and a trusted path from agreement to
+            settlement.
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-3">
             <Button asChild size="lg" className="group rounded-none font-mono text-xs uppercase">
@@ -92,7 +96,7 @@ export function Hero() {
             </Button>
           </div>
 
-          <dl className="mt-12 grid max-w-xl grid-cols-3 border-y border-border">
+          <dl className="mt-12 grid max-w-xl grid-cols-3 border-t border-border">
             {[
               [config.data?.countries.length ?? "—", "countries"],
               [config.data?.corridor_count ?? "—", "corridors"],
@@ -108,8 +112,12 @@ export function Hero() {
           </dl>
         </div>
 
-        <div className="relative">
-          <div className="relative mx-auto aspect-square w-full max-w-[600px]">
+        <div className="relative min-h-[500px] overflow-hidden border-t border-[#d8d8d3] bg-[#ecece8] p-6 sm:p-10 lg:min-h-[640px] lg:border-l lg:border-t-0">
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 bg-[radial-gradient(circle_at_52%_48%,transparent_0%,transparent_38%,rgba(8,16,20,0.06)_39%,transparent_40%),linear-gradient(90deg,transparent_49.9%,rgba(8,16,20,0.12)_50%,transparent_50.1%),linear-gradient(transparent_49.9%,rgba(8,16,20,0.12)_50%,transparent_50.1%)] bg-[length:100%_100%,100%_100%,100%_100%]"
+          />
+          <div className="relative mx-auto aspect-square w-full max-w-[620px]">
             {saver ? (
               <div className="flex size-full flex-col items-center justify-center gap-3 border border-dashed border-border p-6 text-center">
                 <p className="font-display text-2xl">Map paused to save data</p>
@@ -143,7 +151,7 @@ export function Hero() {
           </div>
           <div
             aria-live="polite"
-            className="mx-auto mt-4 min-h-[68px] max-w-[600px] border border-border bg-card p-3 text-sm"
+            className="relative mx-auto mt-1 min-h-[68px] max-w-[600px] border border-[#cfcfca] bg-[#f7f7f4]/95 p-3 text-sm shadow-sm"
           >
             {current ? (
               <>
@@ -172,7 +180,7 @@ export function Hero() {
             )}
           </div>
           <ul
-            className="mx-auto mt-3 flex max-w-[600px] flex-wrap justify-center gap-1.5"
+            className="relative mx-auto mt-3 flex max-w-[600px] flex-wrap justify-center gap-1.5"
             aria-label="Markets"
           >
             {markets.map((m) => (
