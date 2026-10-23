@@ -174,19 +174,25 @@ function Register() {
 
     try {
       const payload = {
-        full_name: form.fullName.trim(),
-        phone_number: form.phone.replace(/\s+/g, ""),
+        name: form.fullName.trim(),
+        phone: form.phone.replace(/\s+/g, ""),
         password: form.password,
-        ...(form.accountType === "business" && form.registrationNumber.trim()
-          ? { business_reg_number: form.registrationNumber.trim() }
-          : {}),
+        account_type: form.accountType,
+        business_name:
+          form.accountType === "business" ? form.businessName.trim() : undefined,
+        registration_number:
+          form.accountType === "business" && form.registrationNumber.trim()
+            ? form.registrationNumber.trim()
+            : undefined,
+        country: form.country,
+        currency: form.currency,
       };
 
-      await auth.register(payload, form.currency);
+      await auth.register(payload);
 
       // Automatically sign in the freshly created user
       try {
-        await auth.traderLogin(payload.phone_number, payload.password);
+        await auth.traderLogin(payload.phone, payload.password);
         await refresh();
       } catch {
         // If login fails, redirect to login page
@@ -214,10 +220,11 @@ function Register() {
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#E8F5E9] text-[#2E7D32]">
               <CheckCircle2 className="h-7 w-7" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-[#0A0D12]">Welcome to VUKA</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-[#0A0D12]">
+              Welcome to VUKA
+            </h1>
             <p className="text-xs sm:text-sm text-[#63635E] leading-relaxed">
-              Your trader account has been created and verified. You are now connected to verified
-              trade corridors across Africa.
+              Your trader account has been created and verified. You are now connected to verified trade corridors across Africa.
             </p>
             <div className="pt-2">
               <Button
@@ -651,7 +658,11 @@ function Register() {
                   <ArrowLeft className="h-3.5 w-3.5 mr-1" />
                   Edit
                 </Button>
-                <Button type="submit" disabled={busy} className={cn("flex-1 group", AUTH_BUTTON)}>
+                <Button
+                  type="submit"
+                  disabled={busy}
+                  className={cn("flex-1 group", AUTH_BUTTON)}
+                >
                   {busy ? "Creating account..." : "Complete Registration"}
                   {!busy && (
                     <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
