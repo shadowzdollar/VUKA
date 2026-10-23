@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { Play, ShieldCheck, Check } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -55,26 +56,87 @@ export function AuthMark({
 }
 
 /** Left Hero Panel inside the center card — matches the visual reference */
-export function AuthHeroPanel({ onWatchVideo }: { onWatchVideo?: () => void }) {
+export function AuthHeroPanel({
+  onWatchVideo,
+}: {
+  onWatchVideo?: () => void;
+}) {
   return (
-    <div className="relative min-h-[580px] overflow-hidden bg-[#070A0F] lg:min-h-[720px] select-none">
-      {/*
-       * This is the supplied, cropped reference artwork rather than a remote stock image.
-       * Keeping it local makes the authentication screen reliable offline and preserves the
-       * detailed globe, vessel and technical drawing treatment from the approved design.
-       */}
+    <div className="relative flex flex-col justify-between overflow-hidden bg-[#070A0F] p-8 sm:p-10 lg:p-12 text-white min-h-[580px] lg:min-h-[720px] select-none">
+      {/* Background artwork: illuminated trade globe & container ship */}
       <img
-        src="/images/auth/trade-network.webp"
+        src="/images/auth-hero.webp"
         alt="VUKA global trade network"
-        className="absolute inset-0 h-full w-full object-cover object-center"
+        className="absolute inset-0 h-full w-full object-cover object-center pointer-events-none opacity-90 transition-opacity duration-700"
         loading="eager"
       />
-      <button
-        type="button"
-        onClick={onWatchVideo}
-        className="absolute left-[7%] top-[53%] h-[9%] w-[35%] rounded-full focus-visible:outline-white"
-        aria-label="Watch how VUKA works"
-      />
+
+      {/* Subtle depth gradient overlay to guarantee text legibility */}
+      <div className="absolute inset-0 bg-gradient-to-t from-[#070A0F]/90 via-transparent to-[#070A0F]/60 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-r from-[#070A0F]/80 via-transparent to-[#070A0F]/40 pointer-events-none" />
+
+      {/* Top row: Brand + category pill */}
+      <div className="relative z-10 flex items-center justify-between">
+        <AuthMark inverted compact />
+        <span className="font-mono text-[9px] uppercase tracking-[0.26em] text-[#9EA3AE] border border-white/10 px-2.5 py-1 rounded-full bg-white/[0.04] backdrop-blur-sm">
+          Cross-Border Trade Platform
+        </span>
+      </div>
+
+      {/* Middle row: Editorial display headline + narrative + play action */}
+      <div className="relative z-10 my-auto py-10 max-w-[420px]">
+        <h2 className="font-serif text-3xl sm:text-4xl lg:text-[44px] font-normal leading-[1.1] tracking-tight text-white drop-shadow-sm">
+          Global trade
+          <br />
+          starts with
+          <br />
+          <span className="italic font-normal text-white/95">trust.</span>
+        </h2>
+
+        <p className="mt-4 text-xs sm:text-sm leading-relaxed text-[#B5BAC6] font-light max-w-[360px]">
+          Connect markets, move goods, manage transactions and documents — all in one secure platform.
+        </p>
+
+        <div className="mt-6 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onWatchVideo}
+            className="group inline-flex items-center gap-2.5 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-medium text-white backdrop-blur-md transition-all hover:bg-white/20 hover:border-white/40 active:scale-95"
+          >
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[#0A0D12] transition-transform group-hover:scale-110">
+              <Play className="h-2.5 w-2.5 fill-current ml-0.5" />
+            </span>
+            <span>Watch how it works</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Bottom row: Live platform statistics + Trade without borders */}
+      <div className="relative z-10 pt-6 border-t border-white/10 flex flex-wrap items-end justify-between gap-4">
+        <div className="grid grid-cols-3 gap-6 sm:gap-8">
+          <div>
+            <span className="block font-semibold text-lg sm:text-xl text-white tracking-tight">120+</span>
+            <span className="block font-mono text-[9px] uppercase tracking-[0.16em] text-[#8E95A5]">Countries</span>
+          </div>
+          <div>
+            <span className="block font-semibold text-lg sm:text-xl text-white tracking-tight">10K+</span>
+            <span className="block font-mono text-[9px] uppercase tracking-[0.16em] text-[#8E95A5]">Businesses</span>
+          </div>
+          <div>
+            <span className="block font-semibold text-lg sm:text-xl text-white tracking-tight">99.9%</span>
+            <span className="block font-mono text-[9px] uppercase tracking-[0.16em] text-[#8E95A5]">Uptime</span>
+          </div>
+        </div>
+
+        <div className="hidden sm:flex flex-col items-end">
+          <span className="font-mono text-[9px] uppercase tracking-[0.24em] text-[#9EA3AE] font-medium">
+            Trade Without Borders
+          </span>
+          <span className="font-mono text-[8px] tracking-[0.18em] text-[#636A7A] mt-0.5">
+            CORRIDOR // EAST &amp; WEST AFRICA
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -195,18 +257,10 @@ export function AuthShell({
 
           {/* Bottom Process steps */}
           <div className="font-mono text-[9px] uppercase tracking-[0.18em] space-y-1.5 border-r-2 border-[#D2D2CC] pr-3 py-1">
-            <p className="text-[#8A8A82]">
-              <span className="text-[#0A0D12] font-semibold">01</span> Documents
-            </p>
-            <p className="text-[#8A8A82]">
-              <span className="text-[#0A0D12] font-semibold">02</span> Transactions
-            </p>
-            <p className="text-[#8A8A82]">
-              <span className="text-[#0A0D12] font-semibold">03</span> Settlement
-            </p>
-            <p className="text-[#8A8A82]">
-              <span className="text-[#0A0D12] font-semibold">04</span> Growth
-            </p>
+            <p className="text-[#8A8A82]"><span className="text-[#0A0D12] font-semibold">01</span> Documents</p>
+            <p className="text-[#8A8A82]"><span className="text-[#0A0D12] font-semibold">02</span> Transactions</p>
+            <p className="text-[#8A8A82]"><span className="text-[#0A0D12] font-semibold">03</span> Settlement</p>
+            <p className="text-[#8A8A82]"><span className="text-[#0A0D12] font-semibold">04</span> Growth</p>
           </div>
         </aside>
 
