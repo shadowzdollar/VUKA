@@ -11,6 +11,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -203,6 +204,12 @@ func seedInvoices(ctx context.Context, svc *ledger.Service, log *slog.Logger) er
 			},
 		})
 		if err != nil {
+			// A reference left over from an older, buggy seeder run (e.g. one that
+			// didn't match INV-YYYY-NNN) shouldn't abort seeding everything else.
+			if errors.Is(err, ledger.ErrInvalidInvoiceNumber) {
+				log.Warn("skip invoice: number does not match INV-YYYY-NNN", "number", r.Number)
+				continue
+			}
 			return fmt.Errorf("create invoice %s: %w", r.Number, err)
 		}
 		issued++
