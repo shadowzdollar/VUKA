@@ -43,6 +43,19 @@ interface Props {
 const reduce = () =>
   typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+/** Applies alpha to a CSS color read off a custom property — oklch(...) or #hex, whichever the theme gives us. */
+function withAlpha(color: string, alpha: number): string {
+  const c = color.trim();
+  if (c.startsWith("oklch(") && c.endsWith(")")) return `${c.slice(0, -1)} / ${alpha})`;
+  if (c.startsWith("#") && (c.length === 7 || c.length === 4)) {
+    const a = Math.round(alpha * 255)
+      .toString(16)
+      .padStart(2, "0");
+    return `${c}${a}`;
+  }
+  return c;
+}
+
 export default function Globe({ markets, arcs, activeCode, onActive, className }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -64,7 +77,8 @@ export default function Globe({ markets, arcs, activeCode, onActive, className }
     fg: "#000",
     bg: "#fff",
     muted: "#888",
-    hatch: null as CanvasPattern | null,
+    primary: "#d9f23d",
+    primaryFg: "#141414",
   });
   const propsRef = useRef({ markets, arcs, activeCode, paused });
   propsRef.current = { markets, arcs, activeCode, paused };
@@ -77,21 +91,9 @@ export default function Globe({ markets, arcs, activeCode, onActive, className }
     const fg = cs.getPropertyValue("--color-foreground").trim() || "#000";
     const bg = cs.getPropertyValue("--color-background").trim() || "#fff";
     const muted = cs.getPropertyValue("--color-muted-foreground").trim() || "#888";
-    const tile = document.createElement("canvas");
-    tile.width = tile.height = 7;
-    const g = tile.getContext("2d");
-    let hatch: CanvasPattern | null = null;
-    if (g) {
-      g.strokeStyle = fg;
-      g.globalAlpha = 0.55;
-      g.lineWidth = 1;
-      g.beginPath();
-      g.moveTo(0, 7);
-      g.lineTo(7, 0);
-      g.stroke();
-      hatch = canvas.current?.getContext("2d")?.createPattern(tile, "repeat") ?? null;
-    }
-    colors.current = { fg, bg, muted, hatch };
+    const primary = cs.getPropertyValue("--primary").trim() || "#d9f23d";
+    const primaryFg = cs.getPropertyValue("--primary-foreground").trim() || "#141414";
+    colors.current = { fg, bg, muted, primary, primaryFg };
   }, []);
 
   useEffect(() => {
@@ -131,7 +133,7 @@ export default function Globe({ markets, arcs, activeCode, onActive, className }
     const draw = (t: number) => {
       const { w, h } = s;
       if (!w || !h) return;
-      const { fg, bg, muted, hatch } = colors.current;
+      const { fg, bg, muted, primary, primaryFg } = colors.current;
       const { markets: mk, arcs: ar, activeCode: ac, paused: pz } = propsRef.current;
       const marketSet = new Set(mk.map((m) => ATLAS_ID[m.code]).filter(Boolean));
 
@@ -156,24 +158,38 @@ export default function Globe({ markets, arcs, activeCode, onActive, className }
       const path = geoPath(proj, ctx);
       ctx.clearRect(0, 0, w, h);
 
-      // Sphere: paper with a soft limb.
+      // Sphere, lit like a body catching light rather than a flat tinted disc.
+      ctx.save();
       ctx.beginPath();
       path({ type: "Sphere" } as never);
+      ctx.clip();
+
       ctx.fillStyle = bg;
-      ctx.fill();
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = fg;
-      ctx.stroke();
+      ctx.fillRect(cx - R - 2, cy - R - 2, R * 2 + 4, R * 2 + 4);
+
+      const key = ctx.createRadialGradient(
+        cx - R * 0.4,
+        cy - R * 0.45,
+        0,
+        cx - R * 0.4,
+        cy - R * 0.45,
+        R * 1.75,
+      );
+      key.addColorStop(0, withAlpha(primary, 0.18));
+      key.addColorStop(0.55, withAlpha(primary, 0.05));
+      key.addColorStop(1, withAlpha(primary, 0));
+      ctx.fillStyle = key;
+      ctx.fillRect(cx - R - 2, cy - R - 2, R * 2 + 4, R * 2 + 4);
 
       ctx.beginPath();
       path(geoGraticule10());
       ctx.lineWidth = 0.5;
-      ctx.globalAlpha = 0.18;
+      ctx.globalAlpha = 0.12;
       ctx.strokeStyle = fg;
       ctx.stroke();
       ctx.globalAlpha = 1;
 
-      // Land.
+      // Land: real geometry, Africa and its markets lifted out in the lime brand color.
       for (const f of countries) {
         const id = String(f.id);
         const isMarket = marketSet.has(id);
@@ -183,26 +199,28 @@ export default function Globe({ markets, arcs, activeCode, onActive, className }
         ctx.beginPath();
         path(f as never);
         if (isMarket) {
-          ctx.globalAlpha = isActive || isHover ? 1 : 0.86;
-          ctx.fillStyle = fg;
+          ctx.fillStyle = primary;
+          ctx.globalAlpha = isActive || isHover ? 1 : 0.9;
           ctx.fill();
-          ctx.globalAlpha = 1;
-          ctx.lineWidth = isActive || isHover ? 1.6 : 0.7;
-          ctx.strokeStyle = bg;
+          ctx.globalAlpha = isActive || isHover ? 0.55 : 0.3;
+          ctx.lineWidth = isActive || isHover ? 1.6 : 0.8;
+          ctx.strokeStyle = primaryFg;
           ctx.stroke();
-        } else if (isAfrica && hatch) {
-          ctx.fillStyle = hatch;
+          ctx.globalAlpha = 1;
+        } else if (isAfrica) {
+          ctx.fillStyle = primary;
+          ctx.globalAlpha = 0.22;
           ctx.fill();
+          ctx.globalAlpha = 0.45;
           ctx.lineWidth = 0.6;
-          ctx.strokeStyle = fg;
-          ctx.globalAlpha = 0.7;
+          ctx.strokeStyle = primary;
           ctx.stroke();
           ctx.globalAlpha = 1;
         } else {
-          ctx.globalAlpha = 0.09;
+          ctx.globalAlpha = 0.08;
           ctx.fillStyle = fg;
           ctx.fill();
-          ctx.globalAlpha = 0.5;
+          ctx.globalAlpha = 0.4;
           ctx.lineWidth = 0.5;
           ctx.strokeStyle = fg;
           ctx.stroke();
@@ -210,9 +228,10 @@ export default function Globe({ markets, arcs, activeCode, onActive, className }
         }
       }
 
-      // Corridor arcs, lifted off the surface.
+      // Corridor arcs — glowing lime lines lifted off the surface, each carrying a single
+      // travelling pulse of light so the thing actually moving (money) reads at a glance.
       const center: [number, number] = [-s.lambda, -s.phi];
-      const visible = (p: [number, number]) => geoDistance(p, center) < Math.PI / 2 - 0.02;
+      const isVisible = (p: [number, number]) => geoDistance(p, center) < Math.PI / 2 - 0.02;
       ctx.lineCap = "round";
       ar.forEach(([a, b], i) => {
         const pa = centroids.get(a);
@@ -221,76 +240,110 @@ export default function Globe({ markets, arcs, activeCode, onActive, className }
         const interp = geoInterpolate(pa, pb);
         const dist = geoDistance(pa, pb);
         const lift = 0.06 + dist * 0.28;
-        const focus = ac && (a === ac || b === ac);
+        const focus = !!ac && (a === ac || b === ac);
+        const arcPoint = (u: number): [number, number, boolean] | null => {
+          const ll = interp(u) as [number, number];
+          const p = proj(ll);
+          if (!p) return null;
+          const e = 1 + lift * Math.sin(Math.PI * u);
+          return [cx + (p[0] - cx) * e, cy + (p[1] - cy) * e, isVisible(ll)];
+        };
+
         ctx.beginPath();
         let started = false;
-        const N = 44;
+        const N = 48;
         for (let k = 0; k <= N; k++) {
-          const u = k / N;
-          const ll = interp(u) as [number, number];
-          if (!visible(ll)) {
+          const pt = arcPoint(k / N);
+          if (!pt || !pt[2]) {
             started = false;
             continue;
           }
-          const p = proj(ll);
-          if (!p) continue;
-          const e = 1 + lift * Math.sin(Math.PI * u);
-          const x = cx + (p[0] - cx) * e;
-          const y = cy + (p[1] - cy) * e;
           if (!started) {
-            ctx.moveTo(x, y);
+            ctx.moveTo(pt[0], pt[1]);
             started = true;
-          } else ctx.lineTo(x, y);
+          } else ctx.lineTo(pt[0], pt[1]);
         }
-        ctx.lineWidth = focus ? 2 : 1.1;
-        ctx.strokeStyle = fg;
-        ctx.globalAlpha = focus ? 1 : ac ? 0.22 : 0.62;
-        ctx.setLineDash([5, 5]);
-        ctx.lineDashOffset = still ? 0 : -((t / 55 + i * 7) % 10);
+        ctx.lineWidth = focus ? 1.6 : 1;
+        ctx.strokeStyle = primary;
+        ctx.globalAlpha = focus ? 0.9 : ac ? 0.16 : 0.5;
+        if (!still) {
+          ctx.shadowColor = primary;
+          ctx.shadowBlur = focus ? 8 : 4;
+        }
         ctx.stroke();
-        ctx.setLineDash([]);
+        ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
+
+        if (!still) {
+          const u = (t / 2600 + i * 0.37) % 1;
+          const pt = arcPoint(u);
+          if (pt && pt[2]) {
+            ctx.beginPath();
+            ctx.arc(pt[0], pt[1], focus ? 3 : 2.1, 0, Math.PI * 2);
+            ctx.fillStyle = primary;
+            ctx.shadowColor = primary;
+            ctx.shadowBlur = 10;
+            ctx.globalAlpha = focus ? 1 : 0.75;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+          }
+        }
       });
+
+      // Limb darkening — the edge falling away in shadow is what reads as a sphere, not a disc.
+      const limb = ctx.createRadialGradient(cx, cy, R * 0.72, cx, cy, R);
+      limb.addColorStop(0, withAlpha(fg, 0));
+      limb.addColorStop(1, withAlpha(fg, 0.22));
+      ctx.fillStyle = limb;
+      ctx.fillRect(cx - R - 2, cy - R - 2, R * 2 + 4, R * 2 + 4);
+      ctx.restore();
+
+      // Crisp outer rim, drawn outside the clip so antialiasing stays clean.
+      ctx.beginPath();
+      path({ type: "Sphere" } as never);
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = fg;
+      ctx.globalAlpha = 0.35;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
 
       // Markers and labels.
       ctx.font = "10px ui-monospace, SFMono-Regular, Menlo, monospace";
       ctx.textAlign = "center";
       for (const m of mk) {
         const c = centroids.get(m.code);
-        if (!c || !visible(c)) continue;
+        if (!c || !isVisible(c)) continue;
         const p = proj(c);
         if (!p) continue;
         const on = ac === m.code || s.hover === m.code;
         const pulse = still ? 0 : (Math.sin(t / 500 + p[0]) + 1) / 2;
         ctx.beginPath();
         ctx.arc(p[0], p[1], 3.5 + pulse * 2.5, 0, Math.PI * 2);
-        ctx.strokeStyle = bg;
+        ctx.strokeStyle = primary;
         ctx.globalAlpha = 0.9 - pulse * 0.6;
         ctx.lineWidth = 1.2;
         ctx.stroke();
         ctx.globalAlpha = 1;
         ctx.beginPath();
         ctx.arc(p[0], p[1], on ? 4.5 : 3, 0, Math.PI * 2);
-        ctx.fillStyle = bg;
+        ctx.fillStyle = on ? primary : bg;
         ctx.fill();
         ctx.lineWidth = 1.4;
-        ctx.strokeStyle = fg;
+        ctx.strokeStyle = on ? primaryFg : fg;
         ctx.stroke();
         if (on) {
           const label = `${m.name} · ${m.currency}`;
           const tw = ctx.measureText(label).width + 12;
-          ctx.fillStyle = fg;
+          ctx.fillStyle = primary;
           ctx.fillRect(p[0] - tw / 2, p[1] - 27, tw, 17);
-          ctx.fillStyle = bg;
+          ctx.fillStyle = primaryFg;
           ctx.fillText(label, p[0], p[1] - 15);
         } else {
-          ctx.fillStyle = muted;
-          ctx.globalAlpha = 0.95;
           ctx.fillStyle = bg;
           ctx.fillText(m.code, p[0], p[1] + 15);
-          ctx.fillStyle = fg;
+          ctx.fillStyle = muted;
           ctx.fillText(m.code, p[0], p[1] + 14);
-          ctx.globalAlpha = 1;
         }
       }
     };
@@ -398,11 +451,11 @@ export default function Globe({ markets, arcs, activeCode, onActive, className }
         aria-label={`Globe of Africa showing ${markets.length} launch markets connected by payment corridors: ${markets.map((m) => m.name).join(", ")}.`}
         className="h-full w-full cursor-grab touch-pan-y select-none"
       />
-      <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1 bg-background/85 p-1 backdrop-blur">
+      <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-background/85 p-1 shadow-float backdrop-blur">
         <Button
           variant="ghost"
           size="icon"
-          className="size-8 rounded-none"
+          className="size-8 rounded-lg"
           onClick={() => nudge(-18)}
           aria-label="Rotate globe west"
         >
@@ -411,7 +464,7 @@ export default function Globe({ markets, arcs, activeCode, onActive, className }
         <Button
           variant="ghost"
           size="icon"
-          className="size-8 rounded-none"
+          className="size-8 rounded-lg"
           onClick={() => {
             state.current.lambda = -22;
             state.current.phi = -6;
@@ -424,7 +477,7 @@ export default function Globe({ markets, arcs, activeCode, onActive, className }
         <Button
           variant="ghost"
           size="icon"
-          className="size-8 rounded-none"
+          className="size-8 rounded-lg"
           onClick={() => nudge(18)}
           aria-label="Rotate globe east"
         >
@@ -433,7 +486,7 @@ export default function Globe({ markets, arcs, activeCode, onActive, className }
         <Button
           variant="ghost"
           size="icon"
-          className="size-8 rounded-none"
+          className="size-8 rounded-lg"
           onClick={() => setPaused((p) => !p)}
           aria-label={paused ? "Resume gentle motion" : "Pause gentle motion"}
           aria-pressed={paused}
