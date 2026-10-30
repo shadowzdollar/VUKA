@@ -36,16 +36,25 @@ export function VukaLogo({
   tagline,
   size = "md",
   className,
+  tile = false,
 }: {
   tagline?: string;
   size?: "md" | "lg" | "xl";
   className?: string;
+  /** Renders the mark on a small rounded lime tile, for dense chrome like a sidebar header. */
+  tile?: boolean;
 }) {
   const word = { md: "text-lg", lg: "text-xl", xl: "text-2xl" }[size];
   const mark = { md: "size-7", lg: "size-8", xl: "size-10" }[size];
   return (
     <span className={cn("inline-flex items-center gap-3", className)}>
-      <VukaMark className={mark} />
+      {tile ? (
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+          <VukaMark className="size-5" />
+        </span>
+      ) : (
+        <VukaMark className={mark} />
+      )}
       <span className="flex flex-col">
         <span className={cn("font-semibold leading-none tracking-[0.4em]", word)}>VUKA</span>
         {tagline ? (
