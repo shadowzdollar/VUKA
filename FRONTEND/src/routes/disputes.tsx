@@ -20,6 +20,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { ChainScopeBar } from "@/components/vuka/chain-scope-bar";
 import { DataTable } from "@/components/vuka/data-table";
+import { LazyDonutChart } from "@/components/vuka/lazy-charts";
 import { EmptyState, QueryBoundary } from "@/components/vuka/query-state";
 import { Chip, Metric, PageHeader, Panel, Shell } from "@/components/vuka/shell";
 import { describeError, download } from "@/lib/api/client";
@@ -84,6 +85,22 @@ function Tribunal() {
             />
             <Metric label="Total" value={disputes.data?.length ?? "—"} sub="For this contract" />
           </div>
+
+          {disputes.data && disputes.data.length > 0 ? (
+            <Panel title="Disputes by status">
+              <LazyDonutChart
+                ariaLabel="Disputes by status"
+                data={Object.entries(
+                  disputes.data.reduce<Record<string, number>>((acc, d) => {
+                    acc[d.status] = (acc[d.status] ?? 0) + 1;
+                    return acc;
+                  }, {}),
+                ).map(([label, value]) => ({ label, value }))}
+                center={{ value: String(disputes.data.length), label: "Disputes" }}
+                format={(v) => String(v)}
+              />
+            </Panel>
+          ) : null}
 
           <Panel title="Arbitration queue" meta={<Chip tone="live">Live</Chip>}>
             <QueryBoundary

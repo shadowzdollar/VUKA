@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DataTable } from "@/components/vuka/data-table";
+import { LazyDonutChart } from "@/components/vuka/lazy-charts";
 import { ErrorState, Loading, QueryBoundary } from "@/components/vuka/query-state";
 import { Chip, Metric, PageHeader, Panel, Shell } from "@/components/vuka/shell";
 import { corridors as corridorApi } from "@/lib/api/endpoints";
@@ -95,6 +96,22 @@ function TraderCorridors() {
                 sub="Kill switch active"
               />
             </div>
+
+            {rows.length > 0 ? (
+              <Panel title="Corridors by destination currency">
+                <LazyDonutChart
+                  ariaLabel="Corridors by destination currency"
+                  data={Object.entries(
+                    rows.reduce<Record<string, number>>((acc, c) => {
+                      acc[c.to_currency] = (acc[c.to_currency] ?? 0) + 1;
+                      return acc;
+                    }, {}),
+                  ).map(([label, value]) => ({ label, value }))}
+                  center={{ value: String(rows.length), label: "Corridors" }}
+                  format={(v) => String(v)}
+                />
+              </Panel>
+            ) : null}
 
             <Panel title="Corridor rate card" meta={<Chip tone="live">Live from engine</Chip>}>
               <DataTable
@@ -456,6 +473,21 @@ function OperatorProviders() {
                 sub="Live provider traffic"
               />
             </div>
+
+            {rows.length > 0 ? (
+              <Panel title="Providers by readiness">
+                <LazyDonutChart
+                  ariaLabel="Providers by readiness"
+                  data={[
+                    { label: "Healthy", value: rows.filter((p) => p.healthy).length },
+                    { label: "Unhealthy", value: rows.filter((p) => !p.healthy).length },
+                  ]}
+                  center={{ value: String(rows.length), label: "Providers" }}
+                  format={(v) => String(v)}
+                />
+              </Panel>
+            ) : null}
+
             <Panel title="Provider registry" meta={<Chip tone="live">Sandbox</Chip>}>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[820px] text-sm">

@@ -19,9 +19,11 @@
  */
 
 @theme inline {
-  /* Editorial display face for the public site: a text serif with real italics, chosen for a
-     printed trade-ledger feel rather than a tech one. Falls back to Georgia. */
-  --font-display: "Newsreader", Georgia, "Times New Roman", serif;
+  /* VUKA design system — off-white, ink and electric lime. Replaces the earlier strict-monochrome
+     palette at the user's explicit request; national flags remain the only other coloured imagery. */
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -45,6 +47,8 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-surface: var(--surface);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -65,80 +69,91 @@
 }
 
 :root {
-  /* Light theme — the "paper" palette from frontend_color_guidelines.md.
-     Ink #0A0A0A on Paper #FFFFFF; secondary text #4A4A4A (AA on paper);
-     hairlines #D6D6D6; shade #F2F2F2. Monochrome by design: state is carried by
-     weight, fill and text, never by hue. */
   color-scheme: light;
-  --radius: 0rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --radius: 0.5rem;
+  --background: oklch(0.985 0.005 110);
+  --foreground: oklch(0.16 0 0);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.16 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.145 0 0);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.96 0 0);
-  --secondary-foreground: oklch(0.145 0 0);
-  --muted: oklch(0.96 0 0);
-  --muted-foreground: oklch(0.4 0 0);
-  --accent: oklch(0.96 0 0);
-  --accent-foreground: oklch(0.145 0 0);
-  --destructive: oklch(0.145 0 0);
-  --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.89 0 0);
+  --popover-foreground: oklch(0.16 0 0);
+  --primary: oklch(0.91 0.2 125);
+  --primary-foreground: oklch(0.16 0.01 125);
+  --secondary: oklch(0.965 0 0);
+  --secondary-foreground: oklch(0.18 0 0);
+  --muted: oklch(0.965 0 0);
+  --muted-foreground: oklch(0.5 0 0);
+  --accent: oklch(0.95 0.055 125);
+  --accent-foreground: oklch(0.18 0 0);
+  --destructive: oklch(0.58 0.2 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.6 0.15 155);
+  --surface: oklch(0.975 0 0);
+  --border: oklch(0.91 0 0);
   --input: oklch(0.89 0 0);
-  --ring: oklch(0.145 0 0);
-  --chart-1: oklch(0.145 0 0);
-  --chart-2: oklch(0.4 0 0);
-  --chart-3: oklch(0.6 0 0);
-  --chart-4: oklch(0.78 0 0);
-  --chart-5: oklch(0.89 0 0);
+  --ring: oklch(0.4 0 0);
+  --glow: oklch(0.91 0.2 125);
+  --hero-paper: oklch(0.985 0.005 110);
+  --hero-ink: oklch(0.16 0.01 125);
+  --hero-muted: oklch(0.55 0.012 110);
+  --hero-lime: oklch(0.91 0.2 125);
+  --hero-line: oklch(0.93 0.008 110);
+  --hero-tile: oklch(0.95 0.008 110);
+  --hero-positive: oklch(0.43 0.13 140);
+  --hero-positive-bg: oklch(0.96 0.04 140);
+  --hero-shadow: 0 28px 60px oklch(0.16 0.01 125 / 16%);
+  --chart-1: oklch(0.2 0 0);
+  --chart-2: oklch(0.6 0.15 155);
+  --chart-3: oklch(0.58 0.2 25);
+  --chart-4: oklch(0.6 0 0);
+  --chart-5: oklch(0.8 0 0);
   --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.145 0 0);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.96 0 0);
-  --sidebar-accent-foreground: oklch(0.145 0 0);
-  --sidebar-border: oklch(0.89 0 0);
-  --sidebar-ring: oklch(0.145 0 0);
+  --sidebar-foreground: oklch(0.16 0 0);
+  --sidebar-primary: oklch(0.18 0 0);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.95 0 0);
+  --sidebar-accent-foreground: oklch(0.18 0 0);
+  --sidebar-border: oklch(0.91 0 0);
+  --sidebar-ring: oklch(0.4 0 0);
 }
 
 .dark {
   color-scheme: dark;
-  --background: oklch(0.06 0 0);
-  --foreground: oklch(1 0 0);
-  --card: oklch(0.12 0 0);
-  --card-foreground: oklch(1 0 0);
-  --popover: oklch(0.1 0 0);
-  --popover-foreground: oklch(1 0 0);
-  --primary: oklch(1 0 0);
-  --primary-foreground: oklch(0.06 0 0);
-  --secondary: oklch(0.18 0 0);
-  --secondary-foreground: oklch(1 0 0);
-  --muted: oklch(0.16 0 0);
-  --muted-foreground: oklch(0.7 0 0);
-  --accent: oklch(0.22 0 0);
-  --accent-foreground: oklch(1 0 0);
-  --destructive: oklch(1 0 0);
-  --destructive-foreground: oklch(0.06 0 0);
-  --border: oklch(0.3 0 0);
-  --input: oklch(0.3 0 0);
-  --ring: oklch(0.85 0 0);
-  --chart-1: oklch(1 0 0);
-  --chart-2: oklch(0.78 0 0);
-  --chart-3: oklch(0.58 0 0);
-  --chart-4: oklch(0.4 0 0);
-  --chart-5: oklch(0.28 0 0);
-  --sidebar: oklch(0.09 0 0);
-  --sidebar-foreground: oklch(1 0 0);
-  --sidebar-primary: oklch(1 0 0);
-  --sidebar-primary-foreground: oklch(0.06 0 0);
-  --sidebar-accent: oklch(0.18 0 0);
-  --sidebar-accent-foreground: oklch(1 0 0);
-  --sidebar-border: oklch(0.3 0 0);
-  --sidebar-ring: oklch(0.85 0 0);
+  --background: oklch(0.11 0 0);
+  --foreground: oklch(0.97 0 0);
+  --card: oklch(0.16 0 0);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: oklch(0.16 0 0);
+  --popover-foreground: oklch(0.97 0 0);
+  --primary: oklch(0.91 0.2 125);
+  --primary-foreground: oklch(0.16 0.01 125);
+  --secondary: oklch(0.22 0 0);
+  --secondary-foreground: oklch(0.97 0 0);
+  --muted: oklch(0.2 0 0);
+  --muted-foreground: oklch(0.66 0 0);
+  --accent: oklch(0.26 0.04 125);
+  --accent-foreground: oklch(0.97 0 0);
+  --destructive: oklch(0.65 0.19 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.72 0.16 155);
+  --surface: oklch(0.14 0 0);
+  --border: oklch(1 0 0 / 11%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.7 0 0);
+  --glow: oklch(0.55 0 0);
+  --chart-1: oklch(0.97 0 0);
+  --chart-2: oklch(0.72 0.16 155);
+  --chart-3: oklch(0.65 0.19 25);
+  --chart-4: oklch(0.6 0 0);
+  --chart-5: oklch(0.4 0 0);
+  --sidebar: oklch(0.14 0 0);
+  --sidebar-foreground: oklch(0.97 0 0);
+  --sidebar-primary: oklch(0.97 0 0);
+  --sidebar-primary-foreground: oklch(0.13 0 0);
+  --sidebar-accent: oklch(0.22 0 0);
+  --sidebar-accent-foreground: oklch(0.97 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.7 0 0);
 }
 
 @layer base {
@@ -206,6 +221,142 @@
   body {
     background: #fff;
     color: #000;
+  }
+}
+
+/* Top-down spotlight used behind the landing hero / CTA */
+@utility hero-glow {
+  background:
+    radial-gradient(60% 55% at 50% 0%, color-mix(in oklab, var(--glow) 55%, transparent), transparent 70%),
+    radial-gradient(40% 30% at 50% 62%, color-mix(in oklab, var(--glow) 35%, transparent), transparent 70%);
+}
+
+/* Fine dotted grid texture */
+@utility grid-texture {
+  background-image: radial-gradient(color-mix(in oklab, var(--foreground) 9%, transparent) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* Headline gradient: muted -> foreground */
+@utility text-gradient {
+  background-image: linear-gradient(180deg, var(--foreground) 20%, color-mix(in oklab, var(--foreground) 55%, transparent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility shadow-float {
+  box-shadow:
+    0 30px 80px -20px color-mix(in oklab, var(--foreground) 22%, transparent),
+    0 0 0 1px var(--border);
+}
+
+/* ---- Landing hero: full-bleed backdrop + mocked device scene ----------------------------- */
+.vuka-hero { position: relative; isolation: isolate; overflow: hidden; min-height: 800px; height: min(880px, 75vw); background: var(--hero-paper); color: var(--hero-ink); }
+.hero-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -1; }
+.hero-copy { position: relative; z-index: 3; width: 44%; max-width: 570px; padding: 148px 0 65px; margin-left: max(48px, calc((100vw - 1440px) / 2)); }
+.hero-eyebrow { display: flex; align-items: center; gap: 10px; font-size: 11px; font-weight: 600; }
+.hero-eyebrow span { width: 7px; height: 7px; border-radius: 50%; background: var(--hero-lime); }
+.hero-copy h1 { margin-top: 24px; font-size: 66px; line-height: 1.02; font-weight: 650; }
+.hero-description { margin-top: 22px; color: var(--hero-muted); font-size: 18px; line-height: 1.55; max-width: 350px; }
+.hero-features { display: grid; grid-template-columns: repeat(3, 95px); gap: 24px 15px; margin-top: 32px; }
+.hero-feature-icon { display: grid; place-items: center; width: 44px; height: 44px; background: var(--hero-tile); border-radius: 8px; }
+.hero-features p { margin-top: 9px; font-size: 12px; line-height: 1.4; }
+.hero-cta { margin-top: 35px; height: 49px; border-radius: 999px; background: var(--hero-ink); color: var(--hero-paper); padding-inline: 23px; }
+.hero-cta:hover { background: var(--hero-ink); opacity: .85; }
+.hero-device-scene { position: absolute; inset: 0; pointer-events: none; }
+.hero-dashboard { position: absolute; width: 760px; top: 145px; left: 49%; transform: perspective(1700px) rotateY(-13deg) rotateZ(-6deg); transform-origin: left center; background: var(--hero-paper); border: 1px solid var(--hero-line); border-radius: 12px; box-shadow: var(--hero-shadow); overflow: hidden; color: var(--hero-ink); }
+.dashboard-window { height: 30px; background: var(--hero-tile); display: flex; align-items: center; gap: 5px; padding: 0 12px; }
+.dashboard-window > span { width: 7px; height: 7px; border-radius: 50%; background: var(--hero-muted); }
+.dashboard-window > span:last-of-type { background: var(--hero-lime); }
+.dashboard-window p { font-size: 9px; color: var(--hero-muted); margin-left: auto; }
+.dashboard-body { display: grid; grid-template-columns: 140px 1fr; }
+.dashboard-sidebar { position: relative; background: var(--hero-paper); border-right: 1px solid var(--hero-line); padding: 20px 12px; }
+.dashboard-business { margin: 24px 0 15px; padding: 9px 7px; border: 1px solid var(--hero-line); border-radius: 5px; font-size: 9px; display: flex; justify-content: space-between; }
+.dashboard-nav { display: flex; align-items: center; gap: 8px; padding: 10px 8px; margin: 4px 0; font-size: 10px; color: var(--hero-muted); border-radius: 4px; }
+.dashboard-nav.is-active { background: var(--hero-lime); color: var(--hero-ink); }
+.dashboard-sidebar-foot { position: absolute; bottom: 22px; left: 20px; display: flex; align-items: center; gap: 6px; font-size: 8px; color: var(--hero-muted); }
+.dashboard-content { padding: 20px 17px; }
+.dashboard-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.dashboard-heading h3 { font-size: 14px; font-weight: 650; }
+.dashboard-heading h4 { font-size: 10px; font-weight: 600; }
+.dashboard-heading > span { border: 1px solid var(--hero-line); border-radius: 4px; padding: 5px 8px; font-size: 9px; }
+.dashboard-heading small { font-size: 9px; color: var(--hero-muted); }
+.dashboard-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0 14px; }
+.dashboard-stat { border: 1px solid var(--hero-line); padding: 16px 12px; border-radius: 8px; height: 132px; }
+.dashboard-stat > div:first-child { display: flex; justify-content: space-between; color: var(--hero-muted); font-size: 10px; }
+.dashboard-stat strong { font-size: 22px; display: block; margin-top: 10px; font-weight: 600; }
+.dashboard-stat small { display: block; margin-top: 14px; color: var(--hero-positive); font-size: 9px; }
+.dashboard-stat small span { margin-left: 8px; color: var(--hero-muted); }
+.dashboard-bars { display: flex; align-items: flex-end; gap: 4px; height: 35px; margin-top: 9px; }
+.dashboard-bars span { flex: 1; background: var(--hero-lime); border-radius: 2px 2px 0 0; }
+.dashboard-transactions { border: 1px solid var(--hero-line); border-radius: 8px; padding: 13px 12px 6px; }
+.dashboard-transactions table { width: 100%; font-size: 8px; border-collapse: collapse; margin-top: 15px; }
+.dashboard-transactions th { color: var(--hero-muted); background: var(--hero-tile); font-size: 7px; text-align: left; padding: 6px 3px; font-weight: 500; }
+.dashboard-transactions td { padding: 9px 3px; border-bottom: 1px solid var(--hero-line); white-space: nowrap; }
+.dashboard-transactions tr:last-child td { border-bottom: 0; }
+.payment-symbol { display: inline-grid; place-items: center; width: 17px; height: 17px; margin-right: 5px; border-radius: 5px; font-weight: 700; background: var(--hero-lime); color: var(--hero-ink); }
+.payment-status { background: var(--hero-positive-bg); color: var(--hero-positive); border-radius: 3px; padding: 4px 5px; }
+.payment-status.is-locked { background: var(--hero-tile); color: var(--hero-ink); }
+.dashboard-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+.dashboard-bottom > div { border: 1px solid var(--hero-line); border-radius: 8px; padding: 15px; }
+.dashboard-bottom svg { color: var(--hero-positive); margin-bottom: 10px; }
+.dashboard-bottom h4 { font-size: 11px; font-weight: 600; }
+.dashboard-bottom p { font-size: 9px; color: var(--hero-muted); line-height: 1.6; margin-top: 5px; }
+.dashboard-corridor { font-size: 13px; font-weight: 600; margin-top: 18px; display: flex; justify-content: space-between; }
+.dashboard-corridor span { color: var(--hero-positive); }
+.dashboard-trust { display: flex; align-items: center; gap: 10px; margin-top: 9px; }
+.dashboard-trust strong { font-size: 27px; }
+.dashboard-trust span { color: var(--hero-muted); font-size: 8px; line-height: 1.6; }
+.hero-device-scene .hero-phone { position: absolute; z-index: 2; width: 320px; max-width: none; left: 36%; top: 395px; transform: rotate(-9deg); filter: drop-shadow(8px 15px 12px oklch(0.16 0.01 125 / 18%)); }
+@media (min-width: 1450px) { .hero-dashboard { width: 850px; left: 47%; top: 140px; } .hero-device-scene .hero-phone { left: 34%; top: 380px; width: 340px; } }
+@media (max-width: 1100px) and (min-width: 768px) { .hero-copy { margin-left: 32px; } .hero-copy h1 { font-size: 56px; } .hero-description { font-size: 16px; max-width: 280px; } .hero-dashboard { width: 670px; left: 49%; top: 160px; } .hero-device-scene .hero-phone { left: 36%; width: 275px; top: 440px; } }
+@media (max-width: 767px) {
+  .vuka-hero { height: auto; min-height: 1080px; }
+  .hero-backdrop { object-position: 58% bottom; }
+  .hero-copy { width: auto; max-width: none; margin: 0; padding: 120px 24px 0; }
+  .hero-copy h1 { font-size: 48px; margin-top: 20px; }
+  .hero-description { font-size: 16px; max-width: 330px; }
+  .hero-eyebrow { font-size: 9px; }
+  .hero-features { gap: 18px 10px; grid-template-columns: repeat(3, 85px); margin-top: 25px; }
+  .hero-feature-icon { width: 38px; height: 38px; }
+  .hero-features p { font-size: 11px; }
+  .hero-cta { margin-top: 25px; }
+  .hero-dashboard { width: 560px; top: 690px; left: 27%; transform: perspective(1700px) rotateY(-13deg) rotateZ(-7deg); }
+  .hero-device-scene .hero-phone { width: 215px; top: 735px; left: -5%; }
+}
+
+/* Travelling highlight along the landing "Journey" rail — referenced via Tailwind's arbitrary
+   animate-[rail-pulse_...] value, guarded by the motion-safe: variant at the call site. */
+@keyframes rail-pulse {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(420%);
+  }
+}
+
+/* ---- Dashboard motion: cards/panels settle in on mount, staggered by --dash-delay -------- */
+@layer utilities {
+  @keyframes dash-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .dash-in {
+    animation: dash-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: var(--dash-delay, 0ms);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dash-in {
+      animation: none;
+    }
   }
 }
 

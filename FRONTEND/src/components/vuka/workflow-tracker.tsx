@@ -1,4 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertTriangle,
+  BookOpenCheck,
+  Check,
+  CircleDollarSign,
+  FileCheck2,
+  PartyPopper,
+  Send,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -9,6 +20,7 @@ import { describeError } from "@/lib/api/client";
 import { workflows } from "@/lib/api/endpoints";
 import type { Workflow, WorkflowState } from "@/lib/api/types";
 import { money, shortId, when } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 /** Happy-path order; FAILED / REQUIRES_REVIEW are off-path terminal-until-acted-on states. */
 const PATH: WorkflowState[] = [
@@ -39,6 +51,71 @@ export function stateTone(s: string) {
   if (s === "COMPLETED") return "invert" as const;
   if (s === "FAILED" || s === "REQUIRES_REVIEW") return "warn" as const;
   return "live" as const;
+}
+
+const STEP_ICON: Partial<Record<WorkflowState, LucideIcon>> = {
+  QUOTED: FileCheck2,
+  COLLECTION_PENDING: Wallet,
+  COLLECTED: CircleDollarSign,
+  LEDGER_POSTED: BookOpenCheck,
+  PAYOUT_PENDING: Send,
+  COMPLETED: PartyPopper,
+};
+
+/**
+ * Live, connected stepper for one payment's journey — the rail fills as the engine actually
+ * advances the workflow (polled, not simulated), with the in-flight step pulsing and a failed
+ * step called out in place rather than just going dark.
+ */
+function PaymentStepper({ idx, failedNodeIndex }: { idx: number; failedNodeIndex: number | null }) {
+  const pct = idx <= 0 ? 0 : (idx / (PATH.length - 1)) * 100;
+  return (
+    <div className="relative">
+      <div aria-hidden="true" className="absolute left-5 right-5 top-5 hidden h-0.5 bg-border sm:block">
+        <div
+          className={cn("h-full transition-[width] duration-700 ease-out", failedNodeIndex !== null ? "bg-destructive" : "bg-primary")}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <ol className="relative grid grid-cols-3 gap-y-6 sm:grid-cols-6 sm:gap-y-0">
+        {PATH.map((s, i) => {
+          const Icon = STEP_ICON[s] ?? FileCheck2;
+          const isFailedNode = i === failedNodeIndex;
+          const reached = i <= idx && !isFailedNode;
+          const current = i === idx && failedNodeIndex === null;
+          return (
+            <li key={s} className="flex flex-col items-center gap-2 text-center">
+              <span
+                className={cn(
+                  "relative z-10 flex size-10 shrink-0 items-center justify-center rounded-full border-2 bg-background transition-colors duration-500",
+                  reached && "border-primary bg-primary text-primary-foreground",
+                  !reached && !isFailedNode && "border-border text-muted-foreground",
+                  isFailedNode && "border-destructive bg-destructive text-destructive-foreground",
+                  current && "motion-safe:animate-pulse ring-4 ring-primary/20",
+                )}
+              >
+                {isFailedNode ? (
+                  <AlertTriangle className="size-4" aria-hidden="true" />
+                ) : i < idx ? (
+                  <Check className="size-4" aria-hidden="true" />
+                ) : (
+                  <Icon className="size-4" aria-hidden="true" />
+                )}
+              </span>
+              <span
+                className={cn(
+                  "font-mono text-[10px] uppercase leading-tight tracking-[0.08em]",
+                  reached || isFailedNode ? "text-foreground" : "text-muted-foreground",
+                )}
+              >
+                {LABEL[s]}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
 }
 
 /**
@@ -78,7 +155,18 @@ export function WorkflowTracker({ id, defaultPhone = "" }: { id: string; default
   if (wf.isError) return <ErrorState error={wf.error} onRetry={() => void wf.refetch()} />;
 
   const w: Workflow = wf.data;
-  const idx = PATH.indexOf(w.state);
+  const pathIdx = PATH.indexOf(w.state);
+  const offPath = w.state === "FAILED" || w.state === "REQUIRES_REVIEW";
+  // Off-path states aren't in PATH, but failed_step still tells us how far the money actually
+  // got — show that real progress instead of resetting the whole rail to empty.
+  const failedNodeIndex = !offPath
+    ? null
+    : w.failed_step === "PAYOUT"
+      ? PATH.indexOf("PAYOUT_PENDING")
+      : w.failed_step === "COLLECTION"
+        ? PATH.indexOf("COLLECTION_PENDING")
+        : null;
+  const idx = pathIdx >= 0 ? pathIdx : (failedNodeIndex ?? -1) - 1;
   const canRetry =
     (w.state === "FAILED" && w.failed_step === "COLLECTION") ||
     (w.state === "REQUIRES_REVIEW" && w.failed_step === "PAYOUT");
@@ -95,24 +183,10 @@ export function WorkflowTracker({ id, defaultPhone = "" }: { id: string; default
         <Chip tone={stateTone(w.state)}>{LABEL[w.state] ?? w.state}</Chip>
       </div>
 
-      <ol className="grid gap-1.5 sm:grid-cols-6">
-        {PATH.map((s, i) => (
-          <li
-            key={s}
-            className={
-              "border px-2 py-1.5 font-mono text-[10px] uppercase tracking-[0.1em] " +
-              (i <= idx
-                ? "border-foreground bg-foreground text-background"
-                : "border-border text-muted-foreground")
-            }
-          >
-            {LABEL[s]}
-          </li>
-        ))}
-      </ol>
+      <PaymentStepper idx={idx} failedNodeIndex={failedNodeIndex} />
 
       {w.state === "FAILED" || w.state === "REQUIRES_REVIEW" ? (
-        <div className="border-2 border-foreground p-3 text-xs">
+        <div className="rounded-2xl border-2 border-destructive/40 bg-destructive/5 p-3 text-xs">
           <div className="font-mono text-[10px] uppercase tracking-[0.2em]">
             {w.state === "FAILED" ? "Payment failed" : "Payout needs review"}
             {w.failed_step ? ` · ${w.failed_step.toLowerCase()} step` : ""}
@@ -134,11 +208,11 @@ export function WorkflowTracker({ id, defaultPhone = "" }: { id: string; default
                 placeholder={
                   w.failed_step === "PAYOUT" ? "Recipient mobile number" : "Your mobile number"
                 }
-                className="h-8 w-56 rounded-none font-mono text-xs"
+                className="h-8 w-56 rounded-lg font-mono text-xs"
               />
               <Button
                 size="sm"
-                className="h-8 rounded-none font-mono text-[10px] uppercase"
+                className="h-8 rounded-lg font-mono text-[10px] uppercase"
                 disabled={retry.isPending || !phone.trim()}
                 onClick={() => retry.mutate()}
               >
@@ -150,7 +224,7 @@ export function WorkflowTracker({ id, defaultPhone = "" }: { id: string; default
       ) : null}
 
       {w.state === "COMPLETED" ? (
-        <dl className="grid gap-2 border border-border p-3 font-mono text-[11px] sm:grid-cols-2">
+        <dl className="grid gap-2 rounded-2xl border border-success/30 bg-success/5 p-4 font-mono text-[11px] sm:grid-cols-2">
           <Row k="Ledger transfer" v={shortId(w.ledger_transfer_id, 12)} />
           <Row k="Rate applied" v={String(w.rate)} />
           <Row k="Collected via" v={w.collection_provider} />
@@ -158,7 +232,7 @@ export function WorkflowTracker({ id, defaultPhone = "" }: { id: string; default
         </dl>
       ) : null}
 
-      <details className="border border-border">
+      <details className="rounded-2xl border border-border">
         <summary className="cursor-pointer px-3 py-2 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
           Audit trail ({events.data?.length ?? "…"} transitions)
         </summary>

@@ -11,6 +11,7 @@ import {
   Search,
   Sun,
 } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, type LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -62,10 +63,10 @@ export function Chip({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em]",
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em]",
         tone === "neutral" && "border-border text-muted-foreground",
-        tone === "live" && "border-foreground/50 text-foreground",
-        tone === "warn" && "border-2 border-foreground text-foreground",
+        tone === "live" && "border-success/40 bg-success/10 text-success",
+        tone === "warn" && "border-destructive/40 bg-destructive/10 text-destructive",
         tone === "dead" && "border-border text-muted-foreground/60 line-through",
         tone === "invert" && "border-foreground bg-foreground text-background",
       )}
@@ -80,15 +81,21 @@ export function Panel({
   meta,
   children,
   className,
+  delay = 0,
 }: {
   title: string;
   meta?: ReactNode;
   children: ReactNode;
   className?: string;
+  /** Entrance-animation stagger, in ms. */
+  delay?: number;
 }) {
   return (
-    <section className={cn("min-w-0 border border-border bg-card", className)}>
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+    <section
+      className={cn("dash-in min-w-0 rounded-2xl border border-border bg-card shadow-float", className)}
+      style={{ "--dash-delay": `${delay}ms` } as React.CSSProperties}
+    >
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
         <h2 className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
           {title}
         </h2>
@@ -99,27 +106,70 @@ export function Panel({
   );
 }
 
+/** A real, computed change (e.g. this week vs. last week) — never a fabricated figure. */
+export type MetricTrend = { direction: "up" | "down" | "flat"; percent: number };
+
 export function Metric({
   label,
   value,
   sub,
   trend,
+  icon: Icon,
+  tone = "primary",
+  delay = 0,
 }: {
   label: string;
   value: ReactNode;
   sub?: ReactNode;
-  /** Optional series drawn as a sparkline under the value. */
-  trend?: ReactNode;
+  /** A sparkline, or a computed MetricTrend rendered as an up/down chip. */
+  trend?: ReactNode | MetricTrend;
+  icon?: LucideIcon;
+  tone?: "primary" | "success" | "muted" | "destructive";
+  delay?: number;
 }) {
+  const isTrendObject =
+    trend != null && typeof trend === "object" && "direction" in (trend as MetricTrend);
+  const trendObj = isTrendObject ? (trend as MetricTrend) : null;
+  const trendNode = isTrendObject ? null : (trend as ReactNode);
+
   return (
-    <div className="border border-border bg-card px-4 py-3.5">
-      <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-        {label}
+    <div
+      className="dash-in rounded-2xl border border-border bg-card px-4 py-4 shadow-float transition-shadow hover:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.15)]"
+      style={{ "--dash-delay": `${delay}ms` } as React.CSSProperties}
+    >
+      <div className="flex items-start justify-between gap-2">
+        {Icon ? (
+          <span
+            className={cn(
+              "flex size-9 shrink-0 items-center justify-center rounded-xl",
+              tone === "primary" && "bg-primary/15 text-foreground",
+              tone === "success" && "bg-success/15 text-success",
+              tone === "destructive" && "bg-destructive/15 text-destructive",
+              tone === "muted" && "bg-muted text-muted-foreground",
+            )}
+          >
+            <Icon className="size-4.5" aria-hidden="true" />
+          </span>
+        ) : null}
+        {trendObj && trendObj.direction !== "flat" ? (
+          <span
+            className={cn(
+              "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-medium",
+              trendObj.direction === "up" ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive",
+            )}
+          >
+            {trendObj.direction === "up" ? (
+              <ArrowUpRight className="size-3" aria-hidden="true" />
+            ) : (
+              <ArrowDownRight className="size-3" aria-hidden="true" />
+            )}
+            {trendObj.percent}%
+          </span>
+        ) : null}
       </div>
-      <div className="mt-2 font-mono text-2xl tabular-nums tracking-tight text-foreground">
-        {value}
-      </div>
-      {trend ? <div className="mt-2 text-foreground">{trend}</div> : null}
+      <div className="mt-3 font-mono text-2xl tabular-nums tracking-tight text-foreground">{value}</div>
+      <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{label}</div>
+      {trendNode ? <div className="mt-2 text-foreground">{trendNode}</div> : null}
       {sub ? <div className="mt-1 text-xs text-muted-foreground">{sub}</div> : null}
     </div>
   );
@@ -174,7 +224,7 @@ function TraderBell() {
   const q = useNotifications();
   const unread = (q.data ?? []).filter((n) => !n.read_at).length;
   return (
-    <Button asChild variant="ghost" size="icon" className="relative size-9 rounded-none">
+    <Button asChild variant="ghost" size="icon" className="relative size-9 rounded-lg">
       <Link
         to="/notifications"
         aria-label={`${t("shell.notifications")}${unread ? ` (${unread})` : ""}`}
@@ -204,7 +254,7 @@ function AccountMenu({ identity, onSignOut }: { identity: string; onSignOut: () 
         <Button
           variant="outline"
           size="sm"
-          className="h-9 gap-2 rounded-none font-mono text-[11px]"
+          className="h-9 gap-2 rounded-lg font-mono text-[11px]"
         >
           <ThemeIcon className="size-3.5" aria-hidden="true" />
           <span className="hidden max-w-[180px] truncate md:inline">{identity}</span>
@@ -212,7 +262,7 @@ function AccountMenu({ identity, onSignOut }: { identity: string; onSignOut: () 
           <ChevronDown className="size-3.5" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-60 rounded-none">
+      <DropdownMenuContent align="end" className="w-60 rounded-lg">
         <DropdownMenuLabel className="truncate font-mono text-[11px] font-normal text-muted-foreground">
           {identity}
         </DropdownMenuLabel>
@@ -419,6 +469,11 @@ export function Shell({
       <VukaLogo tagline={t("app.tagline")} />
     </Link>
   );
+  const brandTile = (
+    <Link to="/" aria-label="VUKA — home">
+      <VukaLogo tile size="lg" />
+    </Link>
+  );
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -430,18 +485,23 @@ export function Shell({
       </a>
       <RouteAnnouncer />
 
-      <div className="lg:grid lg:grid-cols-[256px_minmax(0,1fr)]">
+      <div className="lg:grid lg:grid-cols-[272px_minmax(0,1fr)]">
         <aside
           data-app-chrome
           aria-label="Primary"
-          className="sticky top-0 hidden h-screen flex-col border-r border-sidebar-border bg-sidebar lg:flex"
+          className="sticky top-0 hidden h-screen flex-col bg-sidebar lg:flex"
         >
-          <div className="border-b border-sidebar-border px-5 py-5">{brand}</div>
-          <nav aria-label="Main" className="flex-1 overflow-y-auto px-2 py-5">
+          <div className="px-5 py-6">{brandTile}</div>
+          <nav aria-label="Main" className="flex-1 overflow-y-auto px-3 py-2">
             <NavList groups={groups} />
           </nav>
-          <div className="border-t border-sidebar-border px-5 py-4">
-            <EngineChip />
+          <div className="p-4">
+            <div className="rounded-2xl border border-sidebar-border bg-card/60 p-3.5 shadow-float">
+              <EngineChip />
+              <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+                Sandbox providers · every corridor runs on simulated settlement rails.
+              </p>
+            </div>
           </div>
         </aside>
 
@@ -453,7 +513,7 @@ export function Shell({
             <Button
               variant="ghost"
               size="icon"
-              className="size-9 rounded-none lg:hidden"
+              className="size-9 rounded-lg lg:hidden"
               onClick={() => setDrawer(true)}
               aria-label={t("shell.menu")}
             >
@@ -464,7 +524,7 @@ export function Shell({
             <button
               type="button"
               onClick={() => setPalette(true)}
-              className="ml-auto flex h-9 min-w-0 items-center gap-2 border border-border px-3 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:w-64 sm:flex-none"
+              className="ml-auto flex h-9 min-w-0 items-center gap-2 rounded-full border border-border bg-muted/50 px-3 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:w-64 sm:flex-none"
               aria-label={t("shell.search")}
             >
               <Search className="size-3.5 shrink-0" aria-hidden="true" />
@@ -517,11 +577,11 @@ export function Shell({
       </div>
 
       <Sheet open={drawer} onOpenChange={setDrawer}>
-        <SheetContent side="left" className="w-72 rounded-none bg-sidebar p-0">
+        <SheetContent side="left" className="w-72 rounded-l-2xl bg-sidebar p-0">
           <SheetTitle className="sr-only">{t("shell.menu")}</SheetTitle>
           <SheetDescription className="sr-only">Primary navigation</SheetDescription>
-          <div className="border-b border-sidebar-border px-5 py-5">{brand}</div>
-          <nav aria-label="Main" className="overflow-y-auto px-2 py-5">
+          <div className="px-5 py-6">{brandTile}</div>
+          <nav aria-label="Main" className="overflow-y-auto px-3 py-2">
             <NavList groups={groups} onNavigate={() => setDrawer(false)} />
           </nav>
         </SheetContent>
@@ -530,7 +590,7 @@ export function Shell({
       <CommandMenu open={palette} onOpenChange={setPalette} groups={groups} onSignOut={signOut} />
 
       <Dialog open={idle.warning} onOpenChange={(o) => !o && idle.stay()}>
-        <DialogContent className="rounded-none sm:max-w-sm" role="alertdialog">
+        <DialogContent className="rounded-2xl sm:max-w-sm" role="alertdialog">
           <DialogHeader>
             <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
               {t("shell.session.title")}
@@ -542,12 +602,12 @@ export function Shell({
           <DialogFooter className="gap-2">
             <Button
               variant="outline"
-              className="rounded-none font-mono text-xs uppercase"
+              className="rounded-lg font-mono text-xs uppercase"
               onClick={signOut}
             >
               {t("shell.signOut")}
             </Button>
-            <Button className="rounded-none font-mono text-xs uppercase" onClick={idle.stay}>
+            <Button className="rounded-lg font-mono text-xs uppercase" onClick={idle.stay}>
               {t("shell.session.stay")}
             </Button>
           </DialogFooter>

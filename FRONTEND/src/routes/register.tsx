@@ -3,38 +3,26 @@ import { useEffect, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
   ArrowRight,
-  BriefcaseBusiness,
   Building2,
   Check,
   CheckCircle2,
   Eye,
   EyeOff,
-  Globe2,
-  Lock,
   Phone,
-  ShieldCheck,
-  User,
   UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  AUTH_BUTTON,
-  AUTH_INPUT,
-  AuthError,
-  AuthField,
-  AuthShell,
-  GoogleIcon,
-} from "@/components/vuka/auth-shared";
+import { AUTH_BUTTON, AUTH_INPUT, AuthError, AuthField, AuthShell } from "@/components/vuka/auth-shared";
 import { describeError, isApiError } from "@/lib/api/client";
 import { auth } from "@/lib/api/endpoints";
 import { useSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/register")({
-  head: () => ({ meta: [{ title: "Create account — VUKA Global Trade" }] }),
+  head: () => ({ meta: [{ title: "Create account — VUKA" }] }),
   component: Register,
 });
 
@@ -114,10 +102,6 @@ function Register() {
   function validateStep(s: number): boolean {
     setError(null);
 
-    if (s === 0) {
-      return true;
-    }
-
     if (s === 1) {
       if (!form.fullName.trim()) {
         setError("Please enter your full name.");
@@ -173,26 +157,24 @@ function Register() {
     setBusy(true);
 
     try {
-      const payload = {
-        name: form.fullName.trim(),
-        phone: form.phone.replace(/\s+/g, ""),
-        password: form.password,
-        account_type: form.accountType,
-        business_name:
-          form.accountType === "business" ? form.businessName.trim() : undefined,
-        registration_number:
-          form.accountType === "business" && form.registrationNumber.trim()
-            ? form.registrationNumber.trim()
-            : undefined,
-        country: form.country,
-        currency: form.currency,
-      };
+      const phone = form.phone.replace(/\s+/g, "");
 
-      await auth.register(payload);
+      const registrationNumber =
+        form.accountType === "business" && form.registrationNumber.trim() ? form.registrationNumber.trim() : undefined;
+
+      await auth.register(
+        {
+          full_name: form.fullName.trim(),
+          phone_number: phone,
+          password: form.password,
+          ...(registrationNumber ? { business_reg_number: registrationNumber } : {}),
+        },
+        form.currency,
+      );
 
       // Automatically sign in the freshly created user
       try {
-        await auth.traderLogin(payload.phone, payload.password);
+        await auth.traderLogin(phone, form.password);
         await refresh();
       } catch {
         // If login fails, redirect to login page
@@ -211,30 +193,22 @@ function Register() {
     }
   }
 
-  // Registration Complete Success View
   if (completed) {
     return (
       <AuthShell page="register">
-        <div className="flex flex-col h-full justify-between items-center text-center py-6">
-          <div className="my-auto space-y-4 max-w-sm">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#E8F5E9] text-[#2E7D32]">
-              <CheckCircle2 className="h-7 w-7" />
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight text-[#0A0D12]">
-              Welcome to VUKA
-            </h1>
-            <p className="text-xs sm:text-sm text-[#63635E] leading-relaxed">
-              Your trader account has been created and verified. You are now connected to verified trade corridors across Africa.
-            </p>
-            <div className="pt-2">
-              <Button
-                onClick={() => void navigate({ to: "/" })}
-                className={cn("w-full", AUTH_BUTTON)}
-              >
-                Go to Trade Dashboard
-                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-              </Button>
-            </div>
+        <div className="flex flex-col items-center py-6 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-success/15 text-success">
+            <CheckCircle2 className="h-7 w-7" />
+          </div>
+          <h1 className="mt-4 text-2xl font-semibold tracking-tight">Welcome to VUKA</h1>
+          <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+            Your trader account has been created. You're ready to start trading across corridors.
+          </p>
+          <div className="mt-6 w-full max-w-sm">
+            <Button onClick={() => void navigate({ to: "/" })} className={cn("w-full group", AUTH_BUTTON)}>
+              Go to dashboard
+              <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
+            </Button>
           </div>
         </div>
       </AuthShell>
@@ -242,450 +216,318 @@ function Register() {
   }
 
   return (
-    <AuthShell page="register" wide>
-      <div className="flex flex-col h-full justify-between">
-        {/* Top Header Block matching reference style */}
-        <div>
-          <div className="mb-5">
-            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-[#787870] block mb-1">
-              Get Started
-            </span>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#0A0D12] leading-tight">
-              Create your
-              <br />
-              <span className="font-extrabold">VUKA account.</span>
-            </h1>
-            <div className="flex items-center gap-2 mt-2 font-mono text-[10px] font-medium tracking-[0.18em] text-[#787870] uppercase">
-              <span>Secure</span>
-              <span className="h-1 w-1 rounded-full bg-[#A8A8A2]" />
-              <span>Compliant</span>
-              <span className="h-1 w-1 rounded-full bg-[#A8A8A2]" />
-              <span>Global</span>
-            </div>
-          </div>
+    <AuthShell page="register">
+      <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-muted-foreground">Get started</p>
+      <h1 className="mt-2 text-3xl font-semibold tracking-tight">Create your account</h1>
 
-          {/* Stepper progress indicator */}
-          <div className="mb-6 flex items-center gap-1.5">
-            {[0, 1, 2, 3].map((i) => (
+      <div className="mt-6 mb-6 flex items-center gap-1.5">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className={cn("h-1 flex-1 rounded-full transition-all", step >= i ? "bg-primary" : "bg-muted")} />
+        ))}
+      </div>
+
+      {step === 0 ? (
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">Select the structure that matches your trade operations:</p>
+          <div className="grid grid-cols-1 gap-3">
+            <button
+              type="button"
+              onClick={() => update("accountType", "business")}
+              className={cn(
+                "flex items-start gap-3.5 rounded-xl border p-4 text-left transition-all",
+                form.accountType === "business" ? "border-ring bg-muted/50 ring-1 ring-ring" : "border-border bg-card hover:border-ring/40",
+              )}
+            >
               <div
-                key={i}
                 className={cn(
-                  "h-1 flex-1 rounded-full transition-all duration-300",
-                  step >= i ? "bg-[#0A0D12]" : "bg-[#E6E6E2]",
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                  form.accountType === "business" ? "bg-foreground text-background" : "bg-muted text-muted-foreground",
                 )}
-              />
-            ))}
+              >
+                <Building2 className="h-4 w-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">Registered business</span>
+                  {form.accountType === "business" ? <Check className="h-3.5 w-3.5" /> : null}
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  For registered companies, freight forwarders, manufacturers and trade houses.
+                </p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => update("accountType", "individual")}
+              className={cn(
+                "flex items-start gap-3.5 rounded-xl border p-4 text-left transition-all",
+                form.accountType === "individual" ? "border-ring bg-muted/50 ring-1 ring-ring" : "border-border bg-card hover:border-ring/40",
+              )}
+            >
+              <div
+                className={cn(
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                  form.accountType === "individual" ? "bg-foreground text-background" : "bg-muted text-muted-foreground",
+                )}
+              >
+                <UserRound className="h-4 w-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">Individual trader</span>
+                  {form.accountType === "individual" ? <Check className="h-3.5 w-3.5" /> : null}
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  For sole proprietors, independent brokers and individual merchant importers.
+                </p>
+              </div>
+            </button>
           </div>
 
-          {/* Step 0: Account Type Selection */}
-          {step === 0 && (
-            <div className="space-y-4">
-              <p className="text-xs text-[#52524D] mb-2">
-                Select the structure that matches your trade operations:
-              </p>
+          <Button type="button" onClick={nextStep} className={cn("w-full group", AUTH_BUTTON)}>
+            Continue
+            <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
+          </Button>
+        </div>
+      ) : null}
 
-              <div className="grid grid-cols-1 gap-3">
-                <button
-                  type="button"
-                  onClick={() => update("accountType", "business")}
-                  className={cn(
-                    "flex items-start gap-3.5 p-4 rounded-xl border text-left transition-all",
-                    form.accountType === "business"
-                      ? "border-[#0A0D12] bg-[#FAFAF9] shadow-sm ring-1 ring-[#0A0D12]"
-                      : "border-[#E4E4E0] bg-white hover:border-[#CACAC4]",
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-                      form.accountType === "business"
-                        ? "bg-[#0A0D12] text-white"
-                        : "bg-[#F0F0EB] text-[#55554E]",
-                    )}
-                  >
-                    <Building2 className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-[#0A0D12]">
-                        Registered Business / Corporation
-                      </span>
-                      {form.accountType === "business" && (
-                        <Check className="h-3.5 w-3.5 text-[#0A0D12]" />
-                      )}
-                    </div>
-                    <p className="text-[11px] text-[#6E6E67] mt-0.5 leading-snug">
-                      For registered companies, freight forwarders, manufacturers, and trade houses.
-                    </p>
-                  </div>
-                </button>
+      {step === 1 ? (
+        <div className="space-y-3.5">
+          <AuthField id="fullName" label="Full name">
+            <Input
+              id="fullName"
+              placeholder="e.g. Samuel Mugisha"
+              className={AUTH_INPUT}
+              value={form.fullName}
+              onChange={(e) => update("fullName", e.target.value)}
+              autoComplete="name"
+              required
+            />
+          </AuthField>
 
-                <button
-                  type="button"
-                  onClick={() => update("accountType", "individual")}
-                  className={cn(
-                    "flex items-start gap-3.5 p-4 rounded-xl border text-left transition-all",
-                    form.accountType === "individual"
-                      ? "border-[#0A0D12] bg-[#FAFAF9] shadow-sm ring-1 ring-[#0A0D12]"
-                      : "border-[#E4E4E0] bg-white hover:border-[#CACAC4]",
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-                      form.accountType === "individual"
-                        ? "bg-[#0A0D12] text-white"
-                        : "bg-[#F0F0EB] text-[#55554E]",
-                    )}
-                  >
-                    <UserRound className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-[#0A0D12]">
-                        Individual Trader / Sole Trader
-                      </span>
-                      {form.accountType === "individual" && (
-                        <Check className="h-3.5 w-3.5 text-[#0A0D12]" />
-                      )}
-                    </div>
-                    <p className="text-[11px] text-[#6E6E67] mt-0.5 leading-snug">
-                      For sole proprietors, independent brokers, and individual merchant importers.
-                    </p>
-                  </div>
-                </button>
-              </div>
+          {form.accountType === "business" ? (
+            <>
+              <AuthField id="businessName" label="Business / company name">
+                <Input
+                  id="businessName"
+                  placeholder="e.g. Great Lakes Logistics Ltd"
+                  className={AUTH_INPUT}
+                  value={form.businessName}
+                  onChange={(e) => update("businessName", e.target.value)}
+                  required
+                />
+              </AuthField>
 
-              <div className="pt-3">
-                <Button
-                  type="button"
-                  onClick={nextStep}
-                  className={cn("w-full group", AUTH_BUTTON)}
-                >
-                  Continue
-                  <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
-                </Button>
-              </div>
+              <AuthField
+                id="registrationNumber"
+                label="Business reg. / TIN (optional)"
+                hint="Helps speed up settlement limit verification."
+              >
+                <Input
+                  id="registrationNumber"
+                  placeholder="e.g. 100234567"
+                  className={AUTH_INPUT}
+                  value={form.registrationNumber}
+                  onChange={(e) => update("registrationNumber", e.target.value)}
+                />
+              </AuthField>
+            </>
+          ) : null}
 
-              {/* Quick Google Option */}
-              <div className="relative my-3 text-center">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-[#E7E7E3]" />
-                </div>
-                <span className="relative bg-white px-3 font-mono text-[9px] uppercase tracking-widest text-[#94948E]">
-                  or
-                </span>
-              </div>
+          <div className="grid grid-cols-2 gap-3">
+            <AuthField id="country" label="Primary country">
+              <select
+                id="country"
+                value={form.country}
+                onChange={(e) => update("country", e.target.value)}
+                className={cn("w-full appearance-none", AUTH_INPUT)}
+              >
+                {COUNTRIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name} ({c.code})
+                  </option>
+                ))}
+              </select>
+            </AuthField>
 
+            <AuthField id="currency" label="Operating currency">
+              <Input id="currency" value={form.currency} readOnly className={cn("bg-muted text-muted-foreground", AUTH_INPUT)} />
+            </AuthField>
+          </div>
+
+          <AuthField id="phone" label="Mobile phone (login & OTP)">
+            <div className="relative">
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="+250 788 000 000"
+                className={cn("pr-10", AUTH_INPUT)}
+                value={form.phone}
+                onChange={(e) => update("phone", e.target.value)}
+                required
+              />
+              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-muted-foreground">
+                <Phone className="h-4 w-4" />
+              </span>
+            </div>
+          </AuthField>
+
+          {error ? <AuthError>{error}</AuthError> : null}
+
+          <div className="flex items-center gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={prevStep} className="h-11 px-4 text-xs font-semibold">
+              <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Back
+            </Button>
+            <Button type="button" onClick={nextStep} className={cn("flex-1 group", AUTH_BUTTON)}>
+              Next: Security
+              <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {step === 2 ? (
+        <div className="space-y-3.5">
+          <AuthField id="password" label="Create password">
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                placeholder="At least 8 characters"
+                className={cn("pr-10", AUTH_INPUT)}
+                value={form.password}
+                onChange={(e) => update("password", e.target.value)}
+                required
+              />
               <button
                 type="button"
-                onClick={() => toast.info("Google registration is available on production domains")}
-                className="w-full h-11 rounded-lg border border-[#E4E4E0] bg-white hover:bg-[#FAFAF9] text-xs font-semibold text-[#18181B] flex items-center justify-center gap-2.5 transition-colors"
+                onClick={() => setShowPassword((p) => !p)}
+                className="absolute inset-y-0 right-3 flex items-center text-muted-foreground hover:text-foreground"
               >
-                <GoogleIcon className="h-4 w-4" />
-                <span>Continue with Google</span>
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
-          )}
+          </AuthField>
 
-          {/* Step 1: Entity & Contact Details */}
-          {step === 1 && (
-            <div className="space-y-3.5">
-              <AuthField id="fullName" label="Full Name">
-                <Input
-                  id="fullName"
-                  placeholder="e.g. Samuel Mugisha"
-                  className={AUTH_INPUT}
-                  value={form.fullName}
-                  onChange={(e) => update("fullName", e.target.value)}
-                  autoComplete="name"
-                  required
-                />
-              </AuthField>
+          <AuthField id="confirmPassword" label="Confirm password">
+            <Input
+              id="confirmPassword"
+              type={showPassword ? "text" : "password"}
+              placeholder="Repeat your password"
+              className={AUTH_INPUT}
+              value={form.confirmPassword}
+              onChange={(e) => update("confirmPassword", e.target.value)}
+              required
+            />
+          </AuthField>
 
-              {form.accountType === "business" && (
-                <>
-                  <AuthField id="businessName" label="Business / Company Name">
-                    <Input
-                      id="businessName"
-                      placeholder="e.g. Great Lakes Logistics Ltd"
-                      className={AUTH_INPUT}
-                      value={form.businessName}
-                      onChange={(e) => update("businessName", e.target.value)}
-                      required
-                    />
-                  </AuthField>
-
-                  <AuthField
-                    id="registrationNumber"
-                    label="Business Reg / TIN (Optional)"
-                    hint="Helps speed up settlement limit verifications"
-                  >
-                    <Input
-                      id="registrationNumber"
-                      placeholder="e.g. 100234567"
-                      className={AUTH_INPUT}
-                      value={form.registrationNumber}
-                      onChange={(e) => update("registrationNumber", e.target.value)}
-                    />
-                  </AuthField>
-                </>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <AuthField id="country" label="Primary Country">
-                  <select
-                    id="country"
-                    value={form.country}
-                    onChange={(e) => update("country", e.target.value)}
-                    className={cn("w-full appearance-none", AUTH_INPUT)}
-                  >
-                    {COUNTRIES.map((c) => (
-                      <option key={c.code} value={c.code}>
-                        {c.name} ({c.code})
-                      </option>
-                    ))}
-                  </select>
-                </AuthField>
-
-                <AuthField id="currency" label="Operating Currency">
-                  <Input
-                    id="currency"
-                    value={form.currency}
-                    readOnly
-                    className={cn("bg-[#F0F0EB] text-[#55554E]", AUTH_INPUT)}
-                  />
-                </AuthField>
-              </div>
-
-              <AuthField id="phone" label="Mobile Phone (Login &amp; OTP)">
-                <div className="relative">
-                  <Input
-                    id="phone"
-                    type="tel"
-                    placeholder="+250 788 000 000"
-                    className={cn("pr-10", AUTH_INPUT)}
-                    value={form.phone}
-                    onChange={(e) => update("phone", e.target.value)}
-                    required
-                  />
-                  <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[#9B9B94]">
-                    <Phone className="h-4 w-4" />
-                  </span>
-                </div>
-              </AuthField>
-
-              {error && <AuthError>{error}</AuthError>}
-
-              <div className="flex items-center gap-3 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={prevStep}
-                  className="h-11 px-4 border-[#E4E4E0] text-xs font-semibold"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5 mr-1" />
-                  Back
-                </Button>
-                <Button
-                  type="button"
-                  onClick={nextStep}
-                  className={cn("flex-1 group", AUTH_BUTTON)}
-                >
-                  Next: Security
-                  <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 2: Password & Agreement */}
-          {step === 2 && (
-            <div className="space-y-3.5">
-              <AuthField id="password" label="Create Password">
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="At least 8 characters"
-                    className={cn("pr-10", AUTH_INPUT)}
-                    value={form.password}
-                    onChange={(e) => update("password", e.target.value)}
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((p) => !p)}
-                    className="absolute inset-y-0 right-3 flex items-center text-[#9B9B94] hover:text-[#0A0D12]"
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </AuthField>
-
-              <AuthField id="confirmPassword" label="Confirm Password">
-                <Input
-                  id="confirmPassword"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Repeat your password"
-                  className={AUTH_INPUT}
-                  value={form.confirmPassword}
-                  onChange={(e) => update("confirmPassword", e.target.value)}
-                  required
-                />
-              </AuthField>
-
-              {/* Password strength mini bar */}
-              <div className="space-y-1">
-                <div className="flex h-1 gap-1">
-                  <div
-                    className={cn(
-                      "flex-1 rounded-full",
-                      form.password.length >= 8 ? "bg-[#2E7D32]" : "bg-[#E0E0DC]",
-                    )}
-                  />
-                  <div
-                    className={cn(
-                      "flex-1 rounded-full",
-                      form.password.length >= 10 && /[0-9]/.test(form.password)
-                        ? "bg-[#2E7D32]"
-                        : "bg-[#E0E0DC]",
-                    )}
-                  />
-                  <div
-                    className={cn(
-                      "flex-1 rounded-full",
-                      form.password.length >= 12 && /[^a-zA-Z0-9]/.test(form.password)
-                        ? "bg-[#2E7D32]"
-                        : "bg-[#E0E0DC]",
-                    )}
-                  />
-                </div>
-                <span className="text-[10px] text-[#7A7A72]">
-                  {form.password.length >= 8 ? "Good security level" : "Minimum 8 characters"}
-                </span>
-              </div>
-
-              {/* Terms agreement checkbox */}
-              <div className="pt-2">
-                <label className="flex items-start gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={form.agreeTerms}
-                    onChange={(e) => update("agreeTerms", e.target.checked)}
-                    className="mt-0.5 h-4 w-4 rounded border-[#D0D0CA] text-[#0A0D12] accent-[#0A0D12] focus:ring-0 cursor-pointer"
-                  />
-                  <span className="text-xs text-[#52524D] leading-snug">
-                    I agree to the{" "}
-                    <Link to="/terms" className="underline underline-offset-2 text-[#0A0D12]">
-                      Terms of Trade
-                    </Link>{" "}
-                    and acknowledge the{" "}
-                    <Link to="/privacy" className="underline underline-offset-2 text-[#0A0D12]">
-                      Privacy Policy
-                    </Link>
-                    .
-                  </span>
-                </label>
-              </div>
-
-              {error && <AuthError>{error}</AuthError>}
-
-              <div className="flex items-center gap-3 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={prevStep}
-                  className="h-11 px-4 border-[#E4E4E0] text-xs font-semibold"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5 mr-1" />
-                  Back
-                </Button>
-                <Button
-                  type="button"
-                  onClick={nextStep}
-                  className={cn("flex-1 group", AUTH_BUTTON)}
-                >
-                  Review Details
-                  <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 3: Review & Submit */}
-          {step === 3 && (
-            <form onSubmit={submit} className="space-y-4">
-              <div className="rounded-xl border border-[#E4E4E0] bg-[#FAFAF9] p-4 text-xs space-y-2.5">
-                <div className="flex justify-between border-b border-[#ECECE8] pb-2">
-                  <span className="text-[#7A7A72]">Account Type</span>
-                  <span className="font-semibold text-[#0A0D12] capitalize">
-                    {form.accountType === "business" ? "Registered Business" : "Individual Trader"}
-                  </span>
-                </div>
-                <div className="flex justify-between border-b border-[#ECECE8] pb-2">
-                  <span className="text-[#7A7A72]">Full Name</span>
-                  <span className="font-semibold text-[#0A0D12]">{form.fullName}</span>
-                </div>
-                {form.accountType === "business" && (
-                  <div className="flex justify-between border-b border-[#ECECE8] pb-2">
-                    <span className="text-[#7A7A72]">Business</span>
-                    <span className="font-semibold text-[#0A0D12]">{form.businessName}</span>
-                  </div>
+          <div className="space-y-1">
+            <div className="flex h-1 gap-1">
+              <div className={cn("flex-1 rounded-full", form.password.length >= 8 ? "bg-success" : "bg-muted")} />
+              <div
+                className={cn(
+                  "flex-1 rounded-full",
+                  form.password.length >= 10 && /[0-9]/.test(form.password) ? "bg-success" : "bg-muted",
                 )}
-                <div className="flex justify-between border-b border-[#ECECE8] pb-2">
-                  <span className="text-[#7A7A72]">Country &amp; Currency</span>
-                  <span className="font-semibold text-[#0A0D12]">
-                    {COUNTRIES.find((c) => c.code === form.country)?.name} ({form.currency})
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[#7A7A72]">Mobile Phone</span>
-                  <span className="font-mono font-semibold text-[#0A0D12]">{form.phone}</span>
-                </div>
-              </div>
+              />
+              <div
+                className={cn(
+                  "flex-1 rounded-full",
+                  form.password.length >= 12 && /[^a-zA-Z0-9]/.test(form.password) ? "bg-success" : "bg-muted",
+                )}
+              />
+            </div>
+            <span className="text-[10px] text-muted-foreground">
+              {form.password.length >= 8 ? "Good security level" : "Minimum 8 characters"}
+            </span>
+          </div>
 
-              {error && <AuthError>{error}</AuthError>}
+          <label className="flex items-start gap-2.5 pt-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={form.agreeTerms}
+              onChange={(e) => update("agreeTerms", e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-input accent-foreground focus:ring-0 cursor-pointer"
+            />
+            <span className="text-xs leading-snug text-muted-foreground">
+              I agree to the{" "}
+              <Link to="/terms" className="underline underline-offset-2 text-foreground">
+                Terms of Trade
+              </Link>{" "}
+              and acknowledge the{" "}
+              <Link to="/privacy" className="underline underline-offset-2 text-foreground">
+                Privacy Policy
+              </Link>
+              .
+            </span>
+          </label>
 
-              <div className="flex items-center gap-3 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={prevStep}
-                  disabled={busy}
-                  className="h-11 px-4 border-[#E4E4E0] text-xs font-semibold"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5 mr-1" />
-                  Edit
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={busy}
-                  className={cn("flex-1 group", AUTH_BUTTON)}
-                >
-                  {busy ? "Creating account..." : "Complete Registration"}
-                  {!busy && (
-                    <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
-                  )}
-                </Button>
-              </div>
-            </form>
-          )}
+          {error ? <AuthError>{error}</AuthError> : null}
+
+          <div className="flex items-center gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={prevStep} className="h-11 px-4 text-xs font-semibold">
+              <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Back
+            </Button>
+            <Button type="button" onClick={nextStep} className={cn("flex-1 group", AUTH_BUTTON)}>
+              Review details
+              <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
+            </Button>
+          </div>
         </div>
+      ) : null}
 
-        {/* Bottom sign-in link matching reference */}
-        <div className="pt-6 border-t border-[#F0F0EB] text-center">
-          <p className="text-xs text-[#6B6B64]">
-            Already have an account?{" "}
-            <Link
-              to="/login"
-              className="font-semibold text-[#0A0D12] underline underline-offset-4 hover:text-black transition-colors"
-            >
-              Sign in
-            </Link>
-          </p>
-        </div>
-      </div>
+      {step === 3 ? (
+        <form onSubmit={submit} className="space-y-4">
+          <div className="space-y-2.5 rounded-xl border border-border bg-muted/40 p-4 text-xs">
+            <div className="flex justify-between border-b border-border pb-2">
+              <span className="text-muted-foreground">Account type</span>
+              <span className="font-semibold capitalize">
+                {form.accountType === "business" ? "Registered business" : "Individual trader"}
+              </span>
+            </div>
+            <div className="flex justify-between border-b border-border pb-2">
+              <span className="text-muted-foreground">Full name</span>
+              <span className="font-semibold">{form.fullName}</span>
+            </div>
+            {form.accountType === "business" ? (
+              <div className="flex justify-between border-b border-border pb-2">
+                <span className="text-muted-foreground">Business</span>
+                <span className="font-semibold">{form.businessName}</span>
+              </div>
+            ) : null}
+            <div className="flex justify-between border-b border-border pb-2">
+              <span className="text-muted-foreground">Country &amp; currency</span>
+              <span className="font-semibold">
+                {COUNTRIES.find((c) => c.code === form.country)?.name} ({form.currency})
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Mobile phone</span>
+              <span className="font-mono font-semibold">{form.phone}</span>
+            </div>
+          </div>
+
+          {error ? <AuthError>{error}</AuthError> : null}
+
+          <div className="flex items-center gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={prevStep} disabled={busy} className="h-11 px-4 text-xs font-semibold">
+              <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Edit
+            </Button>
+            <Button type="submit" disabled={busy} className={cn("flex-1 group", AUTH_BUTTON)}>
+              {busy ? "Creating account..." : "Complete registration"}
+              {!busy ? <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-1" /> : null}
+            </Button>
+          </div>
+        </form>
+      ) : null}
+
+      <p className="mt-8 text-center text-sm text-muted-foreground">
+        Already have an account?{" "}
+        <Link to="/login" className="font-semibold text-foreground underline underline-offset-4">
+          Sign in
+        </Link>
+      </p>
     </AuthShell>
   );
 }

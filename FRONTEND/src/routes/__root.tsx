@@ -106,8 +106,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
             { name: "twitter:image", content: `${PUBLIC_URL}/og-image.png` },
           ]
         : []),
-      { name: "theme-color", content: "#fafafa", media: "(prefers-color-scheme: light)" },
-      { name: "theme-color", content: "#0a0a0a", media: "(prefers-color-scheme: dark)" },
+      { name: "theme-color", content: "#fafaf7", media: "(prefers-color-scheme: light)" },
+      { name: "theme-color", content: "#1c1c1c", media: "(prefers-color-scheme: dark)" },
     ],
     // Applies the stored/system theme before first paint (no white flash for dark-mode users).
     scripts: [{ children: themeInitScript }],
@@ -116,7 +116,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap",
       },
       {
         rel: "stylesheet",

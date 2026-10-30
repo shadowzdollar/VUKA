@@ -1,16 +1,16 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import {
+  Check,
+  Copy,
+  Pencil,
+  RotateCcw,
+  Smartphone,
+  Wallet,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -20,17 +20,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Flag } from "@/components/vuka/landing/flags";
 import { ErrorState, Loading } from "@/components/vuka/query-state";
 import { Chip, PageHeader, Panel, Shell } from "@/components/vuka/shell";
 import { invoiceTotal } from "@/components/vuka/trader-invoices";
-import { stateTone, WorkflowTracker } from "@/components/vuka/workflow-tracker";
+import { isSettled, stateTone, WorkflowTracker } from "@/components/vuka/workflow-tracker";
 import { ApiError, describeError, isApiError, newIdempotencyKey } from "@/lib/api/client";
-import { corridors as corridorApi, ledger, workflows } from "@/lib/api/endpoints";
-import type { Account, Recipient, Workflow } from "@/lib/api/types";
-import { fromMinor, money, shortId, toMinor, truncMid } from "@/lib/format";
+import { corridors as corridorApi, ledger, platform, workflows } from "@/lib/api/endpoints";
+import type { Account, Recipient, Transfer, Workflow } from "@/lib/api/types";
+import { fromMinor, money, shortId, toMinor, truncMid, when } from "@/lib/format";
 import { readRecentWorkflows, rememberWorkflow } from "@/lib/recent-workflows";
 import { useTrader } from "@/lib/session";
 import { useInvoices, useWallet } from "@/lib/trader-data";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/send")({
   // /send?invoice=INV-… preselects the invoice being paid (linked from the Invoices page).
@@ -54,6 +56,11 @@ export const Route = createFileRoute("/send")({
 });
 
 type Mode = "domestic" | "workflow";
+type SendResult =
+  | { kind: "domestic"; transfer: Transfer }
+  | { kind: "workflow"; workflow?: Workflow; error?: string };
+
+const WIZARD_STEPS = ["Recipient", "Amount", "Review"] as const;
 
 function useDebounced<T>(value: T, ms = 400): T {
   const [v, setV] = useState(value);
@@ -71,6 +78,45 @@ function workflowFromError(e: unknown): Workflow | undefined {
   return body?.workflow?.id ? body.workflow : undefined;
 }
 
+function StepRail({ step }: { step: number }) {
+  return (
+    <div className="mb-7 flex items-center">
+      {WIZARD_STEPS.map((label, i) => {
+        const n = i + 1;
+        const done = n < step;
+        const current = n === step;
+        return (
+          <div key={label} className="flex flex-1 items-center last:flex-none">
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "flex size-7 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-medium transition-colors duration-300",
+                  (done || current) && "bg-primary text-primary-foreground",
+                  current && "ring-4 ring-primary/20",
+                  !done && !current && "bg-muted text-muted-foreground",
+                )}
+              >
+                {done ? <Check className="size-3.5" aria-hidden="true" /> : n}
+              </span>
+              <span
+                className={cn(
+                  "whitespace-nowrap text-xs font-medium",
+                  !current && !done && "text-muted-foreground",
+                )}
+              >
+                {label}
+              </span>
+            </div>
+            {n < WIZARD_STEPS.length ? (
+              <div className={cn("mx-3 h-px flex-1 transition-colors duration-300", done ? "bg-primary" : "bg-border")} />
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function SendPayment() {
   const trader = useTrader();
   const qc = useQueryClient();
@@ -79,7 +125,14 @@ function SendPayment() {
   const wallet = useWallet();
   const corridors = useQuery({ queryKey: ["corridors"], queryFn: corridorApi.list });
   const received = useInvoices("received");
+  const config = useQuery({
+    queryKey: ["public-config"],
+    queryFn: platform.config,
+    staleTime: 300_000,
+    retry: false,
+  });
 
+  const [step, setStep] = useState(1);
   const [sourceId, setSourceId] = useState("");
   const [phone, setPhone] = useState("");
   const [recipient, setRecipient] = useState<Recipient | null>(null);
@@ -89,8 +142,8 @@ function SendPayment() {
   const [payerPhone, setPayerPhone] = useState(trader.phone_number);
   const [authRef, setAuthRef] = useState("");
   const [needsAuth, setNeedsAuth] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [activeWf, setActiveWf] = useState<string | null>(null);
+  const [domesticResult, setDomesticResult] = useState<Transfer | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
   // One key per intended payment: retrying after a network error can never double-charge.
   const keyRef = useRef(newIdempotencyKey());
@@ -105,6 +158,8 @@ function SendPayment() {
     businessAccounts.find((a) => a.id === sourceId) ?? businessAccounts[0];
   const destOptions = (recipient?.accounts ?? []).filter((a) => a.type === "BUSINESS");
   const dest: Account | undefined = destOptions.find((a) => a.id === destId) ?? destOptions[0];
+  const countryForCurrency = (currency: string) =>
+    config.data?.countries.find((m) => m.currency === currency)?.code;
 
   const lookup = useMutation({
     mutationFn: () => ledger.recipient(phone.trim()),
@@ -188,8 +243,22 @@ function SendPayment() {
                   : "Waiting for a quote…"
                 : null;
 
+  function resetWizard() {
+    setStep(1);
+    setPhone("");
+    setRecipient(null);
+    setDestId("");
+    setAmount("");
+    setInvoiceNumber("");
+    setAuthRef("");
+    setNeedsAuth(false);
+    setActiveWf(null);
+    setDomesticResult(null);
+    keyRef.current = newIdempotencyKey();
+  }
+
   const send = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (): Promise<SendResult> => {
       const key = keyRef.current;
       if (mode === "domestic") {
         const input: Parameters<typeof ledger.createTransfer>[0] = {
@@ -199,8 +268,8 @@ function SendPayment() {
           currency: source!.currency,
         };
         if (invoiceNumber) input.invoice_number = invoiceNumber;
-        await ledger.createTransfer(input, key);
-        return null;
+        const res = await ledger.createTransfer(input, key);
+        return { kind: "domestic", transfer: res.transfer };
       }
       const res = await workflows.start(
         {
@@ -219,30 +288,32 @@ function SendPayment() {
         },
         key,
       );
-      return res;
+      return { kind: "workflow", workflow: res.workflow, ...(res.error ? { error: res.error } : {}) };
     },
     onSuccess: (res) => {
-      setConfirmOpen(false);
       setNeedsAuth(false);
-      if (res?.workflow) {
-        rememberWorkflow(trader.id, res.workflow.id);
-        setActiveWf(res.workflow.id);
-        if (res.error)
-          toast.warning("Payment started but needs attention", { description: res.error });
+      if (res.kind === "domestic") {
+        setDomesticResult(res.transfer);
+        toast.success("Transfer completed", {
+          description: `${money(value, source!.currency)} → ${recipient!.user.full_name}`,
+        });
+      } else {
+        if (res.workflow) {
+          rememberWorkflow(trader.id, res.workflow.id);
+          setActiveWf(res.workflow.id);
+          if (res.error)
+            toast.warning("Payment started but needs attention", { description: res.error });
+        }
+        toast.success("Payment submitted", {
+          description: `${money(value, source!.currency)} → ${recipient!.user.full_name}`,
+        });
       }
-      toast.success(mode === "workflow" ? "Payment submitted" : "Transfer completed", {
-        description: `${money(value, source!.currency)} → ${recipient!.user.full_name}`,
-      });
       keyRef.current = newIdempotencyKey();
-      setAmount("");
-      setInvoiceNumber("");
-      setAuthRef("");
       void qc.invalidateQueries({ queryKey: ["wallet"] });
       void qc.invalidateQueries({ queryKey: ["transfers"] });
       void qc.invalidateQueries({ queryKey: ["invoices"] });
     },
     onError: (e) => {
-      setConfirmOpen(false);
       const wf = workflowFromError(e);
       if (wf) {
         // The engine recorded the workflow even though a step failed: keep the id so it is trackable.
@@ -283,6 +354,7 @@ function SendPayment() {
   });
 
   const q = quote.data?.quote;
+  const inFlight = !!activeWf || !!domesticResult;
 
   return (
     <>
@@ -292,276 +364,559 @@ function SendPayment() {
         description="Pay a supplier in another currency with a live corridor quote. Same-currency payments settle instantly on the ledger; cross-border payments run collect → post → payout with a tracked status."
       />
 
-      {activeWf ? (
-        <Panel title="Payment status" meta={<Chip tone="live">Live</Chip>}>
-          <WorkflowTracker id={activeWf} defaultPhone={payerPhone} />
-        </Panel>
-      ) : null}
+      {inFlight ? (
+        <div className="space-y-3">
+          {activeWf ? <ProcessingPanel id={activeWf} payerPhone={payerPhone} onReset={resetWizard} /> : null}
+          {domesticResult ? (
+            <DomesticSuccessPanel
+              transfer={domesticResult}
+              recipientName={recipient?.user.full_name ?? "the recipient"}
+              onReset={resetWizard}
+            />
+          ) : null}
+          <RecentPayments ids={recent} onOpen={(id) => setActiveWf(id)} />
+        </div>
+      ) : (
+        <div className="grid gap-3 lg:grid-cols-[1fr_380px]">
+          <Panel title="Send money">
+            {wallet.isPending ? (
+              <Loading />
+            ) : wallet.isError ? (
+              <ErrorState error={wallet.error} onRetry={() => void wallet.refetch()} />
+            ) : (
+              <div>
+                <StepRail step={step} />
 
-      <div className="grid gap-3 lg:grid-cols-[1fr_380px]">
-        <Panel title="Payment details">
-          {wallet.isPending ? (
-            <Loading />
-          ) : wallet.isError ? (
-            <ErrorState error={wallet.error} onRetry={() => void wallet.refetch()} />
-          ) : (
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
-                  Pay from
-                </Label>
-                <Select value={source?.id ?? ""} onValueChange={setSourceId}>
-                  <SelectTrigger aria-label="Pay from" className="rounded-none font-mono text-xs">
-                    <SelectValue placeholder="Business wallet" />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-none">
-                    {businessAccounts.map((a) => (
-                      <SelectItem key={a.id} value={a.id}>
-                        Business wallet ·{" "}
-                        {money(wallet.data.balances[a.id]?.amount ?? 0, a.currency)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-[11px] text-muted-foreground">
-                  Invoice payments can only be funded from a business wallet.
-                </p>
-              </div>
+                {step === 1 ? (
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
+                        Recipient mobile number
+                      </Label>
+                      <div className="flex gap-2">
+                        <Input
+                          value={phone}
+                          onChange={(e) => {
+                            setPhone(e.target.value);
+                            setRecipient(null);
+                          }}
+                          placeholder="+254700000000"
+                          inputMode="tel"
+                          className="rounded-lg font-mono"
+                        />
+                        <Button
+                          variant="outline"
+                          className="rounded-lg font-mono text-xs uppercase"
+                          disabled={!phone.trim() || lookup.isPending}
+                          onClick={() => lookup.mutate()}
+                        >
+                          {lookup.isPending ? "…" : "Look up"}
+                        </Button>
+                      </div>
+                      {recipient ? (
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-muted/40 p-3">
+                          <div className="flex items-center gap-3">
+                            <span className="flex size-9 items-center justify-center rounded-full bg-primary/15 font-mono text-xs font-semibold text-primary">
+                              {recipient.user.full_name.charAt(0).toUpperCase()}
+                            </span>
+                            <div>
+                              <div className="text-sm font-medium">{recipient.user.full_name}</div>
+                              <div className="font-mono text-[11px] text-muted-foreground">
+                                {recipient.user.phone_number}
+                              </div>
+                            </div>
+                          </div>
+                          <Chip tone="invert">Verified VUKA trader</Chip>
+                        </div>
+                      ) : null}
+                    </div>
 
-              <div className="space-y-1.5">
-                <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
-                  Recipient mobile number
-                </Label>
-                <div className="flex gap-2">
-                  <Input
-                    value={phone}
-                    onChange={(e) => {
-                      setPhone(e.target.value);
-                      setRecipient(null);
-                    }}
-                    placeholder="+254700000000"
-                    inputMode="tel"
-                    className="rounded-none font-mono"
-                  />
-                  <Button
-                    variant="outline"
-                    className="rounded-none font-mono text-xs uppercase"
-                    disabled={!phone.trim() || lookup.isPending}
-                    onClick={() => lookup.mutate()}
-                  >
-                    {lookup.isPending ? "…" : "Look up"}
-                  </Button>
-                </div>
-                {recipient ? (
-                  <div className="flex flex-wrap items-center justify-between gap-2 border border-border p-3">
-                    <div>
-                      <div className="text-sm">{recipient.user.full_name}</div>
-                      <div className="font-mono text-[11px] text-muted-foreground">
-                        {recipient.user.phone_number}
+                    {recipient && destOptions.length > 1 ? (
+                      <div className="space-y-1.5">
+                        <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
+                          Recipient wallet
+                        </Label>
+                        <Select value={dest?.id ?? ""} onValueChange={setDestId}>
+                          <SelectTrigger
+                            aria-label="Recipient wallet"
+                            className="rounded-lg font-mono text-xs"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-lg">
+                            {destOptions.map((a) => {
+                              const cc = countryForCurrency(a.currency);
+                              return (
+                                <SelectItem key={a.id} value={a.id}>
+                                  <span className="flex items-center gap-2">
+                                    {cc ? <Flag code={cc} className="w-4 rounded-[2px]" /> : null}
+                                    Business wallet · {a.currency}
+                                  </span>
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : null}
+
+                    <Button
+                      className="w-full rounded-lg font-mono text-xs uppercase"
+                      disabled={!recipient || !dest}
+                      onClick={() => setStep(2)}
+                    >
+                      Continue
+                    </Button>
+                  </div>
+                ) : null}
+
+                {step === 2 ? (
+                  <div className="space-y-4">
+                    <RecipientSummary recipient={recipient} dest={dest} countryForCurrency={countryForCurrency} onEdit={() => setStep(1)} />
+
+                    <div className="space-y-1.5">
+                      <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
+                        Pay from
+                      </Label>
+                      <Select value={source?.id ?? ""} onValueChange={setSourceId}>
+                        <SelectTrigger aria-label="Pay from" className="rounded-lg font-mono text-xs">
+                          <SelectValue placeholder="Business wallet" />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-lg">
+                          {businessAccounts.map((a) => (
+                            <SelectItem key={a.id} value={a.id}>
+                              Business wallet · {money(wallet.data.balances[a.id]?.amount ?? 0, a.currency)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
+                          Amount {source ? `(${source.currency})` : ""}
+                        </Label>
+                        <Input
+                          value={amount}
+                          onChange={(e) => setAmount(e.target.value)}
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          className="rounded-lg font-mono"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
+                          Pay an invoice (optional)
+                        </Label>
+                        <Select value={invoiceNumber || "none"} onValueChange={pickInvoice}>
+                          <SelectTrigger
+                            aria-label="Pay an invoice"
+                            className="rounded-lg font-mono text-xs"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-lg">
+                            <SelectItem value="none">No invoice</SelectItem>
+                            {unpaidInvoices.map((i) => (
+                              <SelectItem key={i.id} value={i.number}>
+                                {i.number} · {money(invoiceTotal(i), i.currency)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
-                    <Chip tone="invert">Verified VUKA trader</Chip>
+
+                    {mode === "workflow" && amountValid ? (
+                      <div className="rounded-xl border border-border bg-muted/40 p-3 text-xs">
+                        {quote.isFetching && !q ? (
+                          <span className="text-muted-foreground">Fetching live rate…</span>
+                        ) : q ? (
+                          <>
+                            <span className="text-muted-foreground">Supplier receives ≈ </span>
+                            <span className="font-mono font-medium">
+                              {money(fromMinor(q.deliver_amount_minor), q.to_currency)}
+                            </span>
+                            <span className="text-muted-foreground">
+                              {" "}
+                              · rate 1 {q.from_currency} = {q.inverse_rate.toPrecision(5)} {q.to_currency}
+                            </span>
+                          </>
+                        ) : quote.isError ? (
+                          <span className="text-destructive">{describeError(quote.error)}</span>
+                        ) : null}
+                      </div>
+                    ) : mode === "domestic" && amountValid ? (
+                      <p className="text-xs text-muted-foreground">
+                        Same currency on both sides — no conversion and no fee. This settles
+                        instantly on the ledger.
+                      </p>
+                    ) : null}
+
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="rounded-lg font-mono text-xs uppercase"
+                        onClick={() => setStep(1)}
+                      >
+                        Back
+                      </Button>
+                      <Button
+                        className="flex-1 rounded-lg font-mono text-xs uppercase"
+                        disabled={!!problem}
+                        onClick={() => setStep(3)}
+                      >
+                        Continue
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {step === 3 ? (
+                  <div className="space-y-4">
+                    <RecipientSummary recipient={recipient} dest={dest} countryForCurrency={countryForCurrency} onEdit={() => setStep(1)} />
+
+                    <div className="rounded-xl border border-border p-4 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Amount</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono">{source ? money(value, source.currency) : "—"}</span>
+                          <button
+                            type="button"
+                            onClick={() => setStep(2)}
+                            className="text-muted-foreground hover:text-foreground"
+                            aria-label="Edit amount"
+                          >
+                            <Pencil className="size-3.5" aria-hidden="true" />
+                          </button>
+                        </div>
+                      </div>
+                      {invoiceNumber ? (
+                        <div className="mt-2 flex items-center justify-between">
+                          <span className="text-muted-foreground">Invoice</span>
+                          <span className="font-mono">{invoiceNumber}</span>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {/* The real payment method — VUKA settles domestic transfers straight from the wallet
+                        balance, and collects cross-border payments only via the payer's own mobile money
+                        number. There is no card or bank-transfer rail to choose, so this reflects that
+                        rather than offering a menu that would silently do nothing. */}
+                    <div className="space-y-1.5">
+                      <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
+                        Payment method
+                      </Label>
+                      {mode === "domestic" ? (
+                        <div className="flex items-center gap-3 rounded-xl border border-primary bg-primary/5 p-3">
+                          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                            <Wallet className="size-4" aria-hidden="true" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium">VUKA wallet balance</div>
+                            <p className="text-[11px] text-muted-foreground">
+                              Instant · no conversion, no fee
+                            </p>
+                          </div>
+                          <span className="flex size-4 shrink-0 items-center justify-center rounded-full border-2 border-primary bg-primary">
+                            <Check className="size-2.5 text-primary-foreground" aria-hidden="true" />
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-primary bg-primary/5 p-3">
+                          <div className="flex items-center gap-3">
+                            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                              <Smartphone className="size-4" aria-hidden="true" />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-medium">Mobile money</div>
+                              <p className="text-[11px] text-muted-foreground">
+                                Only collection method available for cross-border payments
+                              </p>
+                            </div>
+                            <span className="flex size-4 shrink-0 items-center justify-center rounded-full border-2 border-primary bg-primary">
+                              <Check className="size-2.5 text-primary-foreground" aria-hidden="true" />
+                            </span>
+                          </div>
+                          <div className="mt-3 space-y-1.5">
+                            <Label
+                              htmlFor="payer-phone"
+                              className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground"
+                            >
+                              Your mobile money number (to be charged)
+                            </Label>
+                            <Input
+                              id="payer-phone"
+                              value={payerPhone}
+                              onChange={(e) => setPayerPhone(e.target.value)}
+                              inputMode="tel"
+                              className="rounded-lg font-mono"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {needsAuth ? (
+                      <div className="space-y-1.5 rounded-xl border-2 border-foreground p-3">
+                        <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
+                          Provider authorization reference
+                        </Label>
+                        <Input
+                          value={authRef}
+                          onChange={(e) => setAuthRef(e.target.value)}
+                          placeholder="Reference from your MTN / M-Pesa prompt"
+                          className="rounded-lg font-mono"
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          VUKA never collects or stores your mobile-money PIN. Complete the
+                          challenge with your provider, then paste the reference it gives you.
+                        </p>
+                      </div>
+                    ) : null}
+
+                    <dl className="space-y-2 rounded-xl border border-border p-4 font-mono text-xs">
+                      {mode === "workflow" && q ? (
+                        <>
+                          <Line k="You send" v={money(fromMinor(q.source_amount_minor), q.from_currency)} />
+                          <Line
+                            k={`Fee (${corridor!.fees_bps / 100}%)`}
+                            v={`−${money(fromMinor(q.fee_minor), q.from_currency)}`}
+                          />
+                        </>
+                      ) : (
+                        <Line k="Fee" v="None — same-currency transfer" />
+                      )}
+                      <div className="flex justify-between border-t border-border pt-2 text-sm">
+                        <dt>{mode === "workflow" ? "Recipient receives" : "Total"}</dt>
+                        <dd className="tabular-nums">
+                          {mode === "workflow" && q
+                            ? money(fromMinor(q.deliver_amount_minor), q.to_currency)
+                            : source
+                              ? money(value, source.currency)
+                              : "—"}
+                        </dd>
+                      </div>
+                    </dl>
+
+                    {problem ? (
+                      <p role="status" className="text-xs text-muted-foreground">
+                        {problem}
+                      </p>
+                    ) : null}
+
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="rounded-lg font-mono text-xs uppercase"
+                        onClick={() => setStep(2)}
+                      >
+                        Back
+                      </Button>
+                      <Button
+                        className="flex-1 rounded-lg font-mono text-xs uppercase"
+                        disabled={
+                          !!problem ||
+                          send.isPending ||
+                          (mode === "workflow" && !payerPhone.trim()) ||
+                          (needsAuth && !authRef.trim())
+                        }
+                        onClick={() => send.mutate()}
+                      >
+                        {send.isPending ? "Processing…" : "Confirm and send"}
+                      </Button>
+                    </div>
                   </div>
                 ) : null}
               </div>
-
-              {recipient && destOptions.length > 1 ? (
-                <div className="space-y-1.5">
-                  <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
-                    Recipient wallet
-                  </Label>
-                  <Select value={dest?.id ?? ""} onValueChange={setDestId}>
-                    <SelectTrigger
-                      aria-label="Recipient wallet"
-                      className="rounded-none font-mono text-xs"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-none">
-                      {destOptions.map((a) => (
-                        <SelectItem key={a.id} value={a.id}>
-                          Business wallet · {a.currency}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null}
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
-                    Amount {source ? `(${source.currency})` : ""}
-                  </Label>
-                  <Input
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    className="rounded-none font-mono"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
-                    Pay an invoice (optional)
-                  </Label>
-                  <Select value={invoiceNumber || "none"} onValueChange={pickInvoice}>
-                    <SelectTrigger
-                      aria-label="Pay an invoice"
-                      className="rounded-none font-mono text-xs"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-none">
-                      <SelectItem value="none">No invoice</SelectItem>
-                      {unpaidInvoices.map((i) => (
-                        <SelectItem key={i.id} value={i.number}>
-                          {i.number} · {money(invoiceTotal(i), i.currency)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {mode === "workflow" ? (
-                <div className="space-y-1.5">
-                  <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
-                    Your mobile money number (to be charged)
-                  </Label>
-                  <Input
-                    value={payerPhone}
-                    onChange={(e) => setPayerPhone(e.target.value)}
-                    inputMode="tel"
-                    className="rounded-none font-mono"
-                  />
-                </div>
-              ) : null}
-
-              {needsAuth ? (
-                <div className="space-y-1.5 border-2 border-foreground p-3">
-                  <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
-                    Provider authorization reference
-                  </Label>
-                  <Input
-                    value={authRef}
-                    onChange={(e) => setAuthRef(e.target.value)}
-                    placeholder="Reference from your MTN / M-Pesa prompt"
-                    className="rounded-none font-mono"
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    VUKA never collects or stores your mobile-money PIN. Complete the challenge with
-                    your provider, then paste the reference it gives you.
-                  </p>
-                </div>
-              ) : null}
-
-              {problem && amount ? (
-                <p role="status" className="text-xs text-muted-foreground">
-                  {problem}
-                </p>
-              ) : null}
-
-              <Button
-                className="w-full rounded-none font-mono text-xs uppercase"
-                disabled={
-                  !!problem ||
-                  send.isPending ||
-                  (mode === "workflow" && !payerPhone.trim()) ||
-                  (needsAuth && !authRef.trim())
-                }
-                onClick={() => setConfirmOpen(true)}
-              >
-                Review payment
-              </Button>
-            </div>
-          )}
-        </Panel>
-
-        <div className="space-y-3">
-          <Panel
-            title="Quote"
-            meta={corridor ? <Chip>{corridor.id}</Chip> : <Chip>Same currency</Chip>}
-          >
-            {!corridor ? (
-              <p className="text-xs text-muted-foreground">
-                {source && dest
-                  ? "Both wallets use the same currency, so no FX conversion or corridor fee applies."
-                  : "Choose a recipient to see pricing."}
-              </p>
-            ) : quote.isFetching && !q ? (
-              <Loading label="Fetching quote" />
-            ) : quote.isError ? (
-              <ErrorState error={quote.error} onRetry={() => void quote.refetch()} />
-            ) : q ? (
-              <dl className="space-y-2 font-mono text-xs">
-                <Line k="You send" v={money(fromMinor(q.source_amount_minor), q.from_currency)} />
-                <Line
-                  k={`Fee (${corridor!.fees_bps / 100}%)`}
-                  v={`−${money(fromMinor(q.fee_minor), q.from_currency)}`}
-                />
-                <Line
-                  k="Rate"
-                  v={`1 ${q.from_currency} = ${q.inverse_rate.toPrecision(5)} ${q.to_currency}`}
-                />
-                <div className="flex justify-between border-t border-border pt-2 text-sm">
-                  <dt>Recipient receives</dt>
-                  <dd className="tabular-nums">
-                    {money(fromMinor(q.deliver_amount_minor), q.to_currency)}
-                  </dd>
-                </div>
-                <p className="pt-1 text-[11px] text-muted-foreground">
-                  Quote {truncMid(q.id, 10, 8)} · valid until{" "}
-                  {new Date(q.expires_at).toLocaleString()}
-                  {quote.data?.execution === "local_synthetic" ? " · sandbox execution" : ""}
-                </p>
-              </dl>
-            ) : (
-              <p className="text-xs text-muted-foreground">Enter an amount to see a live quote.</p>
             )}
           </Panel>
 
-          <RecentPayments ids={recent} onOpen={setActiveWf} />
+          <div className="space-y-3">
+            <Panel
+              title="Quote"
+              meta={corridor ? <Chip>{corridor.id}</Chip> : <Chip>Same currency</Chip>}
+            >
+              {!corridor ? (
+                <p className="text-xs text-muted-foreground">
+                  {source && dest
+                    ? "Both wallets use the same currency, so no FX conversion or corridor fee applies."
+                    : "Choose a recipient to see pricing."}
+                </p>
+              ) : quote.isFetching && !q ? (
+                <Loading label="Fetching quote" />
+              ) : quote.isError ? (
+                <ErrorState error={quote.error} onRetry={() => void quote.refetch()} />
+              ) : q ? (
+                <dl className="space-y-2 font-mono text-xs">
+                  <Line k="You send" v={money(fromMinor(q.source_amount_minor), q.from_currency)} />
+                  <Line
+                    k={`Fee (${corridor!.fees_bps / 100}%)`}
+                    v={`−${money(fromMinor(q.fee_minor), q.from_currency)}`}
+                  />
+                  <Line
+                    k="Rate"
+                    v={`1 ${q.from_currency} = ${q.inverse_rate.toPrecision(5)} ${q.to_currency}`}
+                  />
+                  <div className="flex justify-between border-t border-border pt-2 text-sm">
+                    <dt>Recipient receives</dt>
+                    <dd className="tabular-nums">
+                      {money(fromMinor(q.deliver_amount_minor), q.to_currency)}
+                    </dd>
+                  </div>
+                  <p className="pt-1 text-[11px] text-muted-foreground">
+                    Quote {truncMid(q.id, 10, 8)} · valid until{" "}
+                    {new Date(q.expires_at).toLocaleString()}
+                    {quote.data?.execution === "local_synthetic" ? " · sandbox execution" : ""}
+                  </p>
+                </dl>
+              ) : (
+                <p className="text-xs text-muted-foreground">Enter an amount to see a live quote.</p>
+              )}
+            </Panel>
+
+            <RecentPayments ids={recent} onOpen={setActiveWf} />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function RecipientSummary({
+  recipient,
+  dest,
+  countryForCurrency,
+  onEdit,
+}: {
+  recipient: Recipient | null;
+  dest: Account | undefined;
+  countryForCurrency: (currency: string) => string | undefined;
+  onEdit: () => void;
+}) {
+  if (!recipient) return null;
+  const cc = dest ? countryForCurrency(dest.currency) : undefined;
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-muted/40 p-3">
+      <div className="flex items-center gap-3">
+        <span className="flex size-9 items-center justify-center rounded-full bg-primary/15 font-mono text-xs font-semibold text-primary">
+          {recipient.user.full_name.charAt(0).toUpperCase()}
+        </span>
+        <div>
+          <div className="text-sm font-medium">{recipient.user.full_name}</div>
+          <div className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+            {cc ? <Flag code={cc} className="w-3.5 rounded-[2px]" /> : null}
+            {recipient.user.phone_number}
+            {dest ? ` · ${dest.currency}` : ""}
+          </div>
         </div>
       </div>
+      <button
+        type="button"
+        onClick={onEdit}
+        className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+      >
+        <Pencil className="size-3" aria-hidden="true" /> Edit
+      </button>
+    </div>
+  );
+}
 
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="rounded-none sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
-              Confirm payment
-            </DialogTitle>
-            <DialogDescription>Payments are final once the ledger posts them.</DialogDescription>
-          </DialogHeader>
-          {source && dest && recipient ? (
-            <dl className="space-y-2 border border-border p-3 font-mono text-xs">
-              <Line k="To" v={recipient.user.full_name} />
-              <Line k="Amount" v={money(value, source.currency)} />
-              {q ? (
-                <Line
-                  k="Recipient receives"
-                  v={money(fromMinor(q.deliver_amount_minor), q.to_currency)}
-                />
-              ) : null}
-              {invoiceNumber ? <Line k="Invoice" v={invoiceNumber} /> : null}
-              <Line
-                k="Method"
-                v={mode === "workflow" ? "Mobile-money collect + payout" : "Ledger transfer"}
-              />
-            </dl>
-          ) : null}
-          <DialogFooter>
-            <Button
-              className="rounded-none font-mono text-xs uppercase"
-              disabled={send.isPending}
-              onClick={() => send.mutate()}
-            >
-              {send.isPending ? "Processing…" : "Confirm and send"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+/** The processing step — the already-live PaymentStepper inside WorkflowTracker — plus a plain
+ * "start another payment" exit once the workflow has settled, success or not. */
+function ProcessingPanel({
+  id,
+  payerPhone,
+  onReset,
+}: {
+  id: string;
+  payerPhone: string;
+  onReset: () => void;
+}) {
+  const wf = useQuery({
+    queryKey: ["workflow", id],
+    queryFn: () => workflows.get(id),
+    refetchInterval: (q) => (isSettled(q.state.data?.state) ? false : 2000),
+  });
+  const settled = isSettled(wf.data?.state);
+  const completed = wf.data?.state === "COMPLETED";
+
+  return (
+    <>
+      <Panel title="Payment status" meta={<Chip tone="live">Live</Chip>}>
+        <WorkflowTracker id={id} defaultPhone={payerPhone} />
+      </Panel>
+      {settled ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+          <p className="text-sm text-muted-foreground">
+            {completed
+              ? "This payment has settled."
+              : "This payment has finished for now — see the status above for what to do next."}
+          </p>
+          <Button variant="outline" className="rounded-lg font-mono text-xs uppercase" onClick={onReset}>
+            <RotateCcw className="size-3.5" aria-hidden="true" /> Send another payment
+          </Button>
+        </div>
+      ) : null}
     </>
+  );
+}
+
+/** Domestic transfers settle instantly and never produce a trackable Workflow, so they get their own
+ * lightweight success screen instead of the multi-step tracker. */
+function DomesticSuccessPanel({
+  transfer,
+  recipientName,
+  onReset,
+}: {
+  transfer: Transfer;
+  recipientName: string;
+  onReset: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Panel title="Payment status" meta={<Chip tone="invert">Settled</Chip>}>
+      <div className="flex flex-col items-center py-4 text-center">
+        <span className="flex size-14 items-center justify-center rounded-full bg-success/15 text-success">
+          <Check className="size-7" aria-hidden="true" />
+        </span>
+        <h3 className="mt-4 text-base font-semibold">Payment completed</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {money(transfer.amount, transfer.currency)} sent to {recipientName}.
+        </p>
+        <dl className="mt-6 w-full max-w-sm space-y-2 rounded-xl border border-border p-4 text-left font-mono text-xs">
+          <Line k="Amount" v={money(transfer.amount, transfer.currency)} />
+          <Line k="Fee" v="None" />
+          <div className="flex justify-between border-t border-border pt-2 text-sm">
+            <dt>Total</dt>
+            <dd className="tabular-nums">{money(transfer.amount, transfer.currency)}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-2 border-t border-border pt-2">
+            <dt className="text-muted-foreground">Transaction ID</dt>
+            <dd className="flex items-center gap-1.5">
+              <span>{shortId(transfer.id, 14)}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  void navigator.clipboard.writeText(transfer.id);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                }}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label="Copy transaction ID"
+              >
+                {copied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}
+              </button>
+            </dd>
+          </div>
+          <p className="pt-1 text-[11px] text-muted-foreground">{when(transfer.created_at)}</p>
+        </dl>
+        <Button className="mt-6 rounded-lg font-mono text-xs uppercase" onClick={onReset}>
+          <RotateCcw className="size-3.5" aria-hidden="true" /> Send another payment
+        </Button>
+      </div>
+    </Panel>
   );
 }
 

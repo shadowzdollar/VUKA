@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { CheckCircle2, Gavel, Lock, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ChainScopeBar } from "@/components/vuka/chain-scope-bar";
@@ -86,10 +87,10 @@ export function OperatorCockpit() {
         description={`Signed in as ${me.email} (${me.role}). Chain reconciliation, escrow exposure, provider readiness and the settlement safety policy in one view.`}
         actions={
           <>
-            <Button asChild variant="outline" className="rounded-none font-mono text-xs uppercase">
+            <Button asChild variant="outline" className="rounded-lg font-mono text-xs uppercase">
               <Link to="/escrow">Escrow register</Link>
             </Button>
-            <Button asChild className="rounded-none font-mono text-xs uppercase">
+            <Button asChild className="rounded-lg font-mono text-xs uppercase">
               <Link to="/disputes">Dispute tribunal</Link>
             </Button>
           </>
@@ -100,35 +101,47 @@ export function OperatorCockpit() {
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <Metric
+          icon={Lock}
+          tone="primary"
           label="Escrow locked"
           value={ready ? money(sums.locked) : "—"}
           sub="Token units in contract"
         />
         <Metric
+          icon={CheckCircle2}
+          tone="success"
           label="Released"
           value={ready ? money(sums.released) : "—"}
           sub="Paid to suppliers"
+          delay={60}
         />
         <Metric
+          icon={RotateCcw}
+          tone="muted"
           label="Refunded"
           value={ready ? money(sums.refunded) : "—"}
           sub="Returned to buyers"
+          delay={120}
         />
         <Metric
+          icon={Gavel}
+          tone="destructive"
           label="Disputed / frozen"
           value={ready ? money(sums.disputed) : "—"}
           sub="Under arbiter control"
+          delay={180}
         />
       </div>
 
       <Panel
         title="Network pulse · last 30 days"
+        delay={240}
         meta={
           <Button
             asChild
             variant="outline"
             size="sm"
-            className="h-7 rounded-none font-mono text-[10px] uppercase"
+            className="h-7 rounded-lg font-mono text-[10px] uppercase"
           >
             <Link to="/analytics">Network intelligence</Link>
           </Button>
@@ -206,7 +219,7 @@ export function OperatorCockpit() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="rounded-none font-mono text-[10px] uppercase"
+                        className="rounded-lg font-mono text-[10px] uppercase"
                         disabled={ack.isPending}
                         onClick={() => ack.mutate(s)}
                       >

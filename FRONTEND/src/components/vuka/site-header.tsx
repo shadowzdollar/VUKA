@@ -35,7 +35,7 @@ export function SiteHeader() {
         <Button
           variant="ghost"
           size="icon"
-          className="size-9 rounded-none xl:hidden"
+          className="size-9 xl:hidden"
           aria-label={t("shell.menu")}
           onClick={() => setOpen(true)}
         >
@@ -61,13 +61,13 @@ export function SiteHeader() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-9 gap-1.5 rounded-none font-mono text-[11px] uppercase"
+                className="h-9 gap-1.5 rounded-lg font-mono text-[11px] uppercase"
                 aria-label={t("shell.language")}
               >
                 <Languages className="size-4" aria-hidden="true" /> {lang}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="rounded-none">
+            <DropdownMenuContent align="end" className="rounded-lg">
               <DropdownMenuRadioGroup value={lang} onValueChange={(v) => setLang(v as Lang)}>
                 {LANGUAGES.map((l) => (
                   <DropdownMenuRadioItem key={l.code} value={l.code}>
@@ -80,7 +80,7 @@ export function SiteHeader() {
           <Button
             variant="ghost"
             size="icon"
-            className="size-9 rounded-none"
+            className="size-9"
             aria-label={t("shell.theme")}
             onClick={() => setPreference(resolved === "dark" ? "light" : "dark")}
           >
@@ -94,11 +94,11 @@ export function SiteHeader() {
             asChild
             variant="outline"
             size="sm"
-            className="hidden rounded-none font-mono text-[11px] uppercase sm:inline-flex"
+            className="hidden rounded-lg font-mono text-[11px] uppercase sm:inline-flex"
           >
             <Link to="/login">{t("landing.cta.signin")}</Link>
           </Button>
-          <Button asChild size="sm" className="rounded-none font-mono text-[11px] uppercase">
+          <Button asChild size="sm" className="rounded-lg font-mono text-[11px] uppercase">
             <Link to="/register">
               <span className="sm:hidden">Join</span>
               <span className="hidden sm:inline">{t("landing.cta.register")}</span>
@@ -107,7 +107,7 @@ export function SiteHeader() {
         </div>
       </div>
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="left" className="w-72 rounded-none p-0">
+        <SheetContent side="left" className="w-72 p-0">
           <SheetTitle className="sr-only">{t("shell.menu")}</SheetTitle>
           <SheetDescription className="sr-only">Site navigation</SheetDescription>
           <nav aria-label="Site (mobile)" className="flex flex-col p-5 pt-12">

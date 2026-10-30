@@ -1,18 +1,30 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { Bell, Briefcase, ShieldCheck, UserRound } from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { usd0 } from "@/components/vuka/analytics-parts";
-import { LazyTrendChart } from "@/components/vuka/lazy-charts";
+import { LazyDonutChart, LazyTrendChart } from "@/components/vuka/lazy-charts";
 import { QueryBoundary } from "@/components/vuka/query-state";
-import { Chip, Metric, PageHeader, Panel } from "@/components/vuka/shell";
+import { Chip, Metric, PageHeader, Panel, type MetricTrend } from "@/components/vuka/shell";
 import { describeError } from "@/lib/api/client";
 import { Sparkline } from "@/components/vuka/viz/simple";
 import { platform, support } from "@/lib/api/endpoints";
 import { money, shortId, when } from "@/lib/format";
 import { useTrader } from "@/lib/session";
 import { directionFor, useNotifications, useTransfers, useWallet } from "@/lib/trader-data";
+
+/** This-week-vs-last-week change from a daily series — a real computed figure, never fabricated. */
+function weekOverWeek(daily: { value: number }[]): MetricTrend | undefined {
+  if (daily.length < 14) return undefined;
+  const last = daily.slice(-7).reduce((s, d) => s + d.value, 0);
+  const prior = daily.slice(-14, -7).reduce((s, d) => s + d.value, 0);
+  if (prior === 0) return undefined;
+  const percent = Math.round(((last - prior) / prior) * 100);
+  if (percent === 0) return { direction: "flat", percent: 0 };
+  return { direction: percent > 0 ? "up" : "down", percent: Math.abs(percent) };
+}
 
 export function TraderHome() {
   const trader = useTrader();
@@ -49,10 +61,10 @@ export function TraderHome() {
         description="Your business and personal money, kept apart. Send payments across corridors, issue invoices, and follow every settlement to the ledger."
         actions={
           <>
-            <Button asChild variant="outline" className="rounded-none font-mono text-xs uppercase">
+            <Button asChild variant="outline" className="rounded-lg font-mono text-xs uppercase">
               <Link to="/escrow">Invoices</Link>
             </Button>
-            <Button asChild className="rounded-none font-mono text-xs uppercase">
+            <Button asChild className="rounded-lg font-mono text-xs uppercase">
               <Link to="/send">Send payment</Link>
             </Button>
           </>
@@ -60,7 +72,7 @@ export function TraderHome() {
       />
 
       {!verified ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-2 border-foreground p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-foreground p-4">
           <div>
             <div className="font-mono text-[10px] uppercase tracking-[0.2em]">
               Verification {trader.kyc_status.toLowerCase()}
@@ -74,7 +86,7 @@ export function TraderHome() {
             asChild
             variant="outline"
             size="sm"
-            className="rounded-none font-mono text-[10px] uppercase"
+            className="rounded-lg font-mono text-[10px] uppercase"
           >
             <Link to="/support">Request verification</Link>
           </Button>
@@ -84,71 +96,108 @@ export function TraderHome() {
       <QueryBoundary query={wallet}>
         {(w) => (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {w.accounts.map((a) => (
+            {w.accounts.map((a, i) => (
               <Metric
                 key={a.id}
+                icon={a.type === "BUSINESS" ? Briefcase : UserRound}
+                tone={a.type === "BUSINESS" ? "primary" : "muted"}
                 label={`${a.type === "BUSINESS" ? "Business trade" : "Personal"} wallet`}
                 value={money(w.balances[a.id]?.amount ?? 0, a.currency)}
                 sub="Derived from ledger postings"
+                delay={i * 60}
               />
             ))}
-            <Metric label="Verification" value={trader.kyc_status} sub={trader.phone_number} />
             <Metric
+              icon={ShieldCheck}
+              tone={verified ? "success" : "muted"}
+              label="Verification"
+              value={trader.kyc_status}
+              sub={trader.phone_number}
+              delay={w.accounts.length * 60}
+            />
+            <Metric
+              icon={Bell}
+              tone={unread.length > 0 ? "destructive" : "muted"}
               label="Unread notices"
               value={unread.length}
               sub="From settlements and support"
+              delay={(w.accounts.length + 1) * 60}
             />
           </div>
         )}
       </QueryBoundary>
 
-      <Panel
-        title="Last 30 days"
-        meta={
-          <Button
-            asChild
-            variant="outline"
-            size="sm"
-            className="h-7 rounded-none font-mono text-[10px] uppercase"
-          >
-            <Link to="/analytics">Open insights</Link>
-          </Button>
-        }
-      >
-        <QueryBoundary query={analytics} disabledCodes={["analytics_unavailable"]}>
-          {(r) => (
-            <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Metric
-                  label="Sent"
-                  value={usd0(r.totals.sent_usd)}
-                  trend={<Sparkline values={r.daily.map((d) => d.out_usd)} />}
-                />
-                <Metric
-                  label="Received"
-                  value={usd0(r.totals.received_usd)}
-                  trend={<Sparkline values={r.daily.map((d) => d.in_usd)} />}
-                />
-                <Metric
-                  label="Success rate"
-                  value={`${Math.round(r.totals.success_rate * 100)}%`}
-                  sub={`${r.totals.succeeded} of ${r.totals.succeeded + r.totals.failed + r.totals.reversed} finished`}
+      <div className="grid gap-3 lg:grid-cols-3">
+        <Panel
+          title="Last 30 days"
+          className="lg:col-span-2"
+          delay={240}
+          meta={
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="h-7 rounded-lg font-mono text-[10px] uppercase"
+            >
+              <Link to="/analytics">Open insights</Link>
+            </Button>
+          }
+        >
+          <QueryBoundary query={analytics} disabledCodes={["analytics_unavailable"]}>
+            {(r) => (
+              <div className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Metric
+                    label="Sent"
+                    value={usd0(r.totals.sent_usd)}
+                    trend={weekOverWeek(r.daily.map((d) => ({ value: d.out_usd }))) ?? (
+                      <Sparkline values={r.daily.map((d) => d.out_usd)} />
+                    )}
+                  />
+                  <Metric
+                    label="Received"
+                    value={usd0(r.totals.received_usd)}
+                    trend={weekOverWeek(r.daily.map((d) => ({ value: d.in_usd }))) ?? (
+                      <Sparkline values={r.daily.map((d) => d.in_usd)} />
+                    )}
+                  />
+                </div>
+                <LazyTrendChart
+                  data={r.daily.map((d) => ({ label: d.date.slice(5), a: d.out_usd, b: d.in_usd }))}
+                  aName="Money out"
+                  bName="Money in"
+                  ariaLabel="Money in and out per day, USD equivalent"
+                  format={usd0}
                 />
               </div>
-              <LazyTrendChart
-                data={r.daily.map((d) => ({ label: d.date.slice(5), a: d.out_usd, b: d.in_usd }))}
-                aName="Money out"
-                bName="Money in"
-                ariaLabel="Money in and out per day, USD equivalent"
-                format={usd0}
+            )}
+          </QueryBoundary>
+        </Panel>
+
+        <Panel title="Settlement outcomes" delay={300}>
+          <QueryBoundary query={analytics} disabledCodes={["analytics_unavailable"]}>
+            {(r) => (
+              <LazyDonutChart
+                ariaLabel="Settlement outcomes, last 30 days"
+                data={[
+                  { label: "Succeeded", value: r.totals.succeeded },
+                  { label: "Failed", value: r.totals.failed },
+                  { label: "Reversed", value: r.totals.reversed },
+                ]}
+                center={{
+                  value: `${Math.round(r.totals.success_rate * 100)}%`,
+                  label: "Success rate",
+                }}
+                format={(v) => String(v)}
               />
-            </div>
-          )}
-        </QueryBoundary>
-      </Panel>
+            )}
+          </QueryBoundary>
+        </Panel>
+      </div>
 
       <div className="grid gap-3 lg:grid-cols-3">
         <Panel
+          delay={360}
           title="Recent activity"
           className="lg:col-span-2"
           meta={
@@ -156,7 +205,7 @@ export function TraderHome() {
               asChild
               variant="outline"
               size="sm"
-              className="h-7 rounded-none font-mono text-[10px] uppercase"
+              className="h-7 rounded-lg font-mono text-[10px] uppercase"
             >
               <Link to="/wallets">All transfers</Link>
             </Button>
@@ -209,7 +258,7 @@ export function TraderHome() {
           </QueryBoundary>
         </Panel>
 
-        <Panel title="Notifications" meta={<Chip>{unread.length} unread</Chip>}>
+        <Panel delay={420} title="Notifications" meta={<Chip>{unread.length} unread</Chip>}>
           <QueryBoundary
             query={notifications}
             isEmpty={(d) => d.length === 0}
@@ -238,7 +287,7 @@ export function TraderHome() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-6 rounded-none px-2 font-mono text-[10px] uppercase"
+                          className="h-6 rounded-lg px-2 font-mono text-[10px] uppercase"
                           disabled={markRead.isPending}
                           onClick={() => markRead.mutate(n.id)}
                         >

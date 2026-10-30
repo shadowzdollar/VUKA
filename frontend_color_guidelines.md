@@ -1,5 +1,12 @@
 # VUKA Frontend Color Guidelines
 
+> **Superseded 2026-10-29.** At the user's explicit request, the frontend moved from this strict
+> monochrome palette to an off-white/ink/electric-lime system (see `FRONTEND/AGENTS.md` and the
+> `project-vuka-design-system` memory). The actual palette now lives as semantic tokens in
+> `FRONTEND/src/styles.css` — that file is the source of truth, not the hex values below. The
+> underlying principle this doc argues for — state carried by weight/fill/position, not color
+> alone — still applies; only the base palette itself has changed.
+
 ## Palette
 
 | Token | Hex | Use |

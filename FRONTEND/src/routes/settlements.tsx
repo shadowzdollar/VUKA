@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { LazyDonutChart } from "@/components/vuka/lazy-charts";
 import { QueryBoundary } from "@/components/vuka/query-state";
 import { Chip, Metric, PageHeader, Panel, Shell } from "@/components/vuka/shell";
 import { describeError } from "@/lib/api/client";
@@ -131,6 +132,22 @@ function Settlements() {
                 sub={`Daily ${money(fromMinor(policy.DailyLimitMinor))}`}
               />
             </div>
+
+            {commands.length > 0 ? (
+              <Panel title="Commands by status">
+                <LazyDonutChart
+                  ariaLabel="Settlement commands by status"
+                  data={Object.entries(
+                    commands.reduce<Record<string, number>>((acc, c) => {
+                      acc[c.status] = (acc[c.status] ?? 0) + 1;
+                      return acc;
+                    }, {}),
+                  ).map(([label, value]) => ({ label, value }))}
+                  center={{ value: String(commands.length), label: "Commands" }}
+                  format={(v) => String(v)}
+                />
+              </Panel>
+            ) : null}
 
             <Panel
               title="Settlement commands"
