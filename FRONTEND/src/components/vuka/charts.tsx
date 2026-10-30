@@ -218,7 +218,7 @@ export function DonutChart({
                 paddingAngle={1}
                 stroke="var(--color-background)"
                 strokeWidth={2}
-                isAnimationActive={false}
+                isAnimationActive={true} animationDuration={700}
               >
                 {slices.map((_, i) => (
                   <Cell key={i} fill={TONES[i % TONES.length]} />
@@ -294,7 +294,7 @@ export function HistogramChart({
                 allowDecimals={false}
               />
               <Tooltip contentStyle={tooltipStyle()} cursor={{ fill: "var(--color-accent)" }} />
-              <Bar dataKey="count" name={unit} fill="var(--chart-1)" isAnimationActive={false} />
+              <Bar dataKey="count" name={unit} fill="var(--chart-1)" isAnimationActive={true} animationDuration={500} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -377,7 +377,7 @@ export function TrendChart({
                 strokeWidth={2}
                 fill="var(--chart-1)"
                 fillOpacity={0.14}
-                isAnimationActive={false}
+                isAnimationActive={true} animationDuration={700}
               />
               {bName ? (
                 <Area
@@ -389,7 +389,7 @@ export function TrendChart({
                   strokeDasharray="5 3"
                   fill="var(--chart-3)"
                   fillOpacity={0.1}
-                  isAnimationActive={false}
+                  isAnimationActive={true} animationDuration={700}
                 />
               ) : null}
             </AreaChart>
@@ -448,7 +448,7 @@ export function RadarView({
                 strokeDasharray="4 3"
                 fill="var(--chart-3)"
                 fillOpacity={0.08}
-                isAnimationActive={false}
+                isAnimationActive={true} animationDuration={700}
               />
               <Radar
                 name="Current"
@@ -457,7 +457,7 @@ export function RadarView({
                 strokeWidth={2}
                 fill="var(--chart-1)"
                 fillOpacity={0.25}
-                isAnimationActive={false}
+                isAnimationActive={true} animationDuration={700}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Tooltip contentStyle={tooltipStyle()} />
