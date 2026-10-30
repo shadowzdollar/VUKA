@@ -162,7 +162,13 @@ func main() {
 	log.Info("analytics fixture ready", "payments", made, "reversed", reversed, "failed", failed)
 }
 
+// nextInvoice must match the ledger's INV-YYYY-NNNNNN format (see
+// internal/ledger/invoices.go's invoiceNumberRe) — a literal "SEED" segment
+// here previously made every seeded invoice reference rejected by
+// ledger.CreateInvoice downstream (cmd/seed's invoice backfill step).
 func nextInvoice(n *int, batch int64) string {
 	*n++
-	return fmt.Sprintf("INV-SEED-%d-%03d", batch%100000, *n)
+	year := time.Unix(0, batch).Year()
+	seq := (batch%900000 + int64(*n)) % 1_000_000
+	return fmt.Sprintf("INV-%04d-%06d", year, seq)
 }
