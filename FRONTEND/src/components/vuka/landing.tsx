@@ -2,34 +2,25 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowRight,
-  CheckCircle2,
-  FileText,
-  Gavel,
   Globe2,
   Layers,
-  Lock,
-  PackageCheck,
-  RotateCcw,
   Smartphone,
-  Unlock,
   Wallet,
   Zap,
   ShieldCheck,
 } from "lucide-react";
-import { lazy, Suspense, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import escrowGlobe from "@/assets/escrow-globe.png";
 import heroBackdrop from "@/assets/hero-backdrop.jpg";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { platform } from "@/lib/api/endpoints";
-import { cn } from "@/lib/utils";
 import { Flag } from "./landing/flags";
 import { HeroDashboard } from "./landing/hero-dashboard";
 import { PhoneMockup } from "./landing/phone-mockup";
 import { SiteFooter } from "./site-footer";
 import { SiteHeader } from "./site-header";
-
-const Globe = lazy(() => import("./landing/globe"));
 
 const RAILS = ["MTN MoMo", "M-Pesa", "Airtel Money", "Polygon", "USDC", "PAPSS-ready"];
 
@@ -113,317 +104,233 @@ function Hero() {
   );
 }
 
-const STEPS = [
-  {
-    icon: FileText,
-    title: "Issue the invoice",
-    body: "The supplier raises an invoice in VUKA. Amount, goods and delivery terms are fixed and shared with both sides.",
-  },
-  {
-    icon: Lock,
-    title: "Lock the payment",
-    body: "The buyer pays from mobile money. Funds convert at a firm quote and lock in an on-chain escrow — not in the supplier's wallet.",
-  },
-  {
-    icon: PackageCheck,
-    title: "Ship and confirm",
-    body: "The supplier ships knowing the money is committed. The buyer confirms delivery, or the agreed timeout runs out.",
-  },
-  {
-    icon: Unlock,
-    title: "Release and cash out",
-    body: "Escrow releases to the supplier, who cashes out to local mobile money. Both trust scores update from the outcome.",
-  },
-];
-
-// Each step's node tone deepens along the rail — the same visual logic as the money itself,
-// which gets progressively more committed (raised -> locked -> shipped -> released).
-const STEP_TONE = [
-  "bg-muted text-muted-foreground",
-  "bg-primary/20 text-foreground",
-  "bg-primary/35 text-foreground",
-  "bg-success/20 text-success",
-];
-
 function Journey() {
+  const bullets = [
+    "Suppliers raise an invoice in VUKA with the amount, goods and delivery terms fixed and shared with both sides.",
+    "Buyers pay from mobile money. Funds convert at a firm quote and lock in an on-chain escrow — never in a stranger's wallet.",
+    "Suppliers ship knowing the money is committed, while the buyer confirms delivery or the agreed timeout runs out.",
+    "Escrow releases and the supplier cashes out to local mobile money, with both trust scores updated from the outcome.",
+  ];
+
+  // Scattered green network dots in the background outside the globe/card graphic
+  const dots: [string, string][] = [
+    ["52%", "8.5%"],
+    ["66%", "2.5%"],
+    ["71%", "4.5%"],
+    ["80%", "7.5%"],
+    ["95%", "11%"],
+    ["63%", "12.5%"],
+    ["84%", "15.5%"],
+    ["88%", "20.5%"],
+    ["49%", "30.5%"],
+    ["90%", "32%"],
+    ["86%", "36%"],
+    ["97%", "44%"],
+    ["93%", "52%"],
+    ["46%", "60%"],
+    ["99%", "62%"],
+    ["96%", "81.5%"],
+    ["47%", "91.5%"],
+  ];
+
   return (
-    <section id="journey" className="scroll-mt-24 mx-auto max-w-6xl px-6 py-24">
-      <SectionHead
-        eyebrow="How a payment works"
-        title="Four steps from invoice to cash-out"
-        intro="No 50% deposits to a stranger. The buyer proves the money is there, the supplier proves the goods arrived."
-      />
-      <div className="relative mt-20">
-        {/* The rail: a static track with an animated lime pulse that runs its length — the same
-            metaphor as the mobile-money "rails" named in the hero. */}
-        <div
-          aria-hidden="true"
-          className="absolute left-[9%] right-[9%] top-9 hidden h-px overflow-hidden bg-border md:block"
-        >
-          <div className="h-full w-1/4 bg-gradient-to-r from-transparent via-primary to-transparent motion-safe:animate-[rail-pulse_3.2s_ease-in-out_infinite]" />
+    <section id="journey" className="relative scroll-mt-24 overflow-hidden bg-white text-[#151515]">
+      {/* Scattered background dots */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        {dots.map(([left, top], idx) => (
+          <span
+            key={idx}
+            className="absolute size-[4px] rounded-full bg-[#79b200]"
+            style={{ left, top }}
+          />
+        ))}
+      </div>
+
+      <div className="relative mx-auto grid max-w-[1220px] items-center gap-10 px-6 py-16 lg:min-h-[680px] lg:grid-cols-[500px_1fr] lg:gap-12">
+        {/* Left column: Heading and 4 bullet points */}
+        <div className="relative z-10">
+          <h2 className="text-[40px] leading-[1.18] font-bold tracking-[-0.02em] text-[#151515] sm:text-[44px]">
+            Built on Escrow, Proven
+            <br />
+            by Trade
+          </h2>
+          <ul className="mt-9 space-y-6 text-[16px] leading-[1.6] text-[#222222]">
+            {bullets.map((b) => (
+              <li key={b} className="flex items-start gap-3">
+                <span className="mt-[10px] size-[5px] shrink-0 rounded-full bg-[#151515]" aria-hidden="true" />
+                <span>{b}</span>
+              </li>
+            ))}
+          </ul>
         </div>
 
-        <ol className="relative grid gap-8 md:grid-cols-4">
-          {STEPS.map((s, i) => (
-            <li key={s.title} className="group relative flex flex-col items-center text-center">
-              <div className="relative z-10 flex size-[72px] shrink-0 items-center justify-center rounded-full border border-border bg-background shadow-float transition-transform duration-300 group-hover:-translate-y-1.5">
-                <span className={cn("flex size-12 items-center justify-center rounded-full transition-colors", STEP_TONE[i])}>
-                  <s.icon className="size-5" aria-hidden="true" />
-                </span>
-              </div>
-              <div className="mt-5 w-full flex-1 rounded-2xl border border-border bg-card p-5 transition-shadow duration-300 group-hover:shadow-float">
-                <span className="font-mono text-[11px] tracking-[0.2em] text-muted-foreground">
-                  STEP 0{i + 1}
-                </span>
-                <h3 className="mt-2 font-medium">{s.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground">{s.body}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
+        {/* Right column: Full globe + floating stat cards centered vertically and shifted rightward */}
+        <div className="relative flex items-center justify-center lg:justify-end lg:pr-2">
+          <img
+            src={escrowGlobe}
+            alt="Low-poly globe showing 156K+ USDC settled, 5 live markets, and 4 steps to cash-out"
+            className="block h-auto w-[605px] max-w-full select-none lg:translate-x-6"
+          />
+        </div>
       </div>
     </section>
   );
 }
-
-// Indicative reference rates in USD per 1 unit of local currency (sandbox only).
-const RATES: Record<string, number> = { RWF: 1 / 1380, KES: 1 / 129, UGX: 1 / 3700, TZS: 1 / 2680, BIF: 1 / 2900 };
-const CURRENCY_FLAG: Record<string, string> = { RWF: "RW", KES: "KE", UGX: "UG", TZS: "TZ", BIF: "BI" };
-const FEE_PCT = 0.012;
 
 function Estimator() {
-  const [amount, setAmount] = useState(1_000_000);
-  const [from, setFrom] = useState("RWF");
-  const [to, setTo] = useState("KES");
-  const r = useMemo(() => {
-    const usd = amount * (RATES[from] ?? 1);
-    const fee = usd * FEE_PCT;
-    const received = (usd - fee) / (RATES[to] ?? 1);
-    return { usd, fee, received, escrowPct: usd > 0 ? ((usd - fee) / usd) * 100 : 0 };
-  }, [amount, from, to]);
-  const fmt = (n: number, d = 0) => n.toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
-  const sel = "h-11 rounded-lg border border-input bg-background px-3 font-mono text-sm";
+  const cards = [
+    {
+      body: "Send a request here to get a payment quote.",
+      cta: "Request a Quote",
+      to: "/send",
+    },
+    {
+      body: "Book a demo to see how VUKA protects your trade.",
+      cta: "Get a Demo",
+      to: "/register",
+    },
+    {
+      body: "Talk to a VUKA expert to help you choose the right plan.",
+      cta: "Contact Sales",
+      to: "/support",
+    },
+  ];
 
   return (
-    <section id="estimate" className="scroll-mt-24 border-y border-border bg-surface">
-      <div className="mx-auto grid max-w-6xl gap-12 px-6 py-24 lg:grid-cols-2">
-        <div>
-          <SectionHead
-            eyebrow="Cost estimator"
-            title="See the full cost before you commit"
-            intro="Every payment shows the exchange rate and fee up front. The quote you see is the quote that locks — no surprises at release."
+    <section id="estimate" className="relative scroll-mt-24 overflow-hidden bg-[#f6f6f6] pt-36 pb-3 text-[#151515]">
+      {/* Background curved lime arches and dark bottom band */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        <svg
+          viewBox="0 0 1642 738"
+          preserveAspectRatio="none"
+          className="size-full"
+        >
+          {/* Outer pale-lime arch band */}
+          <path
+            d="M -40 280 Q 821 -10 1682 280 L 1682 738 L -40 738 Z"
+            fill="#eef6dd"
+            stroke="#9fc84b"
+            strokeWidth="1.2"
           />
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-6 shadow-float">
-          {/* Corridor header: the two markets this quote connects, flag to flag. */}
-          <div className="flex items-center justify-center gap-4 border-b border-border pb-5">
-            <div className="flex flex-col items-center gap-1.5">
-              <Flag code={CURRENCY_FLAG[from] ?? "RW"} className="w-9 rounded-md" />
-              <span className="font-mono text-[11px] text-muted-foreground">{from}</span>
-            </div>
-            <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <div className="flex flex-col items-center gap-1.5">
-              <Flag code={CURRENCY_FLAG[to] ?? "KE"} className="w-9 rounded-md" />
-              <span className="font-mono text-[11px] text-muted-foreground">{to}</span>
-            </div>
-          </div>
+          {/* Inner bright-lime arch */}
+          <path
+            d="M -40 448 Q 821 155 1682 448 L 1682 738 L -40 738 Z"
+            fill="#c2f74d"
+          />
+          {/* Green dot on the right between the two curves */}
+          <circle cx="1474" cy="364" r="8" fill="#79b200" />
+        </svg>
+        {/* Bottom dark bar */}
+        <div className="absolute inset-x-0 bottom-0 h-[81px] bg-[#151515]" />
+      </div>
 
-          <label className="mt-5 block text-xs text-muted-foreground" htmlFor="est-amount">
-            You send
-          </label>
-          <div className="mt-2 flex gap-2">
-            <input
-              id="est-amount"
-              type="number"
-              min={0}
-              value={amount}
-              onChange={(e) => setAmount(Math.max(0, Number(e.target.value)))}
-              className="h-11 flex-1 rounded-lg border border-input bg-background px-3 font-mono text-sm"
-            />
-            <select aria-label="From currency" value={from} onChange={(e) => setFrom(e.target.value)} className={sel}>
-              {Object.keys(RATES).map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </select>
-          </div>
-          <label className="mt-5 block text-xs text-muted-foreground" htmlFor="est-to">
-            Supplier receives in
-          </label>
-          <select id="est-to" value={to} onChange={(e) => setTo(e.target.value)} className={`${sel} mt-2 w-full`}>
-            {Object.keys(RATES).map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
-
-          {/* Where every dollar goes: escrow vs. fee, to scale, animated as inputs change. */}
-          <div className="mt-6 border-t border-border pt-5">
-            <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted" role="img" aria-label={`${fmt(r.escrowPct, 0)}% to escrow, ${fmt(100 - r.escrowPct, 0)}% fee`}>
-              <div
-                className="h-full bg-primary transition-[width] duration-500 ease-out"
-                style={{ width: `${r.escrowPct}%` }}
-              />
-              <div className="h-full flex-1 bg-foreground/25 transition-[width] duration-500 ease-out" />
-            </div>
-            <div className="mt-2 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-primary" /> To escrow
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-foreground/25" /> VUKA fee
-              </span>
-            </div>
-          </div>
-
-          <dl className="mt-5 space-y-3 border-t border-border pt-5 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-muted-foreground">Locked in escrow</dt>
-              <dd className="font-mono">USDC {fmt(r.usd, 2)}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-muted-foreground">VUKA fee (1.2%)</dt>
-              <dd className="font-mono">USDC {fmt(r.fee, 2)}</dd>
-            </div>
-            <div className="flex justify-between border-t border-border pt-3 text-base font-medium">
-              <dt>Supplier receives</dt>
-              <dd className="font-mono">
-                {to} {fmt(r.received)}
-              </dd>
-            </div>
-          </dl>
-          <p className="mt-4 text-[11px] text-muted-foreground">
-            Indicative reference rates for illustration. Live quotes are firm for the lock window.
+      {/* Main translucent/frosted center container */}
+      <div className="relative z-10 mx-auto max-w-[1104px] px-4 sm:px-0">
+        <div
+          className="relative overflow-hidden rounded-t-[8px] border border-b-0 border-[#dcdcdc] px-6 pt-14 pb-0 text-center shadow-[0_18px_50px_rgba(0,0,0,0.06)]"
+          style={{
+            background:
+              "radial-gradient(62% 72% at 50% 68%, rgba(194, 247, 77, 0.72) 0%, rgba(235, 252, 197, 0.78) 48%, rgba(249, 252, 245, 0.96) 82%)",
+          }}
+        >
+          <h2 className="mx-auto max-w-3xl text-[36px] leading-[1.18] font-bold tracking-[-0.02em] text-[#151515] sm:text-[44px]">
+            See Your Full Cost Before You Pay
+          </h2>
+          <p className="mx-auto mt-5 max-w-[560px] text-[16px] leading-[1.6] text-[#222222]">
+            Get a firm exchange rate and fee up front — the quote you see
+            <br className="hidden sm:inline" /> is the quote that locks
           </p>
+          <div className="mt-8">
+            <Link
+              to="/send"
+              className="inline-flex h-[54px] w-full max-w-[448px] items-center justify-center rounded-full bg-[#151515] px-8 text-[16px] font-normal text-white transition-opacity hover:opacity-90"
+            >
+              Estimate a Payment
+            </Link>
+          </div>
+
+          {/* 3 bottom white action cards */}
+          <div className="mt-14 -mx-6 grid gap-6 sm:mx-0 md:grid-cols-3 md:gap-[33px]">
+            {cards.map((c) => (
+              <div
+                key={c.cta}
+                className="flex flex-col items-center justify-between rounded-[6px] border border-[#e6e6e6] bg-[#fcfdf9] px-7 pt-9 pb-6 text-center shadow-[0_10px_28px_rgba(0,0,0,0.08)]"
+              >
+                <p className="max-w-[250px] text-[16px] leading-[1.55] font-normal text-[#151515]">
+                  {c.body}
+                </p>
+                <Link
+                  to={c.to}
+                  className="mt-6 inline-flex h-[47px] w-full max-w-[255px] items-center justify-center rounded-full border border-[#79b200] bg-white px-6 text-[16px] font-semibold text-[#79b200] transition-colors hover:bg-[#79b200]/5"
+                >
+                  {c.cta}
+                </Link>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>
-  );
-}
-
-const LOCKED = { icon: Lock, name: "LOCKED", body: "Buyer's funds are committed on-chain against the invoice." };
-const OUTCOMES = [
-  {
-    icon: CheckCircle2,
-    name: "RELEASED",
-    body: "Delivery confirmed or timeout passed. Supplier is paid.",
-    border: "border-success/40 hover:border-success",
-    iconTone: "bg-success/15 text-success",
-  },
-  {
-    icon: RotateCcw,
-    name: "REFUNDED",
-    body: "Order cancelled by agreement. Buyer is made whole.",
-    border: "border-border hover:border-foreground/40",
-    iconTone: "bg-muted text-muted-foreground",
-  },
-  {
-    icon: Gavel,
-    name: "DISPUTED",
-    body: "Funds freeze. Arbitration decides, and the outcome is recorded permanently.",
-    border: "border-destructive/40 hover:border-destructive",
-    iconTone: "bg-destructive/15 text-destructive",
-  },
-];
-
-/** The 3D-feeling network view: a real, draggable orthographic globe of Africa, markets lit up and
- * connected by animated corridor arcs — not a static image, so the "transaction" motion is real.
- * Sized to sit beside the section copy rather than take a full-width band of its own. */
-function NetworkGlobe() {
-  const config = useQuery({
-    queryKey: ["public-config"],
-    queryFn: platform.config,
-    staleTime: 300_000,
-    retry: false,
-  });
-  const [active, setActive] = useState<string | null>(null);
-  const markets = config.data?.countries ?? [];
-  // Illustrative ring connections across the live sandbox markets — the engine doesn't expose the
-  // real corridor graph on this signed-out page, so this is labelled as illustrative, not live data.
-  const arcs = useMemo<[string, string][]>(() => {
-    if (markets.length < 2) return [];
-    return markets.map((m, i) => [m.code, markets[(i + 1) % markets.length]!.code]);
-  }, [markets]);
-
-  if (markets.length < 2) return null;
-
-  return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-float">
-      <div className="relative h-[280px] sm:h-[320px]">
-        <Suspense
-          fallback={
-            <div className="flex h-full items-center justify-center font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-              Loading network…
-            </div>
-          }
-        >
-          <Globe
-            markets={markets}
-            arcs={arcs}
-            activeCode={active}
-            onActive={setActive}
-            className="relative h-full w-full"
-          />
-        </Suspense>
-      </div>
-      <p className="border-t border-border px-4 py-3 text-[11px] text-muted-foreground">
-        Illustrative connections across VUKA's live sandbox markets — drag to rotate. Not a map of
-        real settlement traffic.
-      </p>
-    </div>
   );
 }
 
 function EscrowExplained() {
+  const doors = [
+    {
+      name: "Locked",
+      body: "Buyer's funds are committed on-chain against the invoice.",
+    },
+    {
+      name: "Released",
+      body: "Delivery confirmed or timeout passed. Supplier is paid.",
+    },
+    {
+      name: "Refunded",
+      body: "Order cancelled by agreement. Buyer is made whole.",
+    },
+    {
+      name: "Disputed",
+      body: "Funds freeze while arbitration decides the outcome.",
+    },
+  ];
+
   return (
-    <section id="escrow" className="scroll-mt-24 mx-auto max-w-6xl px-6 py-24">
-      <div className="grid gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
-        <div>
-          <SectionHead
-            eyebrow="Escrow explained"
-            title="Money moves between states, never silently"
-            intro="Each payment lives in a smart-contract escrow. From LOCKED it can only leave through one of three doors — and every move is mirrored in a double-entry ledger."
-          />
-
-          {/* A hub-and-spoke diagram: one locked escrow branches to exactly one terminal outcome. */}
-          <div className="mt-10 flex flex-col gap-6 xl:flex-row xl:items-center">
-            <div className="relative z-10 shrink-0 rounded-2xl border-2 border-foreground bg-foreground p-6 text-background xl:w-56">
-              <LOCKED.icon className="size-6" aria-hidden="true" />
-              <p className="mt-8 font-mono text-sm tracking-[0.15em]">{LOCKED.name}</p>
-              <p className="mt-2 text-sm opacity-75">{LOCKED.body}</p>
-            </div>
-
-            <div className="flex flex-1 flex-col gap-3">
-              {OUTCOMES.map((s) => (
-                <div key={s.name} className="flex items-center gap-3 xl:gap-4">
-                  <svg
-                    aria-hidden="true"
-                    viewBox="0 0 32 2"
-                    preserveAspectRatio="none"
-                    className="hidden h-0.5 w-8 shrink-0 text-border xl:block"
-                  >
-                    <line x1="0" y1="1" x2="32" y2="1" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" />
-                  </svg>
-                  <div
-                    className={cn(
-                      "flex flex-1 items-center gap-4 rounded-2xl border bg-card p-5 transition-colors duration-200",
-                      s.border,
-                    )}
-                  >
-                    <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", s.iconTone)}>
-                      <s.icon className="size-4.5" aria-hidden="true" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="font-mono text-sm tracking-[0.15em]">{s.name}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">{s.body}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+    <section id="escrow" className="scroll-mt-24 bg-[#f6f6f6] px-6 pt-20 pb-28 text-[#151515]">
+      <div className="mx-auto max-w-[1104px] text-center">
+        <h2 className="text-[36px] leading-[1.18] font-bold tracking-[-0.02em] text-[#151515] sm:text-[44px]">
+          Money Never Moves Silently
+        </h2>
+        <p className="mx-auto mt-5 max-w-[580px] text-[16px] leading-[1.6] text-[#222222]">
+          Every payment lives in a smart-contract escrow and can only
+          <br className="hidden sm:inline" /> leave through one of four doors
+        </p>
+        <div className="mt-9">
+          <Link
+            to="/escrow"
+            className="inline-flex h-[55px] w-full max-w-[448px] items-center justify-center rounded-full bg-[#151515] px-8 text-[16px] font-normal text-white transition-opacity hover:opacity-90"
+          >
+            How Escrow Works
+          </Link>
         </div>
 
-        <div className="lg:sticky lg:top-24">
-          <NetworkGlobe />
+        <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-4 lg:gap-[36px]">
+          {doors.map((d) => (
+            <div
+              key={d.name}
+              className="flex min-h-[250px] flex-col items-center justify-between rounded-[6px] border border-[#ebebeb] bg-white px-5 pt-9 pb-6 text-center shadow-[0_12px_32px_rgba(0,0,0,0.05)]"
+            >
+              <div>
+                <h3 className="text-[22px] leading-snug font-bold text-[#79b200]">{d.name}</h3>
+                <p className="mt-3.5 text-[15px] leading-[1.55] text-[#151515]">{d.body}</p>
+              </div>
+              <Link
+                to="/escrow"
+                className="mt-6 inline-flex h-[47px] w-full max-w-[204px] items-center justify-center rounded-full border border-[#79b200] bg-white px-5 text-[15px] font-semibold text-[#79b200] transition-colors hover:bg-[#79b200]/5"
+              >
+                Learn More
+              </Link>
+            </div>
+          ))}
         </div>
       </div>
     </section>
