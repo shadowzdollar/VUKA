@@ -8,60 +8,83 @@ import { cn } from "@/lib/utils";
 
 /** Inline trend line for KPI cards. Purely decorative: the number beside it carries the meaning. */
 export function Sparkline({ values, className }: { values: number[]; className?: string }) {
+  const gradId = useId();
   if (values.length < 2) return null;
   const max = Math.max(...values, 1e-9);
   const min = Math.min(...values, 0);
   const span = max - min || 1;
   const w = 100;
-  const h = 28;
+  const h = 30;
   const pts = values.map(
-    (v, i) => `${(i / (values.length - 1)) * w},${h - 2 - ((v - min) / span) * (h - 4)}`,
+    (v, i) => `${(i / (values.length - 1)) * w},${h - 3 - ((v - min) / span) * (h - 6)}`,
   );
   return (
     <svg
       viewBox={`0 0 ${w} ${h}`}
       preserveAspectRatio="none"
       aria-hidden="true"
-      className={cn("h-7 w-full", className)}
+      className={cn("h-8 w-full overflow-visible", className)}
     >
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#79b200" stopOpacity="0.32" />
+          <stop offset="100%" stopColor="#c2f74d" stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      <polyline points={`0,${h} ${pts.join(" ")} ${w},${h}`} fill={`url(#${gradId})`} />
       <polyline
         points={pts.join(" ")}
         fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
+        stroke="#79b200"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
       />
-      <polyline points={`0,${h} ${pts.join(" ")} ${w},${h}`} fill="currentColor" opacity="0.08" />
     </svg>
   );
 }
 
 /** Semicircular gauge for a 0..1 ratio (success rate, limit usage). */
 export function Gauge({ value, label, sub }: { value: number; label: string; sub?: ReactNode }) {
+  const gradId = useId();
   const v = Math.max(0, Math.min(1, value));
   const r = 42;
   const c = Math.PI * r;
   return (
     <figure className="m-0 text-center" role="img" aria-label={`${label}: ${Math.round(v * 100)}%`}>
-      <svg viewBox="0 0 100 58" className="mx-auto w-full max-w-[200px]" aria-hidden="true">
+      <svg viewBox="0 0 100 60" className="mx-auto w-full max-w-[210px]" aria-hidden="true">
+        <defs>
+          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#79b200" />
+            <stop offset="100%" stopColor="#c2f74d" />
+          </linearGradient>
+        </defs>
         <path
           d="M8 50 A42 42 0 0 1 92 50"
           fill="none"
           stroke="var(--color-border)"
           strokeWidth="9"
+          strokeLinecap="round"
         />
         <path
           d="M8 50 A42 42 0 0 1 92 50"
           fill="none"
-          stroke="var(--color-foreground)"
+          stroke={`url(#${gradId})`}
           strokeWidth="9"
+          strokeLinecap="round"
           strokeDasharray={`${v * c} ${c}`}
         />
-        <text x="50" y="46" textAnchor="middle" className="fill-foreground font-mono text-[15px]">
+        <text
+          x="50"
+          y="46"
+          textAnchor="middle"
+          className="fill-foreground font-mono text-[16px] font-bold"
+        >
           {Math.round(v * 100)}%
         </text>
       </svg>
-      <figcaption className="-mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      <figcaption className="-mt-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
         {label}
       </figcaption>
       {sub ? <div className="mt-1 text-xs text-muted-foreground">{sub}</div> : null}
@@ -89,17 +112,33 @@ export function RankedBars({
   if (items.length === 0) return <p className="text-xs text-muted-foreground">{empty}</p>;
   const max = Math.max(...items.map((i) => i.value), 1e-9);
   return (
-    <ul className="space-y-3" aria-label={ariaLabel}>
-      {items.map((i) => (
-        <li key={i.label}>
+    <ul className="space-y-3.5" aria-label={ariaLabel}>
+      {items.map((i, idx) => (
+        <li key={i.label} className="group">
           <div className="flex items-baseline justify-between gap-3 text-sm">
-            <span className="min-w-0 truncate">{i.label}</span>
-            <span className="tabular shrink-0 font-mono text-xs">{i.display ?? i.value}</span>
+            <span className="flex min-w-0 items-center gap-2 truncate font-medium">
+              <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-md bg-muted font-mono text-[10px] text-muted-foreground">
+                {idx + 1}
+              </span>
+              <span className="truncate">{i.label}</span>
+            </span>
+            <span className="tabular shrink-0 font-mono text-xs font-semibold">
+              {i.display ?? i.value}
+            </span>
           </div>
-          <div className="mt-1 h-1.5 w-full bg-muted" aria-hidden="true">
-            <div className="h-full bg-foreground" style={{ width: `${(i.value / max) * 100}%` }} />
+          <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${Math.max(4, (i.value / max) * 100)}%`,
+                background:
+                  idx === 0
+                    ? "linear-gradient(90deg, #79b200 0%, #b5ef3a 100%)"
+                    : "var(--color-foreground)",
+              }}
+            />
           </div>
-          {i.note ? <div className="mt-0.5 text-[11px] text-muted-foreground">{i.note}</div> : null}
+          {i.note ? <div className="mt-1 text-[11px] text-muted-foreground">{i.note}</div> : null}
         </li>
       ))}
     </ul>
@@ -116,21 +155,32 @@ export function Funnel({
 }) {
   const top = Math.max(stages[0]?.count ?? 0, 1);
   return (
-    <ol className="space-y-2" aria-label={ariaLabel}>
-      {stages.map((s, i) => (
-        <li key={s.label} className="flex items-center gap-3">
-          <span className="w-32 shrink-0 text-xs text-muted-foreground">{s.label}</span>
-          <div className="h-6 flex-1 bg-muted" aria-hidden="true">
-            <div
-              className="flex h-full items-center bg-foreground px-2 font-mono text-[10px] text-background"
-              style={{ width: `${Math.max((s.count / top) * 100, 4)}%`, opacity: 1 - i * 0.18 }}
-            >
-              {s.count}
+    <ol className="space-y-2.5" aria-label={ariaLabel}>
+      {stages.map((s, i) => {
+        const pct = Math.round((s.count / top) * 100);
+        return (
+          <li key={s.label} className="flex items-center gap-3">
+            <span className="w-36 shrink-0 text-xs font-medium text-muted-foreground">
+              {s.label}
+            </span>
+            <div className="h-7 flex-1 overflow-hidden rounded-lg bg-muted" aria-hidden="true">
+              <div
+                className="flex h-full items-center justify-between rounded-lg px-2.5 font-mono text-[10px] font-semibold"
+                style={{
+                  width: `${Math.max((s.count / top) * 100, 10)}%`,
+                  background: i === stages.length - 1 ? "#c2f74d" : "var(--color-foreground)",
+                  color: i === stages.length - 1 ? "#141414" : "var(--color-background)",
+                  opacity: i === stages.length - 1 ? 1 : 1 - i * 0.14,
+                }}
+              >
+                <span>{s.count}</span>
+                { pct < 100 ? <span className="opacity-75">{pct}%</span> : null }
+              </div>
             </div>
-          </div>
-          <span className="sr-only">{s.count}</span>
-        </li>
-      ))}
+            <span className="sr-only">{s.count}</span>
+          </li>
+        );
+      })}
     </ol>
   );
 }
