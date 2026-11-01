@@ -88,17 +88,17 @@ function Insights() {
   });
 
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
-        eyebrow="Insights"
-        title="Your trade, in numbers"
-        description="How money moves through your business: trends, where it goes, how reliably it settles and when you are most active. Everything is computed from your own ledger history."
+        eyebrow="Enterprise Treasury Insights"
+        title="Your Trade, in Numbers"
+        description="How money moves through your business: corridor velocity, currency settlement mix, counterparty concentration, and operational reliability computed directly from your double-entry ledger."
         actions={<PeriodPicker value={days} onChange={setDays} />}
       />
       <QueryBoundary query={q} disabledCodes={["analytics_unavailable"]}>
         {(r) => <TraderBody r={r} />}
       </QueryBoundary>
-    </>
+    </div>
   );
 }
 
@@ -216,17 +216,17 @@ function Intelligence() {
     staleTime: 60_000,
   });
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
-        eyebrow="Network intelligence"
-        title="Platform analytics"
-        description="Throughput, corridor flows, payment mix, verification funnel and rail reliability across the whole network — the operational picture an oversight body would ask for."
+        eyebrow="Network Intelligence · Oversight"
+        title="Platform Settlement Analytics"
+        description="Throughput, cross-border corridor flow matrices, payment size distributions, KYC verification conversion, and African mobile-money rail reliability across the entire VUKA network."
         actions={<PeriodPicker value={days} onChange={setDays} />}
       />
       <QueryBoundary query={q} disabledCodes={["analytics_unavailable"]}>
         {(r) => <PlatformBody r={r} />}
       </QueryBoundary>
-    </>
+    </div>
   );
 }
 
