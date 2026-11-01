@@ -11,6 +11,7 @@ import { useEffect, useMemo, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
+import { InitialVisitPreloader } from "@/components/vuka/preloader";
 import { I18nProvider } from "@/lib/i18n";
 import { SessionProvider } from "@/lib/session";
 import { ThemeProvider, themeInitScript } from "@/lib/theme";
@@ -156,6 +157,7 @@ function RootComponent() {
       <ThemeProvider>
         <I18nProvider>
           <SessionProvider>
+            <InitialVisitPreloader />
             {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
             <Outlet />
             <Toaster position="bottom-right" />
