@@ -1,1 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><title>VUKA</title><rect width="512" height="512" fill="#0a0a0a"/><clipPath id="c"><path d="M0 126H290V72H512V512H0Z"/></clipPath><path d="M104 68L226 368L408 16" fill="none" stroke="#fafafa" stroke-width="58" stroke-miterlimit="10" clip-path="url(#c)"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>VUKA</title>
+  <rect width="512" height="512" rx="96" fill="#151515"/>
+  <path d="M156 36H356L476 156V356L356 476H156L36 356V156L156 36Z" fill="none" stroke="#c2f74d" stroke-width="18" stroke-opacity="0.28" stroke-linejoin="round"/>
+  <path d="M110 196C178 122 334 122 402 196" fill="none" stroke="#c2f74d" stroke-width="20" stroke-linecap="round" stroke-opacity="0.85"/>
+  <path d="M92 142L166 142L248 344L210 416L92 142Z" fill="#fafafa"/>
+  <path d="M210 416L266 416L424 104L352 104L210 416Z" fill="#fafafa"/>
+  <path d="M304 392L442 126" fill="none" stroke="#c2f74d" stroke-width="24" stroke-linecap="square"/>
+  <polygon points="256,74 294,112 256,150 218,112" fill="#c2f74d"/>
+</svg>
