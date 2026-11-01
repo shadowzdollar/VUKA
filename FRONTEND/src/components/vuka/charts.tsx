@@ -30,15 +30,18 @@ interface FlowPoint {
   out: number;
 }
 
-const axis = { fontSize: 11, fill: "var(--color-muted-foreground)" } as const;
+const axis = { fontSize: 11, fill: "var(--color-muted-foreground)", fontFamily: "var(--font-mono)" } as const;
 
 function tooltipStyle() {
   return {
     background: "var(--color-popover)",
     border: "1px solid var(--color-border)",
-    borderRadius: 0,
+    borderRadius: "12px",
+    boxShadow: "0 16px 36px -12px rgba(0, 0, 0, 0.18)",
     color: "var(--color-foreground)",
     fontSize: 12,
+    fontFamily: "var(--font-mono)",
+    padding: "8px 12px",
   };
 }
 
@@ -48,16 +51,27 @@ export function FlowChart({ data, currencyLabel }: { data: FlowPoint[]; currency
       <div
         role="img"
         aria-label={`Money in and out by week, in ${currencyLabel}`}
-        className="h-56 w-full"
+        className="h-60 w-full"
       >
         <div aria-hidden="true" className="h-full w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               accessibilityLayer={false}
               data={data}
-              margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+              margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+              barGap={4}
             >
-              <CartesianGrid stroke="var(--color-border)" vertical={false} />
+              <defs>
+                <linearGradient id="vukaFlowIn" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#8fd100" />
+                  <stop offset="100%" stopColor="#5e8c00" />
+                </linearGradient>
+                <linearGradient id="vukaFlowOut" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.92} />
+                  <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0.65} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
               <XAxis
                 dataKey="label"
                 tick={axis}
@@ -71,10 +85,10 @@ export function FlowChart({ data, currencyLabel }: { data: FlowPoint[]; currency
                 width={56}
                 tickFormatter={(v: number) => v.toLocaleString("en-US", { notation: "compact" })}
               />
-              <Tooltip contentStyle={tooltipStyle()} cursor={{ fill: "var(--color-accent)" }} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="in" name="Money in" fill="var(--chart-1)" />
-              <Bar dataKey="out" name="Money out" fill="var(--chart-4)" stroke="var(--chart-1)" />
+              <Tooltip contentStyle={tooltipStyle()} cursor={{ fill: "var(--color-accent)", opacity: 0.45 }} />
+              <Legend wrapperStyle={{ fontSize: 11, fontFamily: "var(--font-mono)", paddingTop: 8 }} />
+              <Bar dataKey="in" name="Money in" fill="url(#vukaFlowIn)" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="out" name="Money out" fill="url(#vukaFlowOut)" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -173,11 +187,11 @@ export interface DonutDatum {
 }
 
 const TONES = [
+  "#79b200",
   "var(--chart-1)",
+  "#a8e024",
   "var(--chart-2)",
-  "var(--chart-3)",
   "var(--chart-4)",
-  "var(--chart-5)",
 ];
 
 /** Groups everything past the 4th slice into "Other" so five tones stay distinguishable. */
@@ -278,7 +292,7 @@ export function HistogramChart({
               margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
               barCategoryGap={2}
             >
-              <CartesianGrid stroke="var(--color-border)" vertical={false} />
+              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
               <XAxis
                 dataKey="label"
                 tick={axis}
@@ -293,8 +307,15 @@ export function HistogramChart({
                 width={32}
                 allowDecimals={false}
               />
-              <Tooltip contentStyle={tooltipStyle()} cursor={{ fill: "var(--color-accent)" }} />
-              <Bar dataKey="count" name={unit} fill="var(--chart-1)" isAnimationActive={true} animationDuration={500} />
+              <Tooltip contentStyle={tooltipStyle()} cursor={{ fill: "var(--color-accent)", opacity: 0.4 }} />
+              <Bar
+                dataKey="count"
+                name={unit}
+                fill="#79b200"
+                radius={[6, 6, 0, 0]}
+                isAnimationActive={true}
+                animationDuration={500}
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -350,46 +371,59 @@ export function TrendChart({
             <AreaChart
               accessibilityLayer={false}
               data={data}
-              margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+              margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
             >
-              <CartesianGrid stroke="var(--color-border)" vertical={false} />
+              <defs>
+                <linearGradient id="vukaAreaA" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#79b200" stopOpacity={0.42} />
+                  <stop offset="65%" stopColor="#c2f74d" stopOpacity={0.14} />
+                  <stop offset="100%" stopColor="#c2f74d" stopOpacity={0.01} />
+                </linearGradient>
+                <linearGradient id="vukaAreaB" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.28} />
+                  <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
               <XAxis
                 dataKey="label"
                 tick={axis}
                 tickLine={false}
                 axisLine={{ stroke: "var(--color-border)" }}
-                minTickGap={28}
+                minTickGap={24}
               />
               <YAxis
                 tick={axis}
                 tickLine={false}
                 axisLine={false}
-                width={52}
+                width={54}
                 tickFormatter={(v: number) => v.toLocaleString("en-US", { notation: "compact" })}
               />
               <Tooltip contentStyle={tooltipStyle()} formatter={(v: number) => format(v)} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Legend wrapperStyle={{ fontSize: 11, fontFamily: "var(--font-mono)", paddingTop: 8 }} />
               <Area
                 type="monotone"
                 dataKey="a"
                 name={aName}
-                stroke="var(--chart-1)"
-                strokeWidth={2}
-                fill="var(--chart-1)"
-                fillOpacity={0.14}
-                isAnimationActive={true} animationDuration={700}
+                stroke="#79b200"
+                strokeWidth={2.4}
+                fill="url(#vukaAreaA)"
+                fillOpacity={1}
+                isAnimationActive={true}
+                animationDuration={700}
               />
               {bName ? (
                 <Area
                   type="monotone"
                   dataKey="b"
                   name={bName}
-                  stroke="var(--chart-3)"
+                  stroke="var(--chart-1)"
                   strokeWidth={2}
                   strokeDasharray="5 3"
-                  fill="var(--chart-3)"
-                  fillOpacity={0.1}
-                  isAnimationActive={true} animationDuration={700}
+                  fill="url(#vukaAreaB)"
+                  fillOpacity={1}
+                  isAnimationActive={true}
+                  animationDuration={700}
                 />
               ) : null}
             </AreaChart>
