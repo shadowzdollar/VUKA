@@ -22,7 +22,7 @@ export function PeriodPicker({
     <div
       role="radiogroup"
       aria-label="Reporting period"
-      className="inline-flex border border-border"
+      className="inline-flex rounded-xl border border-border bg-muted/40 p-1"
     >
       {PERIODS.map((p) => (
         <button
@@ -32,10 +32,10 @@ export function PeriodPicker({
           aria-checked={value === p}
           onClick={() => onChange(p)}
           className={cn(
-            "px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] transition-colors",
+            "rounded-lg px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.14em] transition-all",
             value === p
-              ? "bg-foreground text-background"
-              : "text-muted-foreground hover:bg-accent hover:text-foreground",
+              ? "bg-[#151515] text-[#c2f74d] shadow-xs"
+              : "text-muted-foreground hover:text-foreground",
           )}
         >
           {p === 365 ? "1y" : `${p}d`}
@@ -54,17 +54,28 @@ export function InsightList({ items }: { items: Insight[] }) {
           <li
             key={i.title}
             className={cn(
-              "flex gap-3 p-4",
-              i.tone === "watch" ? "border-2 border-foreground" : "border border-border",
+              "flex gap-3.5 rounded-xl p-4 transition-colors",
+              i.tone === "watch"
+                ? "border border-[#79b200]/50 bg-[#f6fce8] text-[#151515] dark:bg-[#1e2612] dark:text-foreground"
+                : "border border-border/80 bg-muted/20",
             )}
           >
-            <Icon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span
+              className={cn(
+                "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg",
+                i.tone === "watch"
+                  ? "bg-[#151515] text-[#c2f74d]"
+                  : "bg-muted text-muted-foreground",
+              )}
+            >
+              <Icon className="size-4" aria-hidden="true" />
+            </span>
             <div>
-              <div className="text-sm font-medium">
+              <div className="text-sm font-semibold">
                 {i.title}
                 {i.tone === "watch" ? <span className="sr-only"> (worth attention)</span> : null}
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">{i.body}</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{i.body}</p>
             </div>
           </li>
         );
