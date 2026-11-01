@@ -10,8 +10,8 @@ import {
 import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useT } from "@/lib/i18n";
 import { downloadCsv } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export interface Column<T> {
@@ -113,13 +113,13 @@ export function DataTable<T>({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3.5">
       {searchable || exportName || toolbar ? (
         <div className="flex flex-wrap items-center gap-2">
           {searchable ? (
             <div className="relative">
               <Search
-                className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+                className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
                 aria-hidden="true"
               />
               <Input
@@ -130,7 +130,7 @@ export function DataTable<T>({
                 }}
                 aria-label={`${t("common.search")}: ${caption}`}
                 placeholder={t("common.search")}
-                className="h-8 w-56 rounded-none pl-8 font-mono text-xs"
+                className="h-8 w-60 rounded-lg bg-muted/20 pl-8.5 font-mono text-xs transition-colors focus-visible:bg-background"
               />
             </div>
           ) : null}
@@ -139,7 +139,7 @@ export function DataTable<T>({
             <Button
               variant="outline"
               size="sm"
-              className="ml-auto h-8 gap-1.5 rounded-none font-mono text-[10px] uppercase"
+              className="ml-auto h-8 gap-1.5 rounded-lg font-mono text-[10px] uppercase"
               disabled={sorted.length === 0}
               onClick={() =>
                 downloadCsv(
@@ -149,14 +149,15 @@ export function DataTable<T>({
                 )
               }
             >
-              <Download className="size-3.5" aria-hidden="true" /> {t("common.export")}
+              <Download className="size-3.5 text-[#79b200]" aria-hidden="true" />{" "}
+              {t("common.export")}
             </Button>
           ) : null}
         </div>
       ) : null}
 
       {sorted.length === 0 ? (
-        <div className="border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-border bg-muted/15 p-6 text-center text-xs text-muted-foreground">
           {empty ?? "—"}
         </div>
       ) : (
@@ -166,7 +167,7 @@ export function DataTable<T>({
             <table className="w-full text-sm">
               <caption className="sr-only">{caption}</caption>
               <thead>
-                <tr className="border-b border-border font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                <tr className="border-b border-border/80 bg-muted/20 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                   {columns.map((c) => {
                     const active = sort?.key === c.key;
                     return (
@@ -183,7 +184,7 @@ export function DataTable<T>({
                               : undefined
                         }
                         className={cn(
-                          "py-2 font-normal",
+                          "px-2.5 py-2.5 font-semibold first:rounded-tl-lg last:rounded-tr-lg",
                           alignClass[c.align ?? "left"],
                           c.className,
                         )}
@@ -193,16 +194,16 @@ export function DataTable<T>({
                             type="button"
                             onClick={() => toggleSort(c.key)}
                             className={cn(
-                              "inline-flex items-center gap-1 uppercase tracking-[0.16em] hover:text-foreground",
+                              "inline-flex items-center gap-1 uppercase tracking-[0.16em] transition-colors hover:text-foreground",
                               active && "text-foreground",
                             )}
                           >
                             {c.header}
                             {active ? (
                               sort!.dir === "asc" ? (
-                                <ArrowUp className="size-3" aria-hidden="true" />
+                                <ArrowUp className="size-3 text-[#79b200]" aria-hidden="true" />
                               ) : (
-                                <ArrowDown className="size-3" aria-hidden="true" />
+                                <ArrowDown className="size-3 text-[#79b200]" aria-hidden="true" />
                               )
                             ) : (
                               <ArrowUpDown className="size-3 opacity-40" aria-hidden="true" />
@@ -224,15 +225,17 @@ export function DataTable<T>({
                     onKeyDown={(e) => onKey(e, row)}
                     tabIndex={onRowClick ? 0 : undefined}
                     className={cn(
-                      "border-b border-border/60 last:border-0",
-                      onRowClick && "cursor-pointer hover:bg-accent/40 focus-visible:bg-accent/40",
+                      "border-b border-border/60 transition-colors last:border-0",
+                      onRowClick
+                        ? "cursor-pointer hover:bg-muted/35 focus-visible:bg-muted/35"
+                        : "hover:bg-muted/15",
                     )}
                   >
                     {columns.map((c) => (
                       <td
                         key={c.key}
                         className={cn(
-                          "py-2.5 pr-3 last:pr-0",
+                          "px-2.5 py-3",
                           alignClass[c.align ?? "left"],
                           c.className,
                         )}
@@ -247,7 +250,7 @@ export function DataTable<T>({
           </div>
 
           {/* Mobile: one labelled card per row */}
-          <ul className="space-y-2 md:hidden" aria-label={caption}>
+          <ul className="space-y-2.5 md:hidden" aria-label={caption}>
             {visible.map((row) => (
               <li
                 key={rowKey(row)}
@@ -255,7 +258,7 @@ export function DataTable<T>({
                 onKeyDown={(e) => onKey(e, row)}
                 tabIndex={onRowClick ? 0 : undefined}
                 className={cn(
-                  "border border-border p-3",
+                  "rounded-xl border border-border/80 bg-card p-3.5 shadow-sm",
                   onRowClick && "cursor-pointer active:bg-accent/40",
                 )}
               >
@@ -273,7 +276,7 @@ export function DataTable<T>({
             ))}
           </ul>
 
-          <div className="flex items-center justify-between font-mono text-[11px] text-muted-foreground">
+          <div className="flex items-center justify-between pt-1 font-mono text-[11px] text-muted-foreground">
             <span aria-live="polite">
               {sorted.length} {t("common.rows")} · {safePage + 1}/{pages}
             </span>
@@ -282,7 +285,7 @@ export function DataTable<T>({
                 <Button
                   variant="outline"
                   size="icon"
-                  className="size-7 rounded-none"
+                  className="size-7 rounded-lg"
                   disabled={safePage === 0}
                   onClick={() => setPage(safePage - 1)}
                   aria-label={t("common.previous")}
@@ -292,7 +295,7 @@ export function DataTable<T>({
                 <Button
                   variant="outline"
                   size="icon"
-                  className="size-7 rounded-none"
+                  className="size-7 rounded-lg"
                   disabled={safePage + 1 >= pages}
                   onClick={() => setPage(safePage + 1)}
                   aria-label={t("common.next")}
