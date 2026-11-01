@@ -1,15 +1,24 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
+  ArrowRight,
   Check,
   Copy,
+  FileText,
+  Globe2,
+  Lock,
   Pencil,
   RotateCcw,
+  Send,
+  ShieldCheck,
   Smartphone,
+  Sparkles,
   Wallet,
+  Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import escrowGlobe from "@/assets/escrow-globe.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,13 +31,14 @@ import {
 } from "@/components/ui/select";
 import { Flag } from "@/components/vuka/landing/flags";
 import { ErrorState, Loading } from "@/components/vuka/query-state";
-import { Chip, PageHeader, Panel, Shell } from "@/components/vuka/shell";
+import { Chip, Panel, Shell } from "@/components/vuka/shell";
 import { invoiceTotal } from "@/components/vuka/trader-invoices";
 import { isSettled, stateTone, WorkflowTracker } from "@/components/vuka/workflow-tracker";
 import { ApiError, describeError, isApiError, newIdempotencyKey } from "@/lib/api/client";
 import { corridors as corridorApi, ledger, platform, workflows } from "@/lib/api/endpoints";
 import type { Account, Recipient, Transfer, Workflow } from "@/lib/api/types";
 import { fromMinor, money, shortId, toMinor, truncMid, when } from "@/lib/format";
+import { DIAL } from "@/lib/markets";
 import { readRecentWorkflows, rememberWorkflow } from "@/lib/recent-workflows";
 import { useTrader } from "@/lib/session";
 import { useInvoices, useWallet } from "@/lib/trader-data";
@@ -60,7 +70,11 @@ type SendResult =
   | { kind: "domestic"; transfer: Transfer }
   | { kind: "workflow"; workflow?: Workflow; error?: string };
 
-const WIZARD_STEPS = ["Recipient", "Amount", "Review"] as const;
+const WIZARD_STEPS = [
+  { title: "Recipient & Corridor", sub: "Verify supplier MSISDN & destination vault" },
+  { title: "Amount & Invoice", sub: "Lock corridor FX rate & link trade invoice" },
+  { title: "Review & Dispatch", sub: "Confirm collection rail & execute settlement" },
+] as const;
 
 function useDebounced<T>(value: T, ms = 400): T {
   const [v, setV] = useState(value);
@@ -78,39 +92,65 @@ function workflowFromError(e: unknown): Workflow | undefined {
   return body?.workflow?.id ? body.workflow : undefined;
 }
 
-function StepRail({ step }: { step: number }) {
+function StepRail({ step, onJump }: { step: number; onJump: (target: number) => void }) {
   return (
-    <div className="mb-7 flex items-center">
-      {WIZARD_STEPS.map((label, i) => {
+    <div className="mb-7 grid gap-3 sm:grid-cols-3">
+      {WIZARD_STEPS.map((s, i) => {
         const n = i + 1;
         const done = n < step;
         const current = n === step;
         return (
-          <div key={label} className="flex flex-1 items-center last:flex-none">
-            <div className="flex items-center gap-2">
-              <span
+          <button
+            key={s.title}
+            type="button"
+            disabled={!done}
+            onClick={() => done && onJump(n)}
+            className={cn(
+              "flex items-start gap-3 rounded-2xl border p-3.5 text-left transition-all",
+              current &&
+                "border-[#151515] bg-[#151515] text-white shadow-[0_14px_30px_-14px_rgba(0,0,0,0.35)]",
+              done &&
+                "cursor-pointer border-[#79b200]/45 bg-[#f5fbe6] text-[#151515] hover:border-[#79b200] dark:bg-[#1b2410] dark:text-foreground",
+              !current && !done && "border-border bg-muted/25 text-muted-foreground",
+            )}
+          >
+            <span
+              className={cn(
+                "flex size-7 shrink-0 items-center justify-center rounded-xl font-mono text-xs font-bold",
+                current && "bg-[#c2f74d] text-[#151515]",
+                done && "bg-[#151515] text-[#c2f74d]",
+                !current && !done && "bg-muted text-muted-foreground",
+              )}
+            >
+              {done ? <Check className="size-3.5" aria-hidden="true" /> : `0${n}`}
+            </span>
+            <div className="min-w-0">
+              <div
                 className={cn(
-                  "flex size-7 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-medium transition-colors duration-300",
-                  (done || current) && "bg-primary text-primary-foreground",
-                  current && "ring-4 ring-primary/20",
-                  !done && !current && "bg-muted text-muted-foreground",
+                  "font-mono text-[10px] font-bold uppercase tracking-[0.16em]",
+                  current ? "text-[#c2f74d]" : done ? "text-[#4d7500]" : "text-muted-foreground",
                 )}
               >
-                {done ? <Check className="size-3.5" aria-hidden="true" /> : n}
-              </span>
-              <span
+                Step 0{n}
+              </div>
+              <div
                 className={cn(
-                  "whitespace-nowrap text-xs font-medium",
-                  !current && !done && "text-muted-foreground",
+                  "mt-0.5 truncate text-xs font-semibold",
+                  current ? "text-white" : "text-foreground",
                 )}
               >
-                {label}
-              </span>
+                {s.title}
+              </div>
+              <div
+                className={cn(
+                  "mt-0.5 line-clamp-1 text-[11px]",
+                  current ? "text-white/65" : "text-muted-foreground",
+                )}
+              >
+                {s.sub}
+              </div>
             </div>
-            {n < WIZARD_STEPS.length ? (
-              <div className={cn("mx-3 h-px flex-1 transition-colors duration-300", done ? "bg-primary" : "bg-border")} />
-            ) : null}
-          </div>
+          </button>
         );
       })}
     </div>
@@ -288,7 +328,11 @@ function SendPayment() {
         },
         key,
       );
-      return { kind: "workflow", workflow: res.workflow, ...(res.error ? { error: res.error } : {}) };
+      return {
+        kind: "workflow",
+        workflow: res.workflow,
+        ...(res.error ? { error: res.error } : {}),
+      };
     },
     onSuccess: (res) => {
       setNeedsAuth(false);
@@ -316,7 +360,6 @@ function SendPayment() {
     onError: (e) => {
       const wf = workflowFromError(e);
       if (wf) {
-        // The engine recorded the workflow even though a step failed: keep the id so it is trackable.
         rememberWorkflow(trader.id, wf.id);
         setActiveWf(wf.id);
         keyRef.current = newIdempotencyKey();
@@ -330,7 +373,8 @@ function SendPayment() {
       }
       if (e instanceof ApiError && e.code === "insufficient_funds") {
         const b = e.body as
-          { available?: number; required?: number; currency?: string } | undefined;
+          | { available?: number; required?: number; currency?: string }
+          | undefined;
         toast.error("Insufficient funds", {
           description:
             b?.available !== undefined
@@ -355,18 +399,100 @@ function SendPayment() {
 
   const q = quote.data?.quote;
   const inFlight = !!activeWf || !!domesticResult;
+  const sourceCountry = source ? countryForCurrency(source.currency) : undefined;
+  const destCountry = dest ? countryForCurrency(dest.currency) : undefined;
+  const markets = config.data?.countries ?? [];
 
   return (
-    <>
-      <PageHeader
-        eyebrow="Settlement desk"
-        title="Send Payment"
-        description="Pay a supplier in another currency with a live corridor quote. Same-currency payments settle instantly on the ledger; cross-border payments run collect → post → payout with a tracked status."
-      />
+    <div className="space-y-6">
+      {/* Executive Settlement Desk Banner */}
+      <section className="relative overflow-hidden rounded-3xl border border-[#151515] bg-[#151515] p-6 text-white shadow-[0_24px_60px_-24px_rgba(0,0,0,0.48)] sm:p-8">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-28 -right-20 h-80 w-80 rounded-full opacity-25 blur-3xl"
+          style={{ background: "radial-gradient(circle, #c2f74d 0%, transparent 70%)" }}
+        />
+        <img
+          src={escrowGlobe}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-12 -bottom-16 hidden w-[320px] opacity-20 select-none xl:block"
+        />
+
+        <div className="relative z-10 grid gap-6 lg:grid-cols-[1.35fr_1fr] lg:items-center">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#c2f74d]/40 bg-[#c2f74d]/15 px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[#c2f74d]">
+                <span className="size-1.5 rounded-full bg-[#c2f74d]" />
+                Cross-Border Settlement Desk
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-white/75">
+                <Lock className="size-3 text-[#c2f74d]" /> Replay-Safe Idempotency
+              </span>
+            </div>
+
+            <h1 className="mt-4 text-2xl font-bold tracking-tight text-white sm:text-4xl">
+              Send Supplier Payment
+            </h1>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/70">
+              Lock a deterministic corridor FX quote and settle across borders in three atomic hops
+              (Mobile Money Collection → Double-Entry Ledger → Supplier Rail Payout), or settle
+              same-currency transfers instantly on the ledger.
+            </p>
+          </div>
+
+          {/* Live Liquidity & Corridor Status Strip */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-4 backdrop-blur-md">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/55">
+                  Source Business Vault
+                </span>
+                {sourceCountry ? <Flag code={sourceCountry} className="w-4 rounded-[2px]" /> : null}
+              </div>
+              <div className="mt-2.5 font-mono text-2xl font-bold tabular-nums text-white">
+                {source ? money(balance, source.currency) : "—"}
+              </div>
+              <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2 font-mono text-[10px] text-white/60">
+                <span>Available Liquidity</span>
+                <Link to="/wallets" className="text-[#c2f74d] hover:underline">
+                  Top up →
+                </Link>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-4 backdrop-blur-md">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/55">
+                  Settlement Engine
+                </span>
+                <Globe2 className="size-4 text-[#c2f74d]" />
+              </div>
+              <div className="mt-2.5 font-mono text-xl font-bold text-white">
+                {corridor
+                  ? `${corridor.from_currency} → ${corridor.to_currency}`
+                  : mode === "domestic"
+                    ? `${source?.currency} Instant`
+                    : `${config.data?.corridor_count ?? 90} Corridors`}
+              </div>
+              <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2 font-mono text-[10px] text-white/60">
+                <span>
+                  {corridor
+                    ? `Fee ${(corridor.fees_bps / 100).toFixed(2)}% (${corridor.fees_bps} bps)`
+                    : "0.80% Intra · 1.20% Cross"}
+                </span>
+                <span className="text-[#c2f74d]">Live FX</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {inFlight ? (
-        <div className="space-y-3">
-          {activeWf ? <ProcessingPanel id={activeWf} payerPhone={payerPhone} onReset={resetWizard} /> : null}
+        <div className="space-y-4">
+          {activeWf ? (
+            <ProcessingPanel id={activeWf} payerPhone={payerPhone} onReset={resetWizard} />
+          ) : null}
           {domesticResult ? (
             <DomesticSuccessPanel
               transfer={domesticResult}
@@ -377,21 +503,68 @@ function SendPayment() {
           <RecentPayments ids={recent} onOpen={(id) => setActiveWf(id)} />
         </div>
       ) : (
-        <div className="grid gap-3 lg:grid-cols-[1fr_380px]">
-          <Panel title="Send money">
+        <div className="grid gap-5 lg:grid-cols-[1.2fr_430px] lg:items-start">
+          {/* Left Column: 3-Step Interactive Dispatch Workbench */}
+          <Panel
+            title="Cross-Border Payment Dispatch Workbench"
+            meta={
+              <Chip tone="live">
+                <ShieldCheck className="size-3" /> Step 0{step} of 03
+              </Chip>
+            }
+          >
             {wallet.isPending ? (
               <Loading />
             ) : wallet.isError ? (
               <ErrorState error={wallet.error} onRetry={() => void wallet.refetch()} />
             ) : (
               <div>
-                <StepRail step={step} />
+                <StepRail step={step} onJump={setStep} />
 
+                {/* STEP 1: RECIPIENT & CORRIDOR */}
                 {step === 1 ? (
-                  <div className="space-y-4">
-                    <div className="space-y-1.5">
-                      <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
-                        Recipient mobile number
+                  <div className="space-y-5">
+                    {/* Quick Country Dial-Code Prefix Bar */}
+                    {markets.length > 0 ? (
+                      <div className="rounded-2xl border border-border/80 bg-muted/20 p-4">
+                        <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                          10 Launch Markets · Click a country dial prefix to pre-fill
+                        </div>
+                        <div className="mt-2.5 flex flex-wrap gap-1.5">
+                          {markets.map((m) => {
+                            const dial = DIAL[m.code] ?? "";
+                            const prefix = `+${dial}`;
+                            const activePrefix = phone.startsWith(prefix);
+                            return (
+                              <button
+                                key={m.code}
+                                type="button"
+                                onClick={() => {
+                                  if (!phone.startsWith(prefix)) {
+                                    setPhone(prefix);
+                                    setRecipient(null);
+                                  }
+                                }}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[11px] transition-all",
+                                  activePrefix
+                                    ? "border-[#151515] bg-[#151515] font-semibold text-[#c2f74d]"
+                                    : "border-border bg-card text-foreground hover:border-[#79b200]",
+                                )}
+                              >
+                                <Flag code={m.code} className="w-3.5 rounded-[2px]" />
+                                <span>{m.code}</span>
+                                <span className="opacity-70">{prefix}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="space-y-2">
+                      <Label className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">
+                        Recipient Mobile Money Number (MSISDN)
                       </Label>
                       <div className="flex gap-2">
                         <Input
@@ -400,57 +573,73 @@ function SendPayment() {
                             setPhone(e.target.value);
                             setRecipient(null);
                           }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && phone.trim()) {
+                              e.preventDefault();
+                              lookup.mutate();
+                            }
+                          }}
                           placeholder="+254700000000"
                           inputMode="tel"
-                          className="rounded-lg font-mono"
+                          className="h-11 rounded-xl font-mono text-sm"
                         />
                         <Button
                           variant="outline"
-                          className="rounded-lg font-mono text-xs uppercase"
+                          className="h-11 rounded-xl border-[#151515] bg-[#151515] px-5 font-mono text-xs font-semibold uppercase text-[#c2f74d] hover:bg-[#151515]/90 hover:text-[#c2f74d]"
                           disabled={!phone.trim() || lookup.isPending}
                           onClick={() => lookup.mutate()}
                         >
-                          {lookup.isPending ? "…" : "Look up"}
+                          {lookup.isPending ? "Verifying…" : "Verify Trader"}
                         </Button>
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        Enter the supplier&apos;s registered VUKA phone number with international
+                        dialing code (e.g. +254 for Kenya, +250 for Rwanda).
+                      </p>
+
                       {recipient ? (
-                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-muted/40 p-3">
-                          <div className="flex items-center gap-3">
-                            <span className="flex size-9 items-center justify-center rounded-full bg-primary/15 font-mono text-xs font-semibold text-primary">
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#79b200]/50 bg-[#f5fbe6] p-4 text-[#151515] dark:bg-[#1b2410] dark:text-foreground">
+                          <div className="flex items-center gap-3.5">
+                            <span className="flex size-11 items-center justify-center rounded-2xl bg-[#151515] font-mono text-sm font-bold text-[#c2f74d]">
                               {recipient.user.full_name.charAt(0).toUpperCase()}
                             </span>
                             <div>
-                              <div className="text-sm font-medium">{recipient.user.full_name}</div>
-                              <div className="font-mono text-[11px] text-muted-foreground">
-                                {recipient.user.phone_number}
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold">
+                                  {recipient.user.full_name}
+                                </span>
+                                <Chip tone="live">Verified Counterparty</Chip>
+                              </div>
+                              <div className="mt-0.5 font-mono text-xs opacity-75">
+                                {recipient.user.phone_number} · {destOptions.length} Business{" "}
+                                {destOptions.length === 1 ? "Vault" : "Vaults"}
                               </div>
                             </div>
                           </div>
-                          <Chip tone="invert">Verified VUKA trader</Chip>
                         </div>
                       ) : null}
                     </div>
 
                     {recipient && destOptions.length > 1 ? (
                       <div className="space-y-1.5">
-                        <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
-                          Recipient wallet
+                        <Label className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">
+                          Destination Supplier Vault
                         </Label>
                         <Select value={dest?.id ?? ""} onValueChange={setDestId}>
                           <SelectTrigger
                             aria-label="Recipient wallet"
-                            className="rounded-lg font-mono text-xs"
+                            className="h-11 rounded-xl font-mono text-xs"
                           >
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent className="rounded-lg">
+                          <SelectContent className="rounded-xl">
                             {destOptions.map((a) => {
                               const cc = countryForCurrency(a.currency);
                               return (
                                 <SelectItem key={a.id} value={a.id}>
                                   <span className="flex items-center gap-2">
                                     {cc ? <Flag code={cc} className="w-4 rounded-[2px]" /> : null}
-                                    Business wallet · {a.currency}
+                                    Business Trade Vault · {a.currency}
                                   </span>
                                 </SelectItem>
                               );
@@ -461,31 +650,41 @@ function SendPayment() {
                     ) : null}
 
                     <Button
-                      className="w-full rounded-lg font-mono text-xs uppercase"
+                      className="h-11 w-full rounded-xl bg-[#151515] font-mono text-xs font-bold uppercase tracking-wider text-[#c2f74d] hover:bg-[#151515]/90"
                       disabled={!recipient || !dest}
                       onClick={() => setStep(2)}
                     >
-                      Continue
+                      Continue to Amount &amp; Quote <ArrowRight className="ml-1.5 size-4" />
                     </Button>
                   </div>
                 ) : null}
 
+                {/* STEP 2: AMOUNT, INVOICE & QUOTE */}
                 {step === 2 ? (
-                  <div className="space-y-4">
-                    <RecipientSummary recipient={recipient} dest={dest} countryForCurrency={countryForCurrency} onEdit={() => setStep(1)} />
+                  <div className="space-y-5">
+                    <RecipientSummary
+                      recipient={recipient}
+                      dest={dest}
+                      countryForCurrency={countryForCurrency}
+                      onEdit={() => setStep(1)}
+                    />
 
                     <div className="space-y-1.5">
-                      <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
-                        Pay from
+                      <Label className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">
+                        Source Business Trade Vault
                       </Label>
                       <Select value={source?.id ?? ""} onValueChange={setSourceId}>
-                        <SelectTrigger aria-label="Pay from" className="rounded-lg font-mono text-xs">
+                        <SelectTrigger
+                          aria-label="Pay from"
+                          className="h-11 rounded-xl font-mono text-xs"
+                        >
                           <SelectValue placeholder="Business wallet" />
                         </SelectTrigger>
-                        <SelectContent className="rounded-lg">
+                        <SelectContent className="rounded-xl">
                           {businessAccounts.map((a) => (
                             <SelectItem key={a.id} value={a.id}>
-                              Business wallet · {money(wallet.data.balances[a.id]?.amount ?? 0, a.currency)}
+                              Business Trade Vault ·{" "}
+                              {money(wallet.data.balances[a.id]?.amount ?? 0, a.currency)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -494,30 +693,60 @@ function SendPayment() {
 
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-1.5">
-                        <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
-                          Amount {source ? `(${source.currency})` : ""}
-                        </Label>
+                        <div className="flex items-center justify-between">
+                          <Label className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">
+                            Amount {source ? `(${source.currency})` : ""}
+                          </Label>
+                          {source ? (
+                            <span className="font-mono text-[10px] text-muted-foreground">
+                              Avail: {money(balance, source.currency)}
+                            </span>
+                          ) : null}
+                        </div>
                         <Input
                           value={amount}
                           onChange={(e) => setAmount(e.target.value)}
                           inputMode="decimal"
                           placeholder="0.00"
-                          className="rounded-lg font-mono"
+                          className="h-11 rounded-xl font-mono text-base font-bold"
                         />
+                        {/* Quick Balance Allocation Chips */}
+                        {balance > 0 ? (
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {[
+                              { label: "25%", frac: 0.25 },
+                              { label: "50%", frac: 0.5 },
+                              { label: "75%", frac: 0.75 },
+                              { label: "Max", frac: 1 },
+                            ].map((preset) => (
+                              <button
+                                key={preset.label}
+                                type="button"
+                                onClick={() =>
+                                  setAmount(String(Math.floor(balance * preset.frac)))
+                                }
+                                className="rounded-lg border border-border bg-muted/40 px-2.5 py-1 font-mono text-[10px] font-semibold text-muted-foreground transition hover:border-[#79b200] hover:bg-[#c2f74d]/25 hover:text-foreground"
+                              >
+                                {preset.label}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
+
                       <div className="space-y-1.5">
-                        <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
-                          Pay an invoice (optional)
+                        <Label className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">
+                          Link Trade Invoice (Optional)
                         </Label>
                         <Select value={invoiceNumber || "none"} onValueChange={pickInvoice}>
                           <SelectTrigger
                             aria-label="Pay an invoice"
-                            className="rounded-lg font-mono text-xs"
+                            className="h-11 rounded-xl font-mono text-xs"
                           >
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent className="rounded-lg">
-                            <SelectItem value="none">No invoice</SelectItem>
+                          <SelectContent className="rounded-xl">
+                            <SelectItem value="none">No linked invoice</SelectItem>
                             {unpaidInvoices.map((i) => (
                               <SelectItem key={i.id} value={i.number}>
                                 {i.number} · {money(invoiceTotal(i), i.currency)}
@@ -525,67 +754,112 @@ function SendPayment() {
                             ))}
                           </SelectContent>
                         </Select>
+                        <p className="text-[11px] text-muted-foreground">
+                          Linking an invoice marks it settled on the ledger and boosts your
+                          Invoice-Discipline trust factor.
+                        </p>
                       </div>
                     </div>
 
+                    {/* Live Conversion Preview Strip inside Step 2 */}
                     {mode === "workflow" && amountValid ? (
-                      <div className="rounded-xl border border-border bg-muted/40 p-3 text-xs">
+                      <div className="rounded-2xl border border-[#79b200]/40 bg-[#f6fce8] p-4 text-xs text-[#151515] dark:bg-[#1b2410] dark:text-foreground">
                         {quote.isFetching && !q ? (
-                          <span className="text-muted-foreground">Fetching live rate…</span>
+                          <span className="font-mono text-muted-foreground">
+                            Locking live corridor exchange rate…
+                          </span>
                         ) : q ? (
-                          <>
-                            <span className="text-muted-foreground">Supplier receives ≈ </span>
-                            <span className="font-mono font-medium">
-                              {money(fromMinor(q.deliver_amount_minor), q.to_currency)}
-                            </span>
-                            <span className="text-muted-foreground">
-                              {" "}
-                              · rate 1 {q.from_currency} = {q.inverse_rate.toPrecision(5)} {q.to_currency}
-                            </span>
-                          </>
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <div className="font-mono text-[10px] font-bold uppercase tracking-wider text-[#4d7500]">
+                                Firm Corridor Quote Locked
+                              </div>
+                              <div className="mt-1 text-sm font-bold">
+                                Supplier receives{" "}
+                                <span className="font-mono text-base underline decoration-[#79b200]">
+                                  {money(fromMinor(q.deliver_amount_minor), q.to_currency)}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-right font-mono text-[11px]">
+                              <div>
+                                1 {q.from_currency} = {q.inverse_rate.toPrecision(5)}{" "}
+                                {q.to_currency}
+                              </div>
+                              <div className="text-muted-foreground">
+                                Fee: {money(fromMinor(q.fee_minor), q.from_currency)} (
+                                {(corridor!.fees_bps / 100).toFixed(2)}%)
+                              </div>
+                            </div>
+                          </div>
                         ) : quote.isError ? (
                           <span className="text-destructive">{describeError(quote.error)}</span>
                         ) : null}
                       </div>
                     ) : mode === "domestic" && amountValid ? (
-                      <p className="text-xs text-muted-foreground">
-                        Same currency on both sides — no conversion and no fee. This settles
-                        instantly on the ledger.
-                      </p>
+                      <div className="rounded-2xl border border-border bg-muted/30 p-4 text-xs">
+                        <span className="font-mono font-semibold text-foreground">
+                          Instant Domestic Book Settlement:{" "}
+                        </span>
+                        <span className="text-muted-foreground">
+                          Both vaults are denominated in {source?.currency}. Zero FX conversion and
+                          zero protocol fee.
+                        </span>
+                      </div>
                     ) : null}
 
-                    <div className="flex gap-2">
+                    {problem ? (
+                      <div
+                        role="status"
+                        className="rounded-xl border border-destructive/40 bg-destructive/5 px-3.5 py-2.5 font-mono text-xs text-destructive"
+                      >
+                        {problem}
+                      </div>
+                    ) : null}
+
+                    <div className="flex gap-2.5">
                       <Button
                         variant="outline"
-                        className="rounded-lg font-mono text-xs uppercase"
+                        className="h-11 rounded-xl px-5 font-mono text-xs uppercase"
                         onClick={() => setStep(1)}
                       >
                         Back
                       </Button>
                       <Button
-                        className="flex-1 rounded-lg font-mono text-xs uppercase"
+                        className="h-11 flex-1 rounded-xl bg-[#151515] font-mono text-xs font-bold uppercase tracking-wider text-[#c2f74d] hover:bg-[#151515]/90"
                         disabled={!!problem}
                         onClick={() => setStep(3)}
                       >
-                        Continue
+                        Review Settlement Ticket <ArrowRight className="ml-1.5 size-4" />
                       </Button>
                     </div>
                   </div>
                 ) : null}
 
+                {/* STEP 3: REVIEW & DISPATCH */}
                 {step === 3 ? (
-                  <div className="space-y-4">
-                    <RecipientSummary recipient={recipient} dest={dest} countryForCurrency={countryForCurrency} onEdit={() => setStep(1)} />
+                  <div className="space-y-5">
+                    <RecipientSummary
+                      recipient={recipient}
+                      dest={dest}
+                      countryForCurrency={countryForCurrency}
+                      onEdit={() => setStep(1)}
+                    />
 
-                    <div className="rounded-xl border border-border p-4 text-sm">
+                    {/* Principal & Invoice Summary */}
+                    <div className="rounded-2xl border border-border bg-muted/20 p-4 text-sm">
                       <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Amount</span>
+                        <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                          Principal Amount
+                        </span>
                         <div className="flex items-center gap-2">
-                          <span className="font-mono">{source ? money(value, source.currency) : "—"}</span>
+                          <span className="font-mono text-base font-bold">
+                            {source ? money(value, source.currency) : "—"}
+                          </span>
                           <button
                             type="button"
                             onClick={() => setStep(2)}
-                            className="text-muted-foreground hover:text-foreground"
+                            className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
                             aria-label="Edit amount"
                           >
                             <Pencil className="size-3.5" aria-hidden="true" />
@@ -593,65 +867,68 @@ function SendPayment() {
                         </div>
                       </div>
                       {invoiceNumber ? (
-                        <div className="mt-2 flex items-center justify-between">
-                          <span className="text-muted-foreground">Invoice</span>
-                          <span className="font-mono">{invoiceNumber}</span>
+                        <div className="mt-2.5 flex items-center justify-between border-t border-border/60 pt-2.5">
+                          <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                            Linked Invoice
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 rounded-md bg-[#c2f74d]/35 px-2 py-0.5 font-mono text-xs font-semibold">
+                            <FileText className="size-3" /> {invoiceNumber}
+                          </span>
                         </div>
                       ) : null}
                     </div>
 
-                    {/* The real payment method — VUKA settles domestic transfers straight from the wallet
-                        balance, and collects cross-border payments only via the payer's own mobile money
-                        number. There is no card or bank-transfer rail to choose, so this reflects that
-                        rather than offering a menu that would silently do nothing. */}
-                    <div className="space-y-1.5">
-                      <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
-                        Payment method
+                    {/* Payment Collection Rail */}
+                    <div className="space-y-2">
+                      <Label className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">
+                        Settlement Collection Rail
                       </Label>
                       {mode === "domestic" ? (
-                        <div className="flex items-center gap-3 rounded-xl border border-primary bg-primary/5 p-3">
-                          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                            <Wallet className="size-4" aria-hidden="true" />
+                        <div className="flex items-center gap-3.5 rounded-2xl border border-[#79b200]/50 bg-[#f6fce8] p-4 text-[#151515] dark:bg-[#1b2410] dark:text-foreground">
+                          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#151515] text-[#c2f74d]">
+                            <Wallet className="size-5" aria-hidden="true" />
                           </span>
                           <div className="min-w-0 flex-1">
-                            <div className="text-sm font-medium">VUKA wallet balance</div>
-                            <p className="text-[11px] text-muted-foreground">
-                              Instant · no conversion, no fee
+                            <div className="text-sm font-bold">VUKA Business Vault Balance</div>
+                            <p className="text-xs text-muted-foreground">
+                              Instant double-entry book settlement · zero FX spread, zero fee
                             </p>
                           </div>
-                          <span className="flex size-4 shrink-0 items-center justify-center rounded-full border-2 border-primary bg-primary">
-                            <Check className="size-2.5 text-primary-foreground" aria-hidden="true" />
+                          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#151515] text-[#c2f74d]">
+                            <Check className="size-3" aria-hidden="true" />
                           </span>
                         </div>
                       ) : (
-                        <div className="rounded-xl border border-primary bg-primary/5 p-3">
-                          <div className="flex items-center gap-3">
-                            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                              <Smartphone className="size-4" aria-hidden="true" />
+                        <div className="rounded-2xl border border-[#79b200]/50 bg-[#f6fce8] p-4 text-[#151515] dark:bg-[#1b2410] dark:text-foreground">
+                          <div className="flex items-center gap-3.5">
+                            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#151515] text-[#c2f74d]">
+                              <Smartphone className="size-5" aria-hidden="true" />
                             </span>
                             <div className="min-w-0 flex-1">
-                              <div className="text-sm font-medium">Mobile money</div>
-                              <p className="text-[11px] text-muted-foreground">
-                                Only collection method available for cross-border payments
+                              <div className="text-sm font-bold">
+                                Mobile Money Collection → Ledger → Supplier Payout
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                Authorized push collection from your registered mobile money account
                               </p>
                             </div>
-                            <span className="flex size-4 shrink-0 items-center justify-center rounded-full border-2 border-primary bg-primary">
-                              <Check className="size-2.5 text-primary-foreground" aria-hidden="true" />
+                            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#151515] text-[#c2f74d]">
+                              <Check className="size-3" aria-hidden="true" />
                             </span>
                           </div>
-                          <div className="mt-3 space-y-1.5">
+                          <div className="mt-4 space-y-1.5 border-t border-black/10 pt-3 dark:border-white/10">
                             <Label
                               htmlFor="payer-phone"
-                              className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground"
+                              className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em]"
                             >
-                              Your mobile money number (to be charged)
+                              Your Mobile Money Number (Collection MSISDN)
                             </Label>
                             <Input
                               id="payer-phone"
                               value={payerPhone}
                               onChange={(e) => setPayerPhone(e.target.value)}
                               inputMode="tel"
-                              className="rounded-lg font-mono"
+                              className="h-10 rounded-xl bg-white font-mono dark:bg-background"
                             />
                           </div>
                         </div>
@@ -659,15 +936,15 @@ function SendPayment() {
                     </div>
 
                     {needsAuth ? (
-                      <div className="space-y-1.5 rounded-xl border-2 border-foreground p-3">
-                        <Label className="font-mono text-[10px] uppercase tracking-[0.16em]">
-                          Provider authorization reference
+                      <div className="space-y-2 rounded-2xl border-2 border-[#151515] bg-muted/30 p-4">
+                        <Label className="font-mono text-[10px] font-bold uppercase tracking-[0.16em]">
+                          Provider Authorization Reference
                         </Label>
                         <Input
                           value={authRef}
                           onChange={(e) => setAuthRef(e.target.value)}
                           placeholder="Reference from your MTN / M-Pesa prompt"
-                          className="rounded-lg font-mono"
+                          className="h-10 rounded-xl font-mono"
                         />
                         <p className="text-[11px] text-muted-foreground">
                           VUKA never collects or stores your mobile-money PIN. Complete the
@@ -676,46 +953,22 @@ function SendPayment() {
                       </div>
                     ) : null}
 
-                    <dl className="space-y-2 rounded-xl border border-border p-4 font-mono text-xs">
-                      {mode === "workflow" && q ? (
-                        <>
-                          <Line k="You send" v={money(fromMinor(q.source_amount_minor), q.from_currency)} />
-                          <Line
-                            k={`Fee (${corridor!.fees_bps / 100}%)`}
-                            v={`−${money(fromMinor(q.fee_minor), q.from_currency)}`}
-                          />
-                        </>
-                      ) : (
-                        <Line k="Fee" v="None — same-currency transfer" />
-                      )}
-                      <div className="flex justify-between border-t border-border pt-2 text-sm">
-                        <dt>{mode === "workflow" ? "Recipient receives" : "Total"}</dt>
-                        <dd className="tabular-nums">
-                          {mode === "workflow" && q
-                            ? money(fromMinor(q.deliver_amount_minor), q.to_currency)
-                            : source
-                              ? money(value, source.currency)
-                              : "—"}
-                        </dd>
-                      </div>
-                    </dl>
-
                     {problem ? (
-                      <p role="status" className="text-xs text-muted-foreground">
+                      <p role="status" className="font-mono text-xs text-destructive">
                         {problem}
                       </p>
                     ) : null}
 
-                    <div className="flex gap-2">
+                    <div className="flex gap-2.5">
                       <Button
                         variant="outline"
-                        className="rounded-lg font-mono text-xs uppercase"
+                        className="h-11 rounded-xl px-5 font-mono text-xs uppercase"
                         onClick={() => setStep(2)}
                       >
                         Back
                       </Button>
                       <Button
-                        className="flex-1 rounded-lg font-mono text-xs uppercase"
+                        className="h-11 flex-1 rounded-xl bg-[#151515] font-mono text-xs font-bold uppercase tracking-wider text-[#c2f74d] hover:bg-[#151515]/90"
                         disabled={
                           !!problem ||
                           send.isPending ||
@@ -724,7 +977,8 @@ function SendPayment() {
                         }
                         onClick={() => send.mutate()}
                       >
-                        {send.isPending ? "Processing…" : "Confirm and send"}
+                        <Send className="mr-1.5 size-3.5" />
+                        {send.isPending ? "Dispatching Settlement…" : "Confirm & Dispatch Payment"}
                       </Button>
                     </div>
                   </div>
@@ -733,54 +987,170 @@ function SendPayment() {
             )}
           </Panel>
 
-          <div className="space-y-3">
-            <Panel
-              title="Quote"
-              meta={corridor ? <Chip>{corridor.id}</Chip> : <Chip>Same currency</Chip>}
-            >
-              {!corridor ? (
-                <p className="text-xs text-muted-foreground">
-                  {source && dest
-                    ? "Both wallets use the same currency, so no FX conversion or corridor fee applies."
-                    : "Choose a recipient to see pricing."}
-                </p>
-              ) : quote.isFetching && !q ? (
-                <Loading label="Fetching quote" />
-              ) : quote.isError ? (
-                <ErrorState error={quote.error} onRetry={() => void quote.refetch()} />
-              ) : q ? (
-                <dl className="space-y-2 font-mono text-xs">
-                  <Line k="You send" v={money(fromMinor(q.source_amount_minor), q.from_currency)} />
-                  <Line
-                    k={`Fee (${corridor!.fees_bps / 100}%)`}
-                    v={`−${money(fromMinor(q.fee_minor), q.from_currency)}`}
-                  />
-                  <Line
-                    k="Rate"
-                    v={`1 ${q.from_currency} = ${q.inverse_rate.toPrecision(5)} ${q.to_currency}`}
-                  />
-                  <div className="flex justify-between border-t border-border pt-2 text-sm">
-                    <dt>Recipient receives</dt>
-                    <dd className="tabular-nums">
-                      {money(fromMinor(q.deliver_amount_minor), q.to_currency)}
-                    </dd>
+          {/* Right Column: Live Dark-Ink Settlement Ticket + Recent Workflows */}
+          <div className="space-y-4">
+            <section className="relative overflow-hidden rounded-3xl border border-[#151515] bg-[#151515] p-6 text-white shadow-[0_24px_60px_-24px_rgba(0,0,0,0.45)]">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -top-20 -right-20 size-56 rounded-full opacity-20 blur-3xl"
+                style={{ background: "radial-gradient(circle, #c2f74d 0%, transparent 70%)" }}
+              />
+
+              <div className="relative z-10">
+                <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                  <div>
+                    <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#c2f74d]">
+                      Live Settlement Ticket
+                    </div>
+                    <div className="mt-0.5 font-mono text-xs text-white/70">
+                      {corridor
+                        ? `Corridor ${corridor.id}`
+                        : mode === "domestic"
+                          ? "Same-Currency Book Transfer"
+                          : "Awaiting Route Selection"}
+                    </div>
                   </div>
-                  <p className="pt-1 text-[11px] text-muted-foreground">
-                    Quote {truncMid(q.id, 10, 8)} · valid until{" "}
-                    {new Date(q.expires_at).toLocaleString()}
-                    {quote.data?.execution === "local_synthetic" ? " · sandbox execution" : ""}
-                  </p>
-                </dl>
-              ) : (
-                <p className="text-xs text-muted-foreground">Enter an amount to see a live quote.</p>
-              )}
-            </Panel>
+                  <span className="rounded-full border border-white/15 bg-white/10 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase text-white">
+                    {corridor ? `${(corridor.fees_bps / 100).toFixed(2)}% Fee` : "0.00% Fee"}
+                  </span>
+                </div>
+
+                {/* 3-Node Visual Route Diagram */}
+                <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-3.5">
+                  <div>
+                    <div className="font-mono text-[9px] uppercase tracking-wider text-white/45">
+                      Origin Vault
+                    </div>
+                    <div className="mt-1 flex items-center gap-1.5 font-mono text-xs font-bold">
+                      {sourceCountry ? (
+                        <Flag code={sourceCountry} className="w-4 rounded-[2px]" />
+                      ) : null}
+                      <span>{source?.currency ?? "—"}</span>
+                    </div>
+                    <div className="mt-0.5 truncate text-[10px] text-white/55">
+                      {trader.full_name}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-center px-2">
+                    <span className="rounded-full bg-[#c2f74d]/20 px-2 py-0.5 font-mono text-[9px] font-semibold text-[#c2f74d]">
+                      {mode === "domestic" ? "LEDGER" : "3-HOP FX"}
+                    </span>
+                    <ArrowRight className="mt-1 size-4 text-[#c2f74d]" />
+                  </div>
+
+                  <div className="text-right">
+                    <div className="font-mono text-[9px] uppercase tracking-wider text-white/45">
+                      Target Vault
+                    </div>
+                    <div className="mt-1 flex items-center justify-end gap-1.5 font-mono text-xs font-bold">
+                      {destCountry ? (
+                        <Flag code={destCountry} className="w-4 rounded-[2px]" />
+                      ) : null}
+                      <span>{dest?.currency ?? "Select"}</span>
+                    </div>
+                    <div className="mt-0.5 truncate text-[10px] text-white/55">
+                      {recipient?.user.full_name ?? "Unselected"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Live Quote Details */}
+                <div className="mt-4">
+                  {!corridor ? (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 font-mono text-xs text-white/70">
+                      {source && dest ? (
+                        <div className="space-y-2">
+                          <TicketRow
+                            k="Principal"
+                            v={amountValid ? money(value, source.currency) : "0.00"}
+                          />
+                          <TicketRow k="Protocol Fee" v="0.00 (Same currency)" />
+                          <div className="flex items-baseline justify-between border-t border-white/10 pt-2.5 text-sm">
+                            <span className="text-white/70">Supplier Receives</span>
+                            <span className="font-bold text-[#c2f74d]">
+                              {amountValid ? money(value, source.currency) : "—"}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs leading-relaxed text-white/60">
+                          Verify a recipient in Step 01 and enter an amount in Step 02 to stream a
+                          firm corridor quote from the settlement engine.
+                        </p>
+                      )}
+                    </div>
+                  ) : quote.isFetching && !q ? (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center font-mono text-xs text-[#c2f74d]">
+                      Streaming live corridor quote…
+                    </div>
+                  ) : quote.isError ? (
+                    <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-xs text-destructive">
+                      {describeError(quote.error)}
+                    </div>
+                  ) : q ? (
+                    <dl className="space-y-2.5 rounded-2xl border border-white/10 bg-white/[0.03] p-4 font-mono text-xs">
+                      <TicketRow
+                        k="You Send"
+                        v={money(fromMinor(q.source_amount_minor), q.from_currency)}
+                      />
+                      <TicketRow
+                        k={`Corridor Fee (${(corridor.fees_bps / 100).toFixed(2)}%)`}
+                        v={`−${money(fromMinor(q.fee_minor), q.from_currency)}`}
+                      />
+                      <TicketRow
+                        k="Locked FX Rate"
+                        v={`1 ${q.from_currency} = ${q.inverse_rate.toPrecision(5)} ${q.to_currency}`}
+                      />
+                      {invoiceNumber ? <TicketRow k="Linked Invoice" v={invoiceNumber} /> : null}
+                      <div className="flex items-baseline justify-between border-t border-white/15 pt-3 text-sm">
+                        <dt className="font-sans text-xs font-semibold text-white/80">
+                          Supplier Receives Net
+                        </dt>
+                        <dd className="font-mono text-lg font-bold tabular-nums text-[#c2f74d]">
+                          {money(fromMinor(q.deliver_amount_minor), q.to_currency)}
+                        </dd>
+                      </div>
+                      <p className="border-t border-white/10 pt-2.5 text-[10px] leading-relaxed text-white/50">
+                        Quote {truncMid(q.id, 10, 8)} · Valid until{" "}
+                        {new Date(q.expires_at).toLocaleTimeString()}
+                        {quote.data?.execution === "local_synthetic"
+                          ? " · Sandbox synthetic rail"
+                          : ""}
+                      </p>
+                    </dl>
+                  ) : (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 font-mono text-xs text-white/60">
+                      Enter a payment amount in {source?.currency} to calculate the live FX
+                      conversion and corridor fee.
+                    </div>
+                  )}
+                </div>
+
+                {/* Idempotency & Security Footer */}
+                <div className="mt-4 flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 font-mono text-[10px] text-white/55">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Sparkles className="size-3 text-[#c2f74d]" /> Idempotency Key
+                  </span>
+                  <span>{truncMid(keyRef.current, 8, 6)}</span>
+                </div>
+              </div>
+            </section>
 
             <RecentPayments ids={recent} onOpen={setActiveWf} />
           </div>
         </div>
       )}
-    </>
+    </div>
+  );
+}
+
+function TicketRow({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <dt className="text-white/55">{k}</dt>
+      <dd className="font-semibold tabular-nums text-white">{v}</dd>
+    </div>
   );
 }
 
@@ -798,26 +1168,26 @@ function RecipientSummary({
   if (!recipient) return null;
   const cc = dest ? countryForCurrency(dest.currency) : undefined;
   return (
-    <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-muted/40 p-3">
+    <div className="flex items-center justify-between gap-2 rounded-2xl border border-[#79b200]/45 bg-[#f5fbe6] p-3.5 text-[#151515] dark:bg-[#1b2410] dark:text-foreground">
       <div className="flex items-center gap-3">
-        <span className="flex size-9 items-center justify-center rounded-full bg-primary/15 font-mono text-xs font-semibold text-primary">
+        <span className="flex size-10 items-center justify-center rounded-xl bg-[#151515] font-mono text-xs font-bold text-[#c2f74d]">
           {recipient.user.full_name.charAt(0).toUpperCase()}
         </span>
         <div>
-          <div className="text-sm font-medium">{recipient.user.full_name}</div>
-          <div className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+          <div className="text-sm font-bold">{recipient.user.full_name}</div>
+          <div className="flex items-center gap-1.5 font-mono text-[11px] opacity-75">
             {cc ? <Flag code={cc} className="w-3.5 rounded-[2px]" /> : null}
             {recipient.user.phone_number}
-            {dest ? ` · ${dest.currency}` : ""}
+            {dest ? ` · ${dest.currency} Vault` : ""}
           </div>
         </div>
       </div>
       <button
         type="button"
         onClick={onEdit}
-        className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-1 rounded-lg border border-black/15 bg-white/80 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase hover:bg-white dark:border-white/15 dark:bg-black/30"
       >
-        <Pencil className="size-3" aria-hidden="true" /> Edit
+        <Pencil className="size-3" aria-hidden="true" /> Change
       </button>
     </div>
   );
@@ -844,18 +1214,28 @@ function ProcessingPanel({
 
   return (
     <>
-      <Panel title="Payment status" meta={<Chip tone="live">Live</Chip>}>
+      <Panel
+        title="Live Cross-Border Settlement Telemetry"
+        meta={
+          <Chip tone="live">
+            <Zap className="size-3" /> Real-Time State Machine
+          </Chip>
+        }
+      >
         <WorkflowTracker id={id} defaultPhone={payerPhone} />
       </Panel>
       {settled ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
-          <p className="text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-5">
+          <p className="text-sm font-medium text-muted-foreground">
             {completed
-              ? "This payment has settled."
-              : "This payment has finished for now — see the status above for what to do next."}
+              ? "This cross-border payment has settled on the double-entry ledger and supplier payout rail."
+              : "This payment workflow has paused — inspect the step status above for recovery options."}
           </p>
-          <Button variant="outline" className="rounded-lg font-mono text-xs uppercase" onClick={onReset}>
-            <RotateCcw className="size-3.5" aria-hidden="true" /> Send another payment
+          <Button
+            className="rounded-xl bg-[#151515] font-mono text-xs font-bold uppercase text-[#c2f74d] hover:bg-[#151515]/90"
+            onClick={onReset}
+          >
+            <RotateCcw className="mr-1.5 size-3.5" aria-hidden="true" /> Send another payment
           </Button>
         </div>
       ) : null}
@@ -876,25 +1256,25 @@ function DomesticSuccessPanel({
 }) {
   const [copied, setCopied] = useState(false);
   return (
-    <Panel title="Payment status" meta={<Chip tone="invert">Settled</Chip>}>
-      <div className="flex flex-col items-center py-4 text-center">
-        <span className="flex size-14 items-center justify-center rounded-full bg-success/15 text-success">
-          <Check className="size-7" aria-hidden="true" />
+    <Panel title="Instant Domestic Ledger Settlement" meta={<Chip tone="live">Settled</Chip>}>
+      <div className="flex flex-col items-center py-6 text-center">
+        <span className="flex size-16 items-center justify-center rounded-2xl bg-[#151515] text-[#c2f74d] shadow-lg">
+          <Check className="size-8" aria-hidden="true" />
         </span>
-        <h3 className="mt-4 text-base font-semibold">Payment completed</h3>
+        <h3 className="mt-4 text-xl font-bold">Payment Settled on Ledger</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          {money(transfer.amount, transfer.currency)} sent to {recipientName}.
+          {money(transfer.amount, transfer.currency)} transferred to {recipientName}.
         </p>
-        <dl className="mt-6 w-full max-w-sm space-y-2 rounded-xl border border-border p-4 text-left font-mono text-xs">
+        <dl className="mt-6 w-full max-w-md space-y-2.5 rounded-2xl border border-border bg-muted/20 p-5 text-left font-mono text-xs">
           <Line k="Amount" v={money(transfer.amount, transfer.currency)} />
-          <Line k="Fee" v="None" />
-          <div className="flex justify-between border-t border-border pt-2 text-sm">
-            <dt>Total</dt>
+          <Line k="Protocol Fee" v="0.00 (Same-currency book transfer)" />
+          <div className="flex justify-between border-t border-border pt-2.5 text-sm font-bold">
+            <dt>Total Settled</dt>
             <dd className="tabular-nums">{money(transfer.amount, transfer.currency)}</dd>
           </div>
-          <div className="flex items-center justify-between gap-2 border-t border-border pt-2">
-            <dt className="text-muted-foreground">Transaction ID</dt>
-            <dd className="flex items-center gap-1.5">
+          <div className="flex items-center justify-between gap-2 border-t border-border pt-2.5">
+            <dt className="text-muted-foreground">Ledger Transfer ID</dt>
+            <dd className="flex items-center gap-1.5 font-semibold">
               <span>{shortId(transfer.id, 14)}</span>
               <button
                 type="button"
@@ -906,14 +1286,21 @@ function DomesticSuccessPanel({
                 className="text-muted-foreground hover:text-foreground"
                 aria-label="Copy transaction ID"
               >
-                {copied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}
+                {copied ? (
+                  <Check className="size-3.5" aria-hidden="true" />
+                ) : (
+                  <Copy className="size-3.5" aria-hidden="true" />
+                )}
               </button>
             </dd>
           </div>
           <p className="pt-1 text-[11px] text-muted-foreground">{when(transfer.created_at)}</p>
         </dl>
-        <Button className="mt-6 rounded-lg font-mono text-xs uppercase" onClick={onReset}>
-          <RotateCcw className="size-3.5" aria-hidden="true" /> Send another payment
+        <Button
+          className="mt-6 h-11 rounded-xl bg-[#151515] px-6 font-mono text-xs font-bold uppercase text-[#c2f74d] hover:bg-[#151515]/90"
+          onClick={onReset}
+        >
+          <RotateCcw className="mr-1.5 size-3.5" aria-hidden="true" /> Send another payment
         </Button>
       </div>
     </Panel>
@@ -937,10 +1324,11 @@ function RecentPayments({ ids, onOpen }: { ids: string[]; onOpen: (id: string) =
     })),
   });
   return (
-    <Panel title="Recent cross-border payments">
+    <Panel title="Recent Cross-Border Workflows" meta={<Chip>{ids.length} tracked</Chip>}>
       {ids.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          Payments you start from this browser appear here.
+          Cross-border workflows you dispatch from this browser appear here for instant live
+          tracking.
         </p>
       ) : (
         <ul className="divide-y divide-border/60">
@@ -951,18 +1339,20 @@ function RecentPayments({ ids, onOpen }: { ids: string[]; onOpen: (id: string) =
                 <button
                   type="button"
                   onClick={() => onOpen(id)}
-                  className="flex w-full items-center justify-between gap-3 py-2.5 text-left hover:bg-accent/40"
+                  className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-muted/40"
                 >
                   <span>
-                    <span className="block font-mono text-xs">{shortId(id, 12)}</span>
+                    <span className="block font-mono text-xs font-semibold">
+                      {shortId(id, 14)}
+                    </span>
                     {w ? (
-                      <span className="text-[11px] text-muted-foreground">
-                        {money(w.amount, w.currency_from)} → {w.currency_to}
+                      <span className="font-mono text-[11px] text-muted-foreground">
+                        {money(w.amount, w.currency_from)} → {w.currency_to} ({w.corridor_id})
                       </span>
                     ) : null}
                   </span>
                   {w ? (
-                    <Chip tone={stateTone(w.state)}>{w.state.replace("_", " ")}</Chip>
+                    <Chip tone={stateTone(w.state)}>{w.state.replaceAll("_", " ")}</Chip>
                   ) : (
                     <Chip>…</Chip>
                   )}

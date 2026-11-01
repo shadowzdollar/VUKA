@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { PlusCircle, Send, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import escrowGlobe from "@/assets/escrow-globe.png";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -100,8 +102,9 @@ function Settlements() {
         actions={
           <Button
             onClick={() => setCreateOpen(true)}
-            className="rounded-none font-mono text-xs uppercase"
+            className="gap-1.5 rounded-lg bg-[#151515] font-mono text-xs uppercase text-white hover:bg-[#151515]/90"
           >
+            <PlusCircle className="size-3.5 text-[#c2f74d]" aria-hidden="true" />
             New command
           </Button>
         }
@@ -110,11 +113,54 @@ function Settlements() {
       <QueryBoundary query={list}>
         {({ commands, policy }) => (
           <>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {/* Executive Controlled Settlement Banner */}
+            <div className="relative overflow-hidden rounded-2xl border border-[#151515] bg-[#151515] p-6 text-white shadow-[0_24px_60px_-25px_rgba(21,21,21,0.65)] sm:p-7">
+              <img
+                src={escrowGlobe}
+                alt=""
+                aria-hidden="true"
+                className="pointer-events-none absolute -right-12 -bottom-16 w-[300px] opacity-[0.14] mix-blend-screen select-none"
+              />
+              <div className="relative z-10 flex flex-wrap items-center justify-between gap-6">
+                <div>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-[#c2f74d]/30 bg-[#c2f74d]/10 px-3 py-1">
+                    <Send className="size-3.5 text-[#c2f74d]" aria-hidden="true" />
+                    <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[#c2f74d]">
+                      Multi-Approval Settlement Governance · Dry-Run Policy Guard
+                    </span>
+                  </div>
+                  <h2 className="mt-3 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                    Preflight-Gated Settlement Command Queue
+                  </h2>
+                  <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-white/65">
+                    Every command requires {policy.RequiredApprovals} distinct arbiter approval(s)
+                    and passes deterministic preflight checks before dry-run execution is recorded.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 rounded-xl border border-white/15 bg-black/40 px-4 py-3 font-mono text-xs">
+                  {policy.ExecutionEnabled ? (
+                    <ShieldAlert className="size-4 text-amber-400" aria-hidden="true" />
+                  ) : (
+                    <ShieldCheck className="size-4 text-[#c2f74d]" aria-hidden="true" />
+                  )}
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.16em] text-white/50">
+                      Execution Mode
+                    </div>
+                    <div className="font-bold text-white">
+                      {policy.ExecutionEnabled ? "Live Enabled" : "Dry-Run Enforced"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
               <Metric
                 label="Kill switch"
                 value={policy.GlobalKillSwitch ? "ACTIVE" : "off"}
                 sub="Deployment configuration"
+                accent={policy.GlobalKillSwitch ? "warn" : "lime"}
               />
               <Metric
                 label="Live execution"
@@ -134,7 +180,10 @@ function Settlements() {
             </div>
 
             {commands.length > 0 ? (
-              <Panel title="Commands by status">
+              <Panel
+                title="Commands by status"
+                subtitle="Lifecycle distribution across submitted settlement commands"
+              >
                 <LazyDonutChart
                   ariaLabel="Settlement commands by status"
                   data={Object.entries(
@@ -151,6 +200,7 @@ function Settlements() {
 
             <Panel
               title="Settlement commands"
+              subtitle="Run preflight checks, approve (arbiter), or execute dry-run settlement actions"
               meta={<Chip tone="live">{commands.length} commands</Chip>}
             >
               {commands.length === 0 ? (
@@ -159,15 +209,15 @@ function Settlements() {
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[980px] text-sm">
                     <thead>
-                      <tr className="border-b border-border text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                        <th className="py-2">Command</th>
-                        <th className="py-2">Action</th>
-                        <th className="py-2">Target</th>
-                        <th className="py-2 text-right">Amount</th>
-                        <th className="py-2">Requested</th>
-                        <th className="py-2">Approval</th>
-                        <th className="py-2 text-right">Status</th>
-                        <th className="py-2" />
+                      <tr className="border-b border-border bg-muted/20 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                        <th className="px-2.5 py-2.5">Command</th>
+                        <th className="px-2.5 py-2.5">Action</th>
+                        <th className="px-2.5 py-2.5">Target</th>
+                        <th className="px-2.5 py-2.5 text-right">Amount</th>
+                        <th className="px-2.5 py-2.5">Requested</th>
+                        <th className="px-2.5 py-2.5">Approval</th>
+                        <th className="px-2.5 py-2.5 text-right">Status</th>
+                        <th className="px-2.5 py-2.5" />
                       </tr>
                     </thead>
                     <tbody>
@@ -176,29 +226,34 @@ function Settlements() {
                           c.status,
                         );
                         return (
-                          <tr key={c.id} className="border-b border-border/60 last:border-0">
-                            <td className="py-2.5 font-mono text-xs">{shortId(c.id)}</td>
-                            <td className="py-2.5 font-mono text-xs">{c.action}</td>
-                            <td className="py-2.5 font-mono text-xs text-muted-foreground">
+                          <tr
+                            key={c.id}
+                            className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/20"
+                          >
+                            <td className="px-2.5 py-3 font-mono text-xs font-semibold">
+                              {shortId(c.id)}
+                            </td>
+                            <td className="px-2.5 py-3 font-mono text-xs uppercase">{c.action}</td>
+                            <td className="px-2.5 py-3 font-mono text-xs text-muted-foreground">
                               {c.target}
                             </td>
-                            <td className="py-2.5 text-right font-mono tabular-nums">
+                            <td className="px-2.5 py-3 text-right font-mono font-semibold tabular-nums">
                               {money(fromMinor(c.amount_minor), c.currency)}
                             </td>
-                            <td className="py-2.5 font-mono text-[11px] text-muted-foreground">
+                            <td className="px-2.5 py-3 font-mono text-[11px] text-muted-foreground">
                               {c.requested_by}
                               <br />
                               {when(c.created_at)}
                             </td>
-                            <td className="py-2.5">
+                            <td className="px-2.5 py-3">
                               <Chip tone={tone(c.approval_state)}>{c.approval_state}</Chip>
                             </td>
-                            <td className="py-2.5 text-right">
+                            <td className="px-2.5 py-3 text-right">
                               <Chip tone={tone(c.status)}>{c.status}</Chip>
                             </td>
-                            <td className="py-2.5 text-right">
+                            <td className="px-2.5 py-3 text-right">
                               {!closed ? (
-                                <div className="flex justify-end gap-1">
+                                <div className="flex justify-end gap-1.5">
                                   <Mini onClick={() => run.mutate({ kind: "preflight", cmd: c })}>
                                     Preflight
                                   </Mini>
@@ -236,6 +291,7 @@ function Settlements() {
 
       <Panel
         title="Supervised pilots"
+        subtitle="Bounded corridor pilot programmes with per-transaction and daily caps"
         meta={<Chip>{pilotList.data?.observationOnly ? "Observation only" : "—"}</Chip>}
       >
         <QueryBoundary
@@ -247,34 +303,39 @@ function Settlements() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[820px] text-sm">
                 <thead>
-                  <tr className="border-b border-border text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                    <th className="py-2">Pilot</th>
-                    <th className="py-2">Corridor</th>
-                    <th className="py-2">Scope</th>
-                    <th className="py-2 text-right">Limits (txn / day)</th>
-                    <th className="py-2">Window</th>
-                    <th className="py-2 text-right">Status</th>
-                    <th className="py-2" />
+                  <tr className="border-b border-border bg-muted/20 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                    <th className="px-2.5 py-2.5">Pilot</th>
+                    <th className="px-2.5 py-2.5">Corridor</th>
+                    <th className="px-2.5 py-2.5">Scope</th>
+                    <th className="px-2.5 py-2.5 text-right">Limits (txn / day)</th>
+                    <th className="px-2.5 py-2.5">Window</th>
+                    <th className="px-2.5 py-2.5 text-right">Status</th>
+                    <th className="px-2.5 py-2.5" />
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((p) => (
-                    <tr key={p.id} className="border-b border-border/60 last:border-0">
-                      <td className="py-2.5 font-mono text-xs">{shortId(p.id)}</td>
-                      <td className="py-2.5 font-mono text-xs">{p.corridor_id}</td>
-                      <td className="py-2.5 text-xs text-muted-foreground">{p.scope}</td>
-                      <td className="py-2.5 text-right font-mono text-xs tabular-nums">
+                    <tr
+                      key={p.id}
+                      className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/20"
+                    >
+                      <td className="px-2.5 py-3 font-mono text-xs font-semibold">
+                        {shortId(p.id)}
+                      </td>
+                      <td className="px-2.5 py-3 font-mono text-xs">{p.corridor_id}</td>
+                      <td className="px-2.5 py-3 text-xs text-muted-foreground">{p.scope}</td>
+                      <td className="px-2.5 py-3 text-right font-mono text-xs tabular-nums">
                         {money(fromMinor(p.transaction_limit_minor))} /{" "}
                         {money(fromMinor(p.daily_limit_minor))}
                       </td>
-                      <td className="py-2.5 font-mono text-[11px] text-muted-foreground">
+                      <td className="px-2.5 py-3 font-mono text-[11px] text-muted-foreground">
                         {when(p.start_at)} → {when(p.end_at)}
                       </td>
-                      <td className="py-2.5 text-right">
+                      <td className="px-2.5 py-3 text-right">
                         <Chip tone={tone(p.status)}>{p.status}</Chip>
                       </td>
-                      <td className="py-2.5 text-right">
-                        <div className="flex justify-end gap-1">
+                      <td className="px-2.5 py-3 text-right">
+                        <div className="flex justify-end gap-1.5">
                           {p.status === "active" ? (
                             <Mini onClick={() => pilotAction.mutate({ id: p.id, action: "pause" })}>
                               Pause
@@ -317,7 +378,7 @@ function Settlements() {
       <CreateDialog open={createOpen} onOpenChange={setCreateOpen} onDone={refresh} />
       <ApproveDialog cmd={approving} onClose={() => setApproving(null)} onDone={refresh} />
       <Dialog open={preflight !== null} onOpenChange={(o) => !o && setPreflight(null)}>
-        <DialogContent className="rounded-none sm:max-w-lg">
+        <DialogContent className="rounded-2xl sm:max-w-lg">
           {preflight ? (
             <>
               <DialogHeader>
@@ -330,11 +391,11 @@ function Settlements() {
                     : "One or more required checks failed."}
                 </DialogDescription>
               </DialogHeader>
-              <ul className="divide-y divide-border border border-border">
+              <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
                 {preflight.checks.map((c) => (
-                  <li key={c.name} className="flex items-start justify-between gap-3 px-3 py-2">
+                  <li key={c.name} className="flex items-start justify-between gap-3 px-3.5 py-2.5">
                     <div>
-                      <div className="font-mono text-xs">
+                      <div className="font-mono text-xs font-semibold">
                         {c.name}
                         {c.required ? "" : " (advisory)"}
                       </div>
@@ -357,7 +418,7 @@ function Mini({ onClick, children }: { onClick: () => void; children: ReactNode 
     <Button
       size="sm"
       variant="outline"
-      className="h-7 rounded-none px-2 font-mono text-[10px] uppercase"
+      className="h-7 rounded-lg px-2.5 font-mono text-[10px] uppercase"
       onClick={onClick}
     >
       {children}
@@ -430,7 +491,7 @@ function CreateDialog({
     currency.trim().length === 3;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-none sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
             New settlement command
@@ -443,10 +504,10 @@ function CreateDialog({
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Action">
             <Select value={action} onValueChange={setAction}>
-              <SelectTrigger aria-label="Action" className="rounded-none font-mono text-xs">
+              <SelectTrigger aria-label="Action" className="rounded-lg font-mono text-xs">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="rounded-none">
+              <SelectContent className="rounded-lg">
                 {ACTIONS.map((a) => (
                   <SelectItem key={a} value={a}>
                     {a}
@@ -460,10 +521,10 @@ function CreateDialog({
               value={provider || providers.data?.[0]?.config.id || ""}
               onValueChange={setProvider}
             >
-              <SelectTrigger aria-label="Provider" className="rounded-none font-mono text-xs">
+              <SelectTrigger aria-label="Provider" className="rounded-lg font-mono text-xs">
                 <SelectValue placeholder="Provider" />
               </SelectTrigger>
-              <SelectContent className="rounded-none">
+              <SelectContent className="rounded-lg">
                 {(providers.data ?? []).map((p) => (
                   <SelectItem key={p.config.id} value={p.config.id}>
                     {p.config.id}
@@ -474,7 +535,7 @@ function CreateDialog({
           </Field>
           <Field label="Target">
             <Input
-              className="rounded-none font-mono"
+              className="rounded-lg font-mono"
               value={target}
               onChange={(e) => setTarget(e.target.value)}
               placeholder="escrow / transfer reference"
@@ -482,14 +543,14 @@ function CreateDialog({
           </Field>
           <Field label="Corridor">
             <Input
-              className="rounded-none font-mono"
+              className="rounded-lg font-mono"
               value={corridor}
               onChange={(e) => setCorridor(e.target.value)}
             />
           </Field>
           <Field label="Amount">
             <Input
-              className="rounded-none font-mono"
+              className="rounded-lg font-mono"
               inputMode="decimal"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
@@ -497,7 +558,7 @@ function CreateDialog({
           </Field>
           <Field label="Currency">
             <Input
-              className="rounded-none font-mono"
+              className="rounded-lg font-mono"
               maxLength={3}
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
@@ -506,14 +567,14 @@ function CreateDialog({
         </div>
         <Field label="Reason">
           <Textarea
-            className="min-h-20 rounded-none"
+            className="min-h-20 rounded-lg"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
           />
         </Field>
         <DialogFooter>
           <Button
-            className="rounded-none font-mono text-xs uppercase"
+            className="rounded-lg bg-[#151515] font-mono text-xs uppercase text-white hover:bg-[#151515]/90"
             disabled={!ok || create.isPending}
             onClick={() => create.mutate()}
           >
@@ -548,7 +609,7 @@ function ApproveDialog({
   });
   return (
     <Dialog open={cmd !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="rounded-none sm:max-w-md">
+      <DialogContent className="rounded-2xl sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
             Approval
@@ -560,7 +621,7 @@ function ApproveDialog({
           </DialogDescription>
         </DialogHeader>
         <Textarea
-          className="min-h-20 rounded-none"
+          className="min-h-20 rounded-lg"
           placeholder="Reason for your decision…"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
@@ -568,14 +629,14 @@ function ApproveDialog({
         <DialogFooter className="gap-2">
           <Button
             variant="outline"
-            className="rounded-none font-mono text-xs uppercase"
+            className="rounded-lg font-mono text-xs uppercase"
             disabled={!reason.trim() || decide.isPending}
             onClick={() => decide.mutate("rejected")}
           >
             Reject
           </Button>
           <Button
-            className="rounded-none font-mono text-xs uppercase"
+            className="rounded-lg bg-[#151515] font-mono text-xs uppercase text-white hover:bg-[#151515]/90"
             disabled={!reason.trim() || decide.isPending}
             onClick={() => decide.mutate("approved")}
           >

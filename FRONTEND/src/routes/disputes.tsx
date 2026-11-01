@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { Gavel, Scale, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import escrowGlobe from "@/assets/escrow-globe.png";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -51,6 +53,7 @@ export const Route = createFileRoute("/disputes")({
 const isOpen = (d: Dispute) => !d.resolved_at && d.status.toLowerCase() !== "resolved";
 
 function Tribunal() {
+  const me = useOperator();
   const [scope, setScope] = useChainScope();
   const ready = scopeReady(scope);
   const [active, setActive] = useState<Dispute | null>(null);
@@ -66,18 +69,61 @@ function Tribunal() {
   return (
     <>
       <PageHeader
-        eyebrow="Arbitration"
+        eyebrow="Arbitration & Separation of Duties"
         title="Dispute Tribunal"
         description="Disputes are raised on-chain and freeze the escrow. Arbiters record review notes and a RELEASE / REFUND recommendation; an operator approves it before the outcome is executed by the contract."
       />
+
+      {/* Executive Dispute Tribunal Banner */}
+      <div className="relative overflow-hidden rounded-2xl border border-[#151515] bg-[#151515] p-6 text-white shadow-[0_24px_60px_-25px_rgba(21,21,21,0.65)] sm:p-7">
+        <img
+          src={escrowGlobe}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-12 -bottom-16 w-[300px] opacity-[0.14] mix-blend-screen select-none"
+        />
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-6">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#c2f74d]/30 bg-[#c2f74d]/10 px-3 py-1">
+              <Scale className="size-3.5 text-[#c2f74d]" aria-hidden="true" />
+              <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[#c2f74d]">
+                Two-Stage Arbitration Governance · {me.role.toUpperCase()} DESK
+              </span>
+            </div>
+            <h2 className="mt-3 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+              On-Chain Escrow Dispute Resolution
+            </h2>
+            <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-white/65">
+              Arbiters investigate claims and file written `RELEASE` or `REFUND` recommendations.
+              Operators countersign and approve decisions before any smart-contract settlement is
+              authorized.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 rounded-xl border border-white/15 bg-black/40 px-4 py-3 font-mono text-xs">
+            <Gavel className="size-4 text-[#c2f74d]" aria-hidden="true" />
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.16em] text-white/50">
+                Active Role
+              </div>
+              <div className="font-bold uppercase text-white">{me.role}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <ChainScopeBar scope={scope} onChange={setScope} />
 
       {!ready ? (
         <EmptyState>Enter the escrow contract address to load disputes.</EmptyState>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Metric label="Open disputes" value={open} sub="Awaiting a resolution" />
+          <div className="grid gap-3.5 sm:grid-cols-3">
+            <Metric
+              label="Open disputes"
+              value={open}
+              sub="Awaiting a resolution"
+              accent={open > 0 ? "warn" : "lime"}
+            />
             <Metric
               label="Resolved"
               value={(disputes.data?.length ?? 0) - open}
@@ -87,7 +133,10 @@ function Tribunal() {
           </div>
 
           {disputes.data && disputes.data.length > 0 ? (
-            <Panel title="Disputes by status">
+            <Panel
+              title="Disputes by status"
+              subtitle="Distribution of active vs resolved arbitration cases"
+            >
               <LazyDonutChart
                 ariaLabel="Disputes by status"
                 data={Object.entries(
@@ -102,7 +151,11 @@ function Tribunal() {
             </Panel>
           ) : null}
 
-          <Panel title="Arbitration queue" meta={<Chip tone="live">Live</Chip>}>
+          <Panel
+            title="Arbitration queue"
+            subtitle="Click any case row to inspect decisions, arbiter notes, and the append-only audit timeline"
+            meta={<Chip tone="live">Live</Chip>}
+          >
             <QueryBoundary
               query={disputes}
               disabledCodes={["reconciliation_disabled"]}
@@ -124,7 +177,9 @@ function Tribunal() {
                       sort: (d) => d.id,
                       text: (d) => d.id,
                       cell: (d) => (
-                        <span className="font-mono text-xs">{truncMid(d.id, 8, 4)}</span>
+                        <span className="font-mono text-xs font-semibold">
+                          {truncMid(d.id, 8, 4)}
+                        </span>
                       ),
                     },
                     {
@@ -245,7 +300,7 @@ function CaseDialog({ dispute, onClose }: { dispute: Dispute | null; onClose: ()
 
   return (
     <Dialog open={dispute !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-none sm:max-w-3xl">
+      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-2xl sm:max-w-3xl">
         {dispute ? (
           <>
             <DialogHeader>
@@ -256,7 +311,9 @@ function CaseDialog({ dispute, onClose }: { dispute: Dispute | null; onClose: ()
                 Raised {when(dispute.created_at)} · {dispute.status}
               </DialogDescription>
             </DialogHeader>
-            <p className="border border-border p-3 text-sm">{dispute.reason}</p>
+            <p className="rounded-xl border border-border bg-muted/20 p-3.5 text-sm">
+              {dispute.reason}
+            </p>
 
             <Section title="Decisions">
               <QueryBoundary
@@ -265,9 +322,9 @@ function CaseDialog({ dispute, onClose }: { dispute: Dispute | null; onClose: ()
                 empty="No recommendation yet."
               >
                 {(rows) => (
-                  <ul className="divide-y divide-border border border-border">
+                  <ul className="divide-y divide-border/70 overflow-hidden rounded-xl border border-border">
                     {rows.map((d) => (
-                      <li key={d.id} className="space-y-1 px-3 py-2.5">
+                      <li key={d.id} className="space-y-1.5 px-3.5 py-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="flex items-center gap-2">
                             <Chip tone="invert">{d.decision}</Chip>
@@ -283,7 +340,7 @@ function CaseDialog({ dispute, onClose }: { dispute: Dispute | null; onClose: ()
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-7 rounded-none font-mono text-[10px] uppercase"
+                                className="h-7 rounded-lg font-mono text-[10px] uppercase"
                                 disabled={
                                   approve.isPending ||
                                   d.approvals.some((a) => a.approver_email === me.email)
@@ -312,11 +369,11 @@ function CaseDialog({ dispute, onClose }: { dispute: Dispute | null; onClose: ()
                     empty="No notes yet."
                   >
                     {(rows) => (
-                      <ul className="divide-y divide-border border border-border">
+                      <ul className="divide-y divide-border/70 overflow-hidden rounded-xl border border-border">
                         {rows.map((r) => (
-                          <li key={r.id} className="px-3 py-2">
+                          <li key={r.id} className="px-3.5 py-2.5">
                             <p className="text-xs">{r.note}</p>
-                            <div className="font-mono text-[10px] text-muted-foreground">
+                            <div className="mt-1 font-mono text-[10px] text-muted-foreground">
                               {r.reviewer_email} · {when(r.created_at)}
                             </div>
                           </li>
@@ -329,11 +386,11 @@ function CaseDialog({ dispute, onClose }: { dispute: Dispute | null; onClose: ()
                       value={note}
                       onChange={(e) => setNote(e.target.value)}
                       placeholder="Add a review note…"
-                      className="min-h-16 rounded-none"
+                      className="min-h-16 rounded-lg"
                     />
                     <Button
                       variant="outline"
-                      className="rounded-none font-mono text-[10px] uppercase"
+                      className="rounded-lg font-mono text-[10px] uppercase"
                       disabled={!note.trim() || addNote.isPending}
                       onClick={() => addNote.mutate()}
                     >
@@ -344,15 +401,15 @@ function CaseDialog({ dispute, onClose }: { dispute: Dispute | null; onClose: ()
 
                 {isOpen(dispute) ? (
                   <Section title="Record recommendation">
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
                       <Select value={choice} onValueChange={(v) => setChoice(v as typeof choice)}>
                         <SelectTrigger
                           aria-label="Recommendation"
-                          className="w-48 rounded-none font-mono text-xs"
+                          className="w-52 rounded-lg font-mono text-xs"
                         >
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent className="rounded-none">
+                        <SelectContent className="rounded-lg">
                           <SelectItem value="RELEASE">Release to supplier</SelectItem>
                           <SelectItem value="REFUND">Refund to buyer</SelectItem>
                         </SelectContent>
@@ -361,10 +418,10 @@ function CaseDialog({ dispute, onClose }: { dispute: Dispute | null; onClose: ()
                         value={rationale}
                         onChange={(e) => setRationale(e.target.value)}
                         placeholder="Written rationale (required, permanently recorded)…"
-                        className="min-h-20 rounded-none"
+                        className="min-h-20 rounded-lg"
                       />
                       <Button
-                        className="rounded-none font-mono text-xs uppercase"
+                        className="rounded-lg bg-[#151515] font-mono text-xs uppercase text-white hover:bg-[#151515]/90"
                         disabled={rationale.trim().length < 12 || recommend.isPending}
                         onClick={() => recommend.mutate()}
                       >
@@ -375,7 +432,8 @@ function CaseDialog({ dispute, onClose }: { dispute: Dispute | null; onClose: ()
                 ) : null}
               </>
             ) : (
-              <p className="border border-dashed border-border p-3 text-xs text-muted-foreground">
+              <p className="flex items-center gap-2 rounded-xl border border-dashed border-border bg-muted/15 p-3.5 text-xs text-muted-foreground">
+                <ShieldCheck className="size-4 shrink-0 text-[#79b200]" aria-hidden="true" />
                 Review notes and recommendations are recorded by arbiters. As an operator you can
                 approve a recommendation above and export the audit trail.
               </p>
@@ -387,7 +445,7 @@ function CaseDialog({ dispute, onClose }: { dispute: Dispute | null; onClose: ()
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-7 rounded-none font-mono text-[10px] uppercase"
+                  className="h-7 rounded-lg font-mono text-[10px] uppercase"
                   onClick={() =>
                     void download(
                       `/api/disputes/${dispute.id}/export`,
@@ -405,16 +463,16 @@ function CaseDialog({ dispute, onClose }: { dispute: Dispute | null; onClose: ()
                 empty="No timeline entries."
               >
                 {(rows) => (
-                  <ul className="divide-y divide-border/60 border border-border">
+                  <ul className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border">
                     {rows.map((t) => (
-                      <li key={t.id} className="px-3 py-2">
+                      <li key={t.id} className="px-3.5 py-2.5">
                         <div className="flex justify-between gap-3">
-                          <span className="text-xs">{t.summary}</span>
+                          <span className="text-xs font-medium">{t.summary}</span>
                           <span className="font-mono text-[10px] text-muted-foreground">
                             {when(t.created_at)}
                           </span>
                         </div>
-                        <div className="font-mono text-[10px] text-muted-foreground">
+                        <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
                           {t.kind}
                           {t.actor ? ` · ${t.actor}` : ""}
                         </div>
@@ -443,7 +501,7 @@ function Section({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+        <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
           {title}
         </div>
         {action}

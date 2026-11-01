@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { Building2, FileCheck2, ShieldCheck } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import escrowGlobe from "@/assets/escrow-globe.png";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Flag } from "@/components/vuka/landing/flags";
 import { LazyDonutChart } from "@/components/vuka/lazy-charts";
 import { QueryBoundary } from "@/components/vuka/query-state";
 import { Chip, Metric, PageHeader, Panel, Shell } from "@/components/vuka/shell";
@@ -105,25 +108,55 @@ function Compliance() {
             <Button
               variant="outline"
               onClick={() => setNewVerification(true)}
-              className="rounded-none font-mono text-xs uppercase"
+              className="gap-1.5 rounded-lg font-mono text-xs uppercase"
             >
+              <FileCheck2 className="size-3.5 text-[#79b200]" aria-hidden="true" />
               Submit evidence
             </Button>
             <Button
               onClick={() => setOrgOpen(true)}
-              className="rounded-none font-mono text-xs uppercase"
+              className="gap-1.5 rounded-lg bg-[#151515] font-mono text-xs uppercase text-white hover:bg-[#151515]/90"
             >
+              <Building2 className="size-3.5 text-[#c2f74d]" aria-hidden="true" />
               New organization
             </Button>
           </>
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      {/* Executive Compliance & KYB Banner */}
+      <div className="relative overflow-hidden rounded-2xl border border-[#151515] bg-[#151515] p-6 text-white shadow-[0_24px_60px_-25px_rgba(21,21,21,0.65)] sm:p-7">
+        <img
+          src={escrowGlobe}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-12 -bottom-16 w-[300px] opacity-[0.14] mix-blend-screen select-none"
+        />
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-6">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#c2f74d]/30 bg-[#c2f74d]/10 px-3 py-1">
+              <ShieldCheck className="size-3.5 text-[#c2f74d]" aria-hidden="true" />
+              <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[#c2f74d]">
+                Proportionate KYB & Cryptographic Evidence Desk
+              </span>
+            </div>
+            <h2 className="mt-3 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+              Explainable Compliance & Risk Flag Registry
+            </h2>
+            <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-white/65">
+              Review SHA-256 document fingerprints, national business registry references, and
+              entity risk flags. Every verification decision requires a permanent written rationale.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3.5 sm:grid-cols-3">
         <Metric
           label="Organizations"
           value={orgs.data?.length ?? "—"}
           sub={`${orgs.data?.filter((o) => o.verification_status === "approved").length ?? 0} approved`}
+          accent="lime"
         />
         <Metric
           label="Pending verifications"
@@ -137,8 +170,11 @@ function Compliance() {
         />
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <Panel title="Verification evidence · by status">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Panel
+          title="Verification evidence · by status"
+          subtitle="Breakdown of submitted cryptographic fingerprints and registry references"
+        >
           <LazyDonutChart
             data={tally((verifications.data ?? []).map((v) => v.status))}
             ariaLabel="Verification evidence by status"
@@ -146,7 +182,10 @@ function Compliance() {
             format={(v) => String(v)}
           />
         </Panel>
-        <Panel title="Organizations · by verification status">
+        <Panel
+          title="Organizations · by verification status"
+          subtitle="KYB standing across registered legal entities"
+        >
           <LazyDonutChart
             data={tally((orgs.data ?? []).map((o) => o.verification_status))}
             ariaLabel="Organizations by verification status"
@@ -158,6 +197,7 @@ function Compliance() {
 
       <Panel
         title="Register"
+        subtitle="Inspect organizations, adjudicate verification evidence, or manage compliance reviews"
         meta={
           <div className="flex gap-1.5">
             {(["organizations", "verifications", "reviews"] as const).map((t) => (
@@ -180,15 +220,20 @@ function Compliance() {
                   <tr
                     key={o.id}
                     onClick={() => setOpenOrg(o)}
-                    className="cursor-pointer border-b border-border/60 last:border-0 hover:bg-accent/40"
+                    className="cursor-pointer border-b border-border/60 transition-colors last:border-0 hover:bg-muted/30"
                   >
-                    <td className="py-2.5">{o.legal_name}</td>
-                    <td className="py-2.5 font-mono text-xs">{o.country_code}</td>
-                    <td className="py-2.5 font-mono text-xs">{o.organization_type}</td>
-                    <td className="py-2.5 font-mono text-xs text-muted-foreground">
+                    <td className="px-2.5 py-3 font-medium">{o.legal_name}</td>
+                    <td className="px-2.5 py-3 font-mono text-xs">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Flag code={o.country_code} className="h-3 w-4 rounded-[1px]" />
+                        {o.country_code}
+                      </span>
+                    </td>
+                    <td className="px-2.5 py-3 font-mono text-xs">{o.organization_type}</td>
+                    <td className="px-2.5 py-3 font-mono text-xs text-muted-foreground">
                       {o.registration_number ?? "—"}
                     </td>
-                    <td className="py-2.5 text-right">
+                    <td className="px-2.5 py-3 text-right">
                       <Chip tone={statusTone(o.verification_status)}>{o.verification_status}</Chip>
                     </td>
                   </tr>
@@ -205,28 +250,31 @@ function Compliance() {
             {(rows) => (
               <Table head={["Subject", "Type", "Reference", "Submitted", "Status", ""]}>
                 {rows.map((v) => (
-                  <tr key={v.id} className="border-b border-border/60 last:border-0">
-                    <td className="py-2.5 text-xs">
+                  <tr
+                    key={v.id}
+                    className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/20"
+                  >
+                    <td className="px-2.5 py-3 text-xs font-medium">
                       {v.organization_id
                         ? orgName(v.organization_id)
                         : `trader ${shortId(v.user_id)}`}
                     </td>
-                    <td className="py-2.5 font-mono text-xs">{v.verification_type}</td>
-                    <td className="py-2.5 font-mono text-xs text-muted-foreground">
+                    <td className="px-2.5 py-3 font-mono text-xs">{v.verification_type}</td>
+                    <td className="px-2.5 py-3 font-mono text-xs text-muted-foreground">
                       {v.reference}
                     </td>
-                    <td className="py-2.5 font-mono text-xs text-muted-foreground">
+                    <td className="px-2.5 py-3 font-mono text-xs text-muted-foreground">
                       {when(v.created_at)} · {v.submitted_by}
                     </td>
-                    <td className="py-2.5 text-right">
+                    <td className="px-2.5 py-3 text-right">
                       <Chip tone={statusTone(v.status)}>{v.status}</Chip>
                     </td>
-                    <td className="py-2.5 text-right">
+                    <td className="px-2.5 py-3 text-right">
                       {v.status === "pending" ? (
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-7 rounded-none font-mono text-[10px] uppercase"
+                          className="h-7 rounded-lg font-mono text-[10px] uppercase"
                           onClick={() => setDecide({ kind: "verification", id: v.id })}
                         >
                           Decide
@@ -247,20 +295,25 @@ function Compliance() {
             {(rows) => (
               <Table head={["Organization", "Reason", "Opened", "Status", ""]}>
                 {rows.map((r) => (
-                  <tr key={r.id} className="border-b border-border/60 last:border-0">
-                    <td className="py-2.5 text-xs">{orgName(r.organization_id)}</td>
-                    <td className="max-w-xs truncate py-2.5 text-xs">{r.reason}</td>
-                    <td className="py-2.5 font-mono text-xs text-muted-foreground">
+                  <tr
+                    key={r.id}
+                    className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/20"
+                  >
+                    <td className="px-2.5 py-3 text-xs font-medium">
+                      {orgName(r.organization_id)}
+                    </td>
+                    <td className="max-w-xs truncate px-2.5 py-3 text-xs">{r.reason}</td>
+                    <td className="px-2.5 py-3 font-mono text-xs text-muted-foreground">
                       {when(r.created_at)} · {r.opened_by}
                     </td>
-                    <td className="py-2.5 text-right">
+                    <td className="px-2.5 py-3 text-right">
                       <Chip tone={statusTone(r.status)}>{r.status}</Chip>
                     </td>
-                    <td className="py-2.5 text-right">
+                    <td className="px-2.5 py-3 text-right">
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-7 rounded-none font-mono text-[10px] uppercase"
+                        className="h-7 rounded-lg font-mono text-[10px] uppercase"
                         onClick={() => setDecide({ kind: "review", id: r.id })}
                       >
                         Decide
@@ -297,9 +350,12 @@ function Table({ head, children }: { head: string[]; children: ReactNode }) {
     <div className="overflow-x-auto">
       <table className="w-full min-w-[760px] text-sm">
         <thead>
-          <tr className="border-b border-border text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+          <tr className="border-b border-border bg-muted/20 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
             {head.map((h, i) => (
-              <th key={i} className={`py-2 ${i >= head.length - 2 ? "text-right" : ""}`}>
+              <th
+                key={i}
+                className={`px-2.5 py-2.5 ${i >= head.length - 2 ? "text-right" : ""}`}
+              >
                 {h}
               </th>
             ))}
@@ -331,10 +387,10 @@ function Pick({
 }) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger aria-label="Choose an option" className="rounded-none font-mono text-xs">
+      <SelectTrigger aria-label="Choose an option" className="rounded-lg font-mono text-xs">
         <SelectValue />
       </SelectTrigger>
-      <SelectContent className="rounded-none">
+      <SelectContent className="rounded-lg">
         {options.map((o) => (
           <SelectItem key={o} value={o}>
             {o}
@@ -381,7 +437,7 @@ function OrgDialog({
   });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-none sm:max-w-lg">
+      <DialogContent className="rounded-2xl sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
             New organization
@@ -391,14 +447,14 @@ function OrgDialog({
         <div className="space-y-3">
           <Field label="Legal name">
             <Input
-              className="rounded-none"
+              className="rounded-lg"
               value={f.legal_name}
               onChange={(e) => setF({ ...f, legal_name: e.target.value })}
             />
           </Field>
           <Field label="Trading name (optional)">
             <Input
-              className="rounded-none"
+              className="rounded-lg"
               value={f.trading_name}
               onChange={(e) => setF({ ...f, trading_name: e.target.value })}
             />
@@ -407,7 +463,7 @@ function OrgDialog({
             <Field label="Country (ISO-2)">
               <Input
                 maxLength={2}
-                className="rounded-none font-mono"
+                className="rounded-lg font-mono"
                 value={f.country_code}
                 onChange={(e) => setF({ ...f, country_code: e.target.value })}
               />
@@ -422,7 +478,7 @@ function OrgDialog({
           </div>
           <Field label="Registration number (optional)">
             <Input
-              className="rounded-none font-mono"
+              className="rounded-lg font-mono"
               value={f.registration_number}
               onChange={(e) => setF({ ...f, registration_number: e.target.value })}
             />
@@ -430,7 +486,7 @@ function OrgDialog({
         </div>
         <DialogFooter>
           <Button
-            className="rounded-none font-mono text-xs uppercase"
+            className="rounded-lg bg-[#151515] font-mono text-xs uppercase text-white hover:bg-[#151515]/90"
             disabled={!f.legal_name.trim() || f.country_code.length !== 2 || create.isPending}
             onClick={() => create.mutate()}
           >
@@ -483,7 +539,7 @@ function OrgDetail({
   });
   return (
     <Dialog open={org !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-none sm:max-w-2xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-2xl">
         {org ? (
           <>
             <DialogHeader>
@@ -498,7 +554,7 @@ function OrgDetail({
               <Button
                 variant="outline"
                 size="sm"
-                className="rounded-none font-mono text-[10px] uppercase"
+                className="rounded-lg font-mono text-[10px] uppercase"
                 onClick={() => onOpenReview(org.id)}
               >
                 Open compliance review
@@ -509,12 +565,15 @@ function OrgDetail({
             </div>
             <QueryBoundary query={flags} isEmpty={(d) => d.length === 0} empty="No risk flags.">
               {(rows) => (
-                <ul className="divide-y divide-border border border-border">
+                <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
                   {rows.map((fl) => (
-                    <li key={fl.id} className="flex items-start justify-between gap-3 px-3 py-2">
+                    <li
+                      key={fl.id}
+                      className="flex items-start justify-between gap-3 px-3.5 py-2.5"
+                    >
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs">{fl.code}</span>
+                          <span className="font-mono text-xs font-semibold">{fl.code}</span>
                           <Chip tone={statusTone(fl.severity)}>{fl.severity}</Chip>
                           <Chip tone={statusTone(fl.status)}>{fl.status}</Chip>
                         </div>
@@ -524,7 +583,7 @@ function OrgDetail({
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-7 rounded-none font-mono text-[10px] uppercase"
+                          className="h-7 rounded-lg font-mono text-[10px] uppercase"
                           disabled={resolve.isPending}
                           onClick={() => resolve.mutate(fl.id)}
                         >
@@ -538,7 +597,7 @@ function OrgDetail({
             </QueryBoundary>
             <div className="grid gap-2 sm:grid-cols-[1fr_140px]">
               <Input
-                className="rounded-none font-mono"
+                className="rounded-lg font-mono"
                 placeholder="Flag code e.g. VOLUME_SPIKE"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
@@ -546,13 +605,13 @@ function OrgDetail({
               <Pick value={severity} onChange={setSeverity} options={SEVERITIES} />
             </div>
             <Textarea
-              className="min-h-16 rounded-none"
+              className="min-h-16 rounded-lg"
               placeholder="Describe the concern…"
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
             />
             <Button
-              className="rounded-none font-mono text-xs uppercase"
+              className="rounded-lg bg-[#151515] font-mono text-xs uppercase text-white hover:bg-[#151515]/90"
               disabled={!code.trim() || !desc.trim() || add.isPending}
               onClick={() => add.mutate()}
             >
@@ -595,7 +654,7 @@ function DecisionDialog({
   });
   return (
     <Dialog open={target !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="rounded-none sm:max-w-md">
+      <DialogContent className="rounded-2xl sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
             Record decision
@@ -610,7 +669,7 @@ function DecisionDialog({
           </Field>
           <Field label="Rationale">
             <Textarea
-              className="min-h-24 rounded-none"
+              className="min-h-24 rounded-lg"
               value={rationale}
               onChange={(e) => setRationale(e.target.value)}
             />
@@ -618,7 +677,7 @@ function DecisionDialog({
         </div>
         <DialogFooter>
           <Button
-            className="rounded-none font-mono text-xs uppercase"
+            className="rounded-lg bg-[#151515] font-mono text-xs uppercase text-white hover:bg-[#151515]/90"
             disabled={!rationale.trim() || decide.isPending}
             onClick={() => decide.mutate()}
           >
@@ -664,7 +723,7 @@ function VerificationDialog({
   });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-none sm:max-w-md">
+      <DialogContent className="rounded-2xl sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
             Submit evidence
@@ -680,10 +739,10 @@ function VerificationDialog({
               <p className="text-xs text-muted-foreground">Create an organization first.</p>
             ) : (
               <Select value={orgId || orgs[0]!.id} onValueChange={setOrgId}>
-                <SelectTrigger aria-label="Organization" className="rounded-none text-xs">
+                <SelectTrigger aria-label="Organization" className="rounded-lg text-xs">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="rounded-none">
+                <SelectContent className="rounded-lg">
                   {orgs.map((o) => (
                     <SelectItem key={o.id} value={o.id}>
                       {o.legal_name}
@@ -698,7 +757,7 @@ function VerificationDialog({
           </Field>
           <Field label="Reference">
             <Input
-              className="rounded-none font-mono"
+              className="rounded-lg font-mono"
               value={reference}
               onChange={(e) => setReference(e.target.value)}
               placeholder="Certificate / document reference"
@@ -706,7 +765,7 @@ function VerificationDialog({
           </Field>
           <Field label="Label (optional)">
             <Input
-              className="rounded-none"
+              className="rounded-lg"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
             />
@@ -714,7 +773,7 @@ function VerificationDialog({
         </div>
         <DialogFooter>
           <Button
-            className="rounded-none font-mono text-xs uppercase"
+            className="rounded-lg bg-[#151515] font-mono text-xs uppercase text-white hover:bg-[#151515]/90"
             disabled={orgs.length === 0 || !reference.trim() || create.isPending}
             onClick={() => create.mutate()}
           >
@@ -748,7 +807,7 @@ function ReviewDialog({
   });
   return (
     <Dialog open={orgId !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="rounded-none sm:max-w-md">
+      <DialogContent className="rounded-2xl sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
             Open compliance review
@@ -756,13 +815,13 @@ function ReviewDialog({
           <DialogDescription>Describe why this organization needs review.</DialogDescription>
         </DialogHeader>
         <Textarea
-          className="min-h-24 rounded-none"
+          className="min-h-24 rounded-lg"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
         />
         <DialogFooter>
           <Button
-            className="rounded-none font-mono text-xs uppercase"
+            className="rounded-lg bg-[#151515] font-mono text-xs uppercase text-white hover:bg-[#151515]/90"
             disabled={!reason.trim() || create.isPending}
             onClick={() => create.mutate()}
           >

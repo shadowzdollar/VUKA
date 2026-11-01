@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, FileDown } from "lucide-react";
+import { ArrowLeft, BookOpenCheck, FileDown, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import escrowGlobe from "@/assets/escrow-globe.png";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/vuka/data-table";
 import { Loading, QueryBoundary } from "@/components/vuka/query-state";
@@ -67,45 +68,65 @@ function WalletDetail() {
     }
   }
 
+  const netChange =
+    (statement.data?.closing_balance ?? 0) - (statement.data?.opening_balance ?? 0);
+
   return (
     <div className="space-y-6">
       <div>
         <Link
           to="/wallets"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 font-mono text-xs text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
         >
           <ArrowLeft className="size-3.5" aria-hidden="true" />
           All wallets
         </Link>
-        <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
+      </div>
+
+      {/* Executive Account Statement Banner */}
+      <div className="relative overflow-hidden rounded-2xl border border-[#151515] bg-[#151515] p-6 text-white shadow-[0_24px_60px_-25px_rgba(21,21,21,0.65)] sm:p-7">
+        <img
+          src={escrowGlobe}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-12 -bottom-16 w-[320px] opacity-[0.14] mix-blend-screen select-none"
+        />
+        <div className="relative z-10 flex flex-wrap items-end justify-between gap-6">
           <div>
-            <h1 className="font-display text-3xl leading-tight">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#c2f74d]/30 bg-[#c2f74d]/10 px-3 py-1">
+              <BookOpenCheck className="size-3.5 text-[#c2f74d]" aria-hidden="true" />
+              <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[#c2f74d]">
+                Double-Entry Account Statement · ISO 20022 camt.053
+              </span>
+            </div>
+            <h1 className="mt-3 text-2xl font-bold tracking-tight text-white sm:text-3xl">
               {account.data ? (
                 accountLabel(account.data)
               ) : (
-                <span className="text-muted-foreground">Wallet</span>
+                <span className="text-white/60">Wallet</span>
               )}
             </h1>
-            <p className="mt-1 font-mono text-xs text-muted-foreground">
+            <p className="mt-1.5 font-mono text-xs text-white/65">
               acct {id}
               {account.data ? ` · opened ${when(account.data.created_at)}` : ""}
             </p>
           </div>
           <Button
-            variant="outline"
             onClick={() => void downloadXml()}
-            className="rounded-none font-mono text-xs uppercase"
+            className="gap-2 rounded-lg bg-[#c2f74d] font-mono text-xs font-bold uppercase text-[#151515] hover:bg-[#c2f74d]/90"
           >
-            <FileDown className="mr-2 size-3.5" aria-hidden="true" />
+            <FileDown className="size-3.5" aria-hidden="true" />
             Download statement (ISO 20022)
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
         <Metric
           label="Current balance"
           value={balance.isPending ? "…" : money(balance.data?.amount ?? 0, account.data?.currency)}
+          sub="Settled ledger balance"
+          accent="lime"
         />
         <Metric
           label={`Opening · ${fromDate}`}
@@ -114,6 +135,7 @@ function WalletDetail() {
               ? "…"
               : money(statement.data?.opening_balance ?? 0, account.data?.currency)
           }
+          sub="Start of statement window"
         />
         <Metric
           label={`Closing · ${toDate}`}
@@ -122,11 +144,22 @@ function WalletDetail() {
               ? "…"
               : money(statement.data?.closing_balance ?? 0, account.data?.currency)
           }
+          sub="End of statement window"
+        />
+        <Metric
+          label="Net period delta"
+          value={
+            statement.isPending
+              ? "…"
+              : `${netChange >= 0 ? "+" : "−"}${money(Math.abs(netChange), account.data?.currency)}`
+          }
+          sub={`${entries.length} ledger postings`}
         />
       </div>
 
       <Panel
         title="Statement"
+        subtitle="Cryptographically balanced journal entries for the selected date window"
         meta={
           <div className="flex flex-wrap items-center gap-2">
             <label className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
@@ -136,7 +169,7 @@ function WalletDetail() {
                 value={fromDate}
                 max={toDate}
                 onChange={(e) => setFromDate(e.target.value)}
-                className="h-7 border border-input bg-background px-1.5 font-mono text-[11px]"
+                className="h-8 rounded-lg border border-input bg-background px-2 font-mono text-[11px] text-foreground"
                 aria-label="Statement period start"
               />
             </label>
@@ -147,16 +180,16 @@ function WalletDetail() {
                 value={toDate}
                 min={fromDate}
                 onChange={(e) => setToDate(e.target.value)}
-                className="h-7 border border-input bg-background px-1.5 font-mono text-[11px]"
+                className="h-8 rounded-lg border border-input bg-background px-2 font-mono text-[11px] text-foreground"
                 aria-label="Statement period end"
               />
             </label>
-            <Chip>{entries.length} entries</Chip>
+            <Chip tone="lime">{entries.length} entries</Chip>
           </div>
         }
       >
         {fromDate >= toDate ? (
-          <p role="alert" className="border-2 border-foreground p-3 text-xs">
+          <p role="alert" className="rounded-xl border-2 border-foreground p-3 text-xs">
             The start date must be before the end date.
           </p>
         ) : statement.isPending ? (
@@ -196,8 +229,8 @@ function WalletDetail() {
                     cell: (e) => (
                       <span
                         className={
-                          "tabular font-mono text-xs " +
-                          (e.amount < 0 ? "text-muted-foreground" : "text-foreground")
+                          "tabular font-mono text-xs font-semibold " +
+                          (e.amount < 0 ? "text-muted-foreground" : "text-[#4d7300]")
                         }
                       >
                         {e.amount < 0 ? "−" : "+"}
@@ -236,7 +269,8 @@ function WalletDetail() {
                     header: "Transfer",
                     text: (e) => e.transaction_id,
                     cell: (e) => (
-                      <span className="font-mono text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1 font-mono text-xs text-muted-foreground">
+                        <ShieldCheck className="size-3 text-[#79b200]" aria-hidden="true" />
                         {shortId(e.transaction_id)}
                       </span>
                     ),
