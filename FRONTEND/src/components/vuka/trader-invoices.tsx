@@ -4,12 +4,17 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   CheckCircle2,
+  CloudUpload,
   FilePlus2,
   FileText,
+  RefreshCw,
   Send,
   ShieldCheck,
+  Trash2,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import escrowGlobe from "@/assets/escrow-globe.png";
 import { Button } from "@/components/ui/button";
@@ -33,6 +38,12 @@ import { invoices as invoiceApi, ledger } from "@/lib/api/endpoints";
 import type { Invoice, Recipient } from "@/lib/api/types";
 import { day, money } from "@/lib/format";
 import { useLangCopy } from "@/lib/i18n";
+import {
+  deleteOfflineDraft,
+  getOfflineDrafts,
+  saveOfflineDraft,
+  type OfflineDraftInvoice,
+} from "@/lib/offline-store";
 import { useTrader } from "@/lib/session";
 import { useInvoices, useWallet } from "@/lib/trader-data";
 import { cn } from "@/lib/utils";
@@ -41,7 +52,7 @@ export const invoiceSubtotal = (i: Invoice) =>
   i.items.reduce((s, it) => s + it.quantity * it.unit_price, 0);
 export const invoiceTotal = (i: Invoice) => invoiceSubtotal(i) * (1 + i.vat_rate / 100);
 
-type Tab = "issued" | "received";
+type Tab = "issued" | "received" | "drafts";
 
 const INVOICE_COPY = {
   en: {
@@ -111,6 +122,23 @@ const INVOICE_COPY = {
     totalAmountLabel: (vatRate: number) => `Total Invoice Amount (incl. ${vatRate}% VAT)`,
     issuingBtn: "Issuing Invoice…",
     issueSubmitBtn: "Issue Commercial Invoice",
+    tabDrafts: (n: number) => `Offline Drafts (${n})`,
+    offlinePillOnline: "Border Relay Online",
+    offlinePillOffline: "Border-Zone Offline Mode",
+    offlineBannerDesc:
+      "Network unreachable in border corridor. Invoices drafted now are stored safely in local browser storage and will be synchronized to the VUKA ledger once connection restores.",
+    saveAsDraftBtn: "Save Offline Draft",
+    savedDraftToast: "Draft saved locally",
+    savedDraftDesc: "Invoice saved in offline border store",
+    syncAllBtn: "Sync All Drafts",
+    syncBtn: "Sync to Ledger",
+    syncSuccessToast: "Draft synchronized to ledger",
+    deleteBtn: "Delete",
+    emptyDraftsTable: "No offline drafts pending.",
+    colDraftId: "Draft ID",
+    colDraftCustomer: "Buyer / Recipient",
+    colDraftAmount: "Amount",
+    colDraftStatus: "Status",
   },
   fr: {
     ageingBuckets: ["Non échues", "1–30 j de retard", "31–60 j de retard", "60+ j de retard"] as const,
@@ -179,6 +207,23 @@ const INVOICE_COPY = {
     totalAmountLabel: (vatRate: number) => `Montant total de la facture (TVA ${vatRate}% incl.)`,
     issuingBtn: "Émission en cours…",
     issueSubmitBtn: "Émettre la facture commerciale",
+    tabDrafts: (n: number) => `Brouillons hors-ligne (${n})`,
+    offlinePillOnline: "Relais frontière en ligne",
+    offlinePillOffline: "Mode frontalier hors-ligne",
+    offlineBannerDesc:
+      "Réseau indisponible dans le corridor frontalier. Les factures rédigées sont enregistrées localement et seront synchronisées sur le registre VUKA dès le retour du réseau.",
+    saveAsDraftBtn: "Sauvegarder en brouillon",
+    savedDraftToast: "Brouillon sauvegardé localement",
+    savedDraftDesc: "Facture enregistrée dans le stockage hors-ligne",
+    syncAllBtn: "Synchroniser tous les brouillons",
+    syncBtn: "Synchroniser",
+    syncSuccessToast: "Brouillon synchronisé sur le registre",
+    deleteBtn: "Supprimer",
+    emptyDraftsTable: "Aucun brouillon hors-ligne en attente.",
+    colDraftId: "ID Brouillon",
+    colDraftCustomer: "Acheteur / Bénéficiaire",
+    colDraftAmount: "Montant",
+    colDraftStatus: "Statut",
   },
   sw: {
     ageingBuckets: [
@@ -252,6 +297,23 @@ const INVOICE_COPY = {
     totalAmountLabel: (vatRate: number) => `Jumla ya Kiasi cha Ankara (pamoja na ${vatRate}% VAT)`,
     issuingBtn: "Inatoa Ankara…",
     issueSubmitBtn: "Toa Ankara ya Kibiashara",
+    tabDrafts: (n: number) => `Nyaraka za Nje ya Mtandao (${n})`,
+    offlinePillOnline: "Mtandao wa Mpakani Upo Hewani",
+    offlinePillOffline: "Hali ya Nje ya Mtandao Mpakanani",
+    offlineBannerDesc:
+      "Mtandao haupatikani katika eneo la mpaka. Ankara zinazoandikwa sasa zimehifadhiwa salama kwenye kifaa chako na zitasawazishwa kwenye leja ya VUKA mara mtandao utakaporejea.",
+    saveAsDraftBtn: "Hifadhi Kama Rasimu",
+    savedDraftToast: "Rasimu imehifadhiwa salama",
+    savedDraftDesc: "Ankara imehifadhiwa kwenye kumbukumbu ya kifaa",
+    syncAllBtn: "Sawazisha Rasimu Zote",
+    syncBtn: "Sawazisha kwenye Leja",
+    syncSuccessToast: "Rasimu imesawazishwa kwenye leja",
+    deleteBtn: "Futa",
+    emptyDraftsTable: "Hakuna rasimu za nje ya mtandao zinazosubiri.",
+    colDraftId: "Namba ya Rasimu",
+    colDraftCustomer: "Mnunuzi / Mpokeaji",
+    colDraftAmount: "Kiasi",
+    colDraftStatus: "Hali",
   },
   pt: {
     ageingBuckets: [
@@ -325,6 +387,23 @@ const INVOICE_COPY = {
     totalAmountLabel: (vatRate: number) => `Montante Total da Fatura (incl. ${vatRate}% IVA)`,
     issuingBtn: "A Emitir Fatura…",
     issueSubmitBtn: "Emitir Fatura Comercial",
+    tabDrafts: (n: number) => `Rascunhos Offline (${n})`,
+    offlinePillOnline: "Retransmissão Fronteiriça Online",
+    offlinePillOffline: "Modo Fronteiriço Offline",
+    offlineBannerDesc:
+      "Rede inacessível no corredor fronteiriço. As faturas rascunhadas são armazenadas em segurança no armazenamento local e serão sincronizadas com o razão VUKA assim que a ligação regressar.",
+    saveAsDraftBtn: "Guardar como Rascunho",
+    savedDraftToast: "Rascunho guardado localmente",
+    savedDraftDesc: "Fatura guardada no armazenamento offline",
+    syncAllBtn: "Sincronizar Todos os Rascunhos",
+    syncBtn: "Sincronizar",
+    syncSuccessToast: "Rascunho sincronizado com o razão",
+    deleteBtn: "Eliminar",
+    emptyDraftsTable: "Nenhum rascunho offline pendente.",
+    colDraftId: "ID do Rascunho",
+    colDraftCustomer: "Comprador / Destinatário",
+    colDraftAmount: "Montante",
+    colDraftStatus: "Estado",
   },
   rw: {
     ageingBuckets: [
@@ -398,6 +477,23 @@ const INVOICE_COPY = {
     totalAmountLabel: (vatRate: number) => `Igiteranyo cy'Inyemezabuguzi (harimo ${vatRate}% TVA)`,
     issuingBtn: "Birimo Gutangwa…",
     issueSubmitBtn: "Tanga Inyemezabuguzi y'Ubucuruzi",
+    tabDrafts: (n: number) => `Inyandiko zo hanze y'umurongo (${n})`,
+    offlinePillOnline: "Umurongo w'Umupaka Urakora",
+    offlinePillOffline: "Uburyo bwo Hanze y'Umurongo ku Mupaka",
+    offlineBannerDesc:
+      "Nta murongo uri mu gace k'umupaka. Inyemezabuguzi zanditswe zibitswe neza muri porogaramu yawe kandi zizoherezwa mu gitabo cya VUKA mu gihe umurongo wagarutse.",
+    saveAsDraftBtn: "Bika nk'Inyandiko y'Ibanze",
+    savedDraftToast: "Inyandiko y'ibanze yabitswe",
+    savedDraftDesc: "Inyemezabuguzi yabitswe muri terefone",
+    syncAllBtn: "Ohereza Inyandiko Zose mu Gitabo",
+    syncBtn: "Ohereza mu Gitabo",
+    syncSuccessToast: "Inyandiko yoherejwe neza mu gitabo",
+    deleteBtn: "Siba",
+    emptyDraftsTable: "Nta nyandiko zo hanze y'umurongo zitegereje.",
+    colDraftId: "Nimero y'Inyandiko",
+    colDraftCustomer: "Umuguzi / Uwakira",
+    colDraftAmount: "Amafaranga",
+    colDraftStatus: "Imiterere",
   },
 } as const;
 
@@ -416,9 +512,32 @@ export function TraderInvoices() {
   const trader = useTrader();
   const copy = useLangCopy(INVOICE_COPY);
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("received");
   const [createOpen, setCreateOpen] = useState(false);
-  const list = useInvoices(tab);
+  const [isOnline, setIsOnline] = useState(() =>
+    typeof navigator !== "undefined" ? navigator.onLine : true,
+  );
+  const [drafts, setDrafts] = useState<OfflineDraftInvoice[]>([]);
+  const [syncingDraftId, setSyncingDraftId] = useState<string | null>(null);
+
+  const refreshDrafts = () => {
+    void getOfflineDrafts().then(setDrafts);
+  };
+
+  useEffect(() => {
+    refreshDrafts();
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  const list = useInvoices(tab === "drafts" ? "received" : tab);
   const all = useInvoices();
 
   const totals = useMemo(() => {
@@ -434,8 +553,67 @@ export function TraderInvoices() {
     };
   }, [all.data, trader.id]);
 
+  const handleSyncSingleDraft = async (d: OfflineDraftInvoice) => {
+    setSyncingDraftId(d.id);
+    try {
+      let buyerId = "";
+      if (d.customerPhone) {
+        try {
+          const recip = await ledger.recipient(d.customerPhone);
+          buyerId = recip.user.id;
+        } catch {
+          // fallback to trader id if looking up offline recipient
+          buyerId = trader.id;
+        }
+      } else {
+        buyerId = trader.id;
+      }
+      await invoiceApi.create(trader.id, {
+        number: `INV-OFF-${d.id.slice(-6).toUpperCase()}`,
+        counterparty_user_id: buyerId,
+        currency: d.currency,
+        issue_date: d.createdAt.slice(0, 10),
+        due_date: d.dueDate || inDays(14),
+        vat_rate: 0,
+        terms: `Offline draft synced from border device (${d.description})`,
+        items: [
+          {
+            description: d.description || "General trade items",
+            quantity: 1,
+            unit_price: d.amount,
+          },
+        ],
+      });
+      await deleteOfflineDraft(d.id);
+      toast.success(copy.syncSuccessToast);
+      void qc.invalidateQueries({ queryKey: ["invoices"] });
+      refreshDrafts();
+    } catch (e) {
+      toast.error("Failed to sync draft", { description: describeError(e) });
+    } finally {
+      setSyncingDraftId(null);
+    }
+  };
+
+  const handleSyncAllDrafts = async () => {
+    for (const d of drafts) {
+      await handleSyncSingleDraft(d);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Offline Border Warning Banner */}
+      {!isOnline && (
+        <div className="flex items-center gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-900 shadow-xs">
+          <WifiOff className="size-5 shrink-0 text-amber-600" />
+          <div className="text-xs leading-relaxed">
+            <span className="font-bold uppercase tracking-wider">{copy.offlinePillOffline}: </span>
+            {copy.offlineBannerDesc}
+          </div>
+        </div>
+      )}
+
       {/* Executive Trade Documents & Invoice Escrow Banner */}
       <section className="relative overflow-hidden rounded-3xl border border-[#151515] bg-[#151515] p-6 text-white shadow-[0_24px_60px_-24px_rgba(0,0,0,0.48)] sm:p-8">
         <div
@@ -459,6 +637,24 @@ export function TraderInvoices() {
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-white/75">
                 <ShieldCheck className="size-3 text-[#c2f74d]" /> {copy.eyebrow2}
+              </span>
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-[0.16em]",
+                  isOnline
+                    ? "border-[#c2f74d]/40 bg-[#c2f74d]/10 text-[#c2f74d]"
+                    : "border-amber-400/40 bg-amber-400/10 text-amber-300",
+                )}
+              >
+                {isOnline ? (
+                  <>
+                    <Wifi className="size-3 text-[#c2f74d]" /> {copy.offlinePillOnline}
+                  </>
+                ) : (
+                  <>
+                    <WifiOff className="size-3 text-amber-400" /> {copy.offlinePillOffline}
+                  </>
+                )}
               </span>
             </div>
 
@@ -554,123 +750,233 @@ export function TraderInvoices() {
       <Panel
         title={copy.registerTitle}
         meta={
-          <div className="inline-flex rounded-xl border border-border bg-muted/40 p-1">
-            {(
-              [
-                { id: "received", label: copy.tabReceived(totals.payable) },
-                { id: "issued", label: copy.tabIssued(totals.receivable) },
-              ] as const
-            ).map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTab(t.id)}
-                className={cn(
-                  "rounded-lg px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-wider transition",
-                  tab === t.id
-                    ? "bg-[#151515] text-[#c2f74d] shadow-xs"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
+          <div className="flex flex-wrap items-center gap-2">
+            {tab === "drafts" && drafts.length > 0 && isOnline ? (
+              <Button
+                size="sm"
+                className="h-7 rounded-lg bg-[#151515] px-2.5 font-mono text-[10px] font-bold uppercase text-[#c2f74d] hover:bg-[#151515]/90"
+                onClick={handleSyncAllDrafts}
               >
-                {t.label}
-              </button>
-            ))}
+                <CloudUpload className="mr-1 size-3" /> {copy.syncAllBtn}
+              </Button>
+            ) : null}
+            <div className="inline-flex rounded-xl border border-border bg-muted/40 p-1">
+              {(
+                [
+                  { id: "received", label: copy.tabReceived(totals.payable) },
+                  { id: "issued", label: copy.tabIssued(totals.receivable) },
+                  { id: "drafts", label: copy.tabDrafts(drafts.length) },
+                ] as const
+              ).map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  className={cn(
+                    "rounded-lg px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-wider transition",
+                    tab === t.id
+                      ? "bg-[#151515] text-[#c2f74d] shadow-xs"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
           </div>
         }
       >
-        <QueryBoundary
-          query={list}
-          isEmpty={(d) => d.length === 0}
-          empty={tab === "issued" ? copy.emptyIssuedBoundary : copy.emptyReceivedBoundary}
-        >
-          {(rows) => (
-            <DataTable
-              caption={tab === "issued" ? copy.captionIssued : copy.captionReceived}
-              exportName={`vuka-invoices-${tab}.csv`}
-              rows={rows}
-              rowKey={(i) => i.id}
-              onRowClick={(i) => void navigate({ to: "/escrow/$id", params: { id: i.id } })}
-              initialSort={{ key: "issued", dir: "desc" }}
-              columns={[
-                {
-                  key: "number",
-                  header: copy.colNumber,
-                  sort: (i) => i.number,
-                  cell: (i) => <span className="font-mono text-xs font-bold">{i.number}</span>,
-                },
-                {
-                  key: "party",
-                  header: tab === "issued" ? copy.colBuyer : copy.colSupplier,
-                  text: (i) => (tab === "issued" ? i.counterparty_name : i.issuer_name),
-                  cell: (i) => (
-                    <span className="text-xs font-medium">
-                      {tab === "issued" ? i.counterparty_name : i.issuer_name}
+        {tab === "drafts" ? (
+          <DataTable
+            caption="Offline Draft Invoices"
+            exportName="vuka-offline-drafts.csv"
+            rows={drafts}
+            rowKey={(d) => d.id}
+            initialSort={{ key: "id", dir: "desc" }}
+            columns={[
+              {
+                key: "id",
+                header: copy.colDraftId,
+                sort: (d) => d.id,
+                cell: (d) => (
+                  <span className="font-mono text-xs font-bold text-muted-foreground">
+                    {d.id.slice(-10)}
+                  </span>
+                ),
+              },
+              {
+                key: "customer",
+                header: copy.colDraftCustomer,
+                sort: (d) => d.customerName || d.customerPhone,
+                cell: (d) => (
+                  <div className="flex flex-col">
+                    <span className="text-xs font-semibold">{d.customerName || "Counterparty"}</span>
+                    <span className="font-mono text-[11px] text-muted-foreground">
+                      {d.customerPhone}
                     </span>
-                  ),
-                },
-                {
-                  key: "issued",
-                  header: copy.colIssueDate,
-                  sort: (i) => i.issue_date,
-                  cell: (i) => (
-                    <span className="tabular font-mono text-xs text-muted-foreground">
-                      {day(i.issue_date)}
-                    </span>
-                  ),
-                },
-                {
-                  key: "due",
-                  header: copy.colDueDate,
-                  sort: (i) => i.due_date,
-                  cell: (i) => (
-                    <span className="tabular font-mono text-xs">{day(i.due_date)}</span>
-                  ),
-                },
-                {
-                  key: "total",
-                  header: copy.colTotalVat,
-                  align: "right",
-                  sort: (i) => invoiceTotal(i),
-                  text: (i) => `${invoiceTotal(i)} ${i.currency}`,
-                  cell: (i) => (
-                    <span className="tabular font-mono font-bold">
-                      {money(invoiceTotal(i), i.currency)}
-                    </span>
-                  ),
-                },
-                {
-                  key: "status",
-                  header: copy.colStatusAction,
-                  align: "right",
-                  sort: (i) => i.status,
-                  cell: (i) => (
-                    <div
-                      className="inline-flex items-center gap-2"
-                      onClick={(e) => e.stopPropagation()}
+                  </div>
+                ),
+              },
+              {
+                key: "description",
+                header: copy.lineItemsLabel,
+                cell: (d) => (
+                  <span className="text-xs text-muted-foreground line-clamp-1">
+                    {d.description || "General Merchandise"}
+                  </span>
+                ),
+              },
+              {
+                key: "amount",
+                header: copy.colDraftAmount,
+                align: "right",
+                sort: (d) => d.amount,
+                cell: (d) => (
+                  <span className="tabular font-mono font-bold">
+                    {money(d.amount, d.currency)}
+                  </span>
+                ),
+              },
+              {
+                key: "status",
+                header: copy.colDraftStatus,
+                align: "right",
+                cell: (d) => (
+                  <div
+                    className="inline-flex items-center gap-2"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Chip tone="live">{d.status}</Chip>
+                    <Button
+                      size="sm"
+                      disabled={!isOnline || syncingDraftId === d.id}
+                      className="h-7 rounded-lg bg-[#151515] px-2.5 font-mono text-[10px] font-bold uppercase text-[#c2f74d] hover:bg-[#151515]/90"
+                      onClick={() => void handleSyncSingleDraft(d)}
                     >
-                      <Chip tone={i.status === "PAID" ? "live" : "invert"}>{i.status}</Chip>
-                      {tab === "received" && i.status !== "PAID" ? (
-                        <Button
-                          size="sm"
-                          className="h-7 rounded-lg bg-[#151515] px-2.5 font-mono text-[10px] font-bold uppercase text-[#c2f74d] hover:bg-[#151515]/90"
-                          onClick={() =>
-                            void navigate({ to: "/send", search: { invoice: i.number } })
-                          }
-                        >
-                          <Send className="mr-1 size-3" /> {copy.payBtn}
-                        </Button>
-                      ) : null}
-                    </div>
-                  ),
-                },
-              ]}
-              empty={tab === "issued" ? copy.emptyIssuedTable : copy.emptyReceivedTable}
-            />
-          )}
-        </QueryBoundary>
+                      {syncingDraftId === d.id ? (
+                        <RefreshCw className="mr-1 size-3 animate-spin" />
+                      ) : (
+                        <CloudUpload className="mr-1 size-3" />
+                      )}
+                      {copy.syncBtn}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 rounded-lg px-2 text-destructive hover:bg-destructive/10"
+                      onClick={async () => {
+                        await deleteOfflineDraft(d.id);
+                        refreshDrafts();
+                      }}
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </div>
+                ),
+              },
+            ]}
+            empty={copy.emptyDraftsTable}
+          />
+        ) : (
+          <QueryBoundary
+            query={list}
+            isEmpty={(d) => d.length === 0}
+            empty={tab === "issued" ? copy.emptyIssuedBoundary : copy.emptyReceivedBoundary}
+          >
+            {(rows) => (
+              <DataTable
+                caption={tab === "issued" ? copy.captionIssued : copy.captionReceived}
+                exportName={`vuka-invoices-${tab}.csv`}
+                rows={rows}
+                rowKey={(i) => i.id}
+                onRowClick={(i) => void navigate({ to: "/escrow/$id", params: { id: i.id } })}
+                initialSort={{ key: "issued", dir: "desc" }}
+                columns={[
+                  {
+                    key: "number",
+                    header: copy.colNumber,
+                    sort: (i) => i.number,
+                    cell: (i) => <span className="font-mono text-xs font-bold">{i.number}</span>,
+                  },
+                  {
+                    key: "party",
+                    header: tab === "issued" ? copy.colBuyer : copy.colSupplier,
+                    text: (i) => (tab === "issued" ? i.counterparty_name : i.issuer_name),
+                    cell: (i) => (
+                      <span className="text-xs font-medium">
+                        {tab === "issued" ? i.counterparty_name : i.issuer_name}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "issued",
+                    header: copy.colIssueDate,
+                    sort: (i) => i.issue_date,
+                    cell: (i) => (
+                      <span className="tabular font-mono text-xs text-muted-foreground">
+                        {day(i.issue_date)}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "due",
+                    header: copy.colDueDate,
+                    sort: (i) => i.due_date,
+                    cell: (i) => (
+                      <span className="tabular font-mono text-xs">{day(i.due_date)}</span>
+                    ),
+                  },
+                  {
+                    key: "total",
+                    header: copy.colTotalVat,
+                    align: "right",
+                    sort: (i) => invoiceTotal(i),
+                    text: (i) => `${invoiceTotal(i)} ${i.currency}`,
+                    cell: (i) => (
+                      <span className="tabular font-mono font-bold">
+                        {money(invoiceTotal(i), i.currency)}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "status",
+                    header: copy.colStatusAction,
+                    align: "right",
+                    sort: (i) => i.status,
+                    cell: (i) => (
+                      <div
+                        className="inline-flex items-center gap-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Chip tone={i.status === "PAID" ? "live" : "invert"}>{i.status}</Chip>
+                        {tab === "received" && i.status !== "PAID" ? (
+                          <Button
+                            size="sm"
+                            className="h-7 rounded-lg bg-[#151515] px-2.5 font-mono text-[10px] font-bold uppercase text-[#c2f74d] hover:bg-[#151515]/90"
+                            onClick={() =>
+                              void navigate({ to: "/send", search: { invoice: i.number } })
+                            }
+                          >
+                            <Send className="mr-1 size-3" /> {copy.payBtn}
+                          </Button>
+                        ) : null}
+                      </div>
+                    ),
+                  },
+                ]}
+                empty={tab === "issued" ? copy.emptyIssuedTable : copy.emptyReceivedTable}
+              />
+            )}
+          </QueryBoundary>
+        )}
       </Panel>
 
-      <CreateInvoiceDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <CreateInvoiceDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        isOnline={isOnline}
+        onDraftSaved={refreshDrafts}
+      />
     </div>
   );
 }
@@ -689,9 +995,13 @@ const suggestNumber = () =>
 function CreateInvoiceDialog({
   open,
   onOpenChange,
+  isOnline = true,
+  onDraftSaved,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
+  isOnline?: boolean;
+  onDraftSaved?: () => void;
 }) {
   const trader = useTrader();
   const copy = useLangCopy(INVOICE_COPY);
@@ -757,6 +1067,27 @@ function CreateInvoiceDialog({
     onError: (e) => toast.error(copy.toastNotCreated, { description: describeError(e) }),
   });
 
+  const handleSaveDraft = async () => {
+    if (!linesValid) {
+      toast.error("Please enter item description, quantity and price before saving.");
+      return;
+    }
+    await saveOfflineDraft({
+      traderId: trader.id,
+      customerName: buyer ? buyer.user.full_name : phone.trim() || "Counterparty",
+      customerPhone: phone.trim(),
+      amount: total,
+      currency: cur,
+      description: lines.map((l) => l.description).filter(Boolean).join(", ") || "Border goods",
+      dueDate: due,
+    });
+    toast.success(copy.savedDraftToast, {
+      description: copy.savedDraftDesc,
+    });
+    onOpenChange(false);
+    onDraftSaved?.();
+  };
+
   const setLine = (i: number, patch: Partial<Line>) =>
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
 
@@ -798,7 +1129,7 @@ function CreateInvoiceDialog({
               <Button
                 variant="outline"
                 className="h-10 rounded-xl font-mono text-xs uppercase"
-                disabled={!phone.trim() || lookup.isPending}
+                disabled={!phone.trim() || lookup.isPending || !isOnline}
                 onClick={() => lookup.mutate()}
               >
                 {copy.verifyBuyerBtn}
@@ -920,10 +1251,18 @@ function CreateInvoiceDialog({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-col gap-2 sm:flex-row">
           <Button
-            className="h-11 w-full rounded-xl bg-[#151515] font-mono text-xs font-bold uppercase tracking-wider text-[#c2f74d] hover:bg-[#151515]/90"
-            disabled={!ready || create.isPending}
+            type="button"
+            variant="outline"
+            className="h-11 flex-1 rounded-xl border-dashed font-mono text-xs uppercase"
+            onClick={() => void handleSaveDraft()}
+          >
+            <CloudUpload className="mr-1.5 size-4" /> {copy.saveAsDraftBtn}
+          </Button>
+          <Button
+            className="h-11 flex-1 rounded-xl bg-[#151515] font-mono text-xs font-bold uppercase tracking-wider text-[#c2f74d] hover:bg-[#151515]/90"
+            disabled={!ready || create.isPending || !isOnline}
             onClick={() => create.mutate()}
           >
             {create.isPending ? copy.issuingBtn : copy.issueSubmitBtn}

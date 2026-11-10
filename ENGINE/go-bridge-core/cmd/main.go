@@ -251,15 +251,65 @@ func run(log *slog.Logger) error {
 	}
 	supportCancel()
 	log.Info("trader support schema ready", "local_only", true)
-	if cfg.ReconciliationEnabled {
-		reconcileCtx, reconcileCancel := context.WithTimeout(ctx, 30*time.Second)
-		if err := reconciliation.EnsureSchema(reconcileCtx, pool); err != nil {
-			reconcileCancel()
-			return fmt.Errorf("ensure reconciliation schema: %w", err)
+
+	// Ensure reconciliation schema for escrows, events, and dispute arbitration.
+	reconcileCtx, reconcileCancel := context.WithTimeout(ctx, 30*time.Second)
+	if err := reconciliation.EnsureSchema(reconcileCtx, pool); err != nil {
+		reconcileCancel()
+		return fmt.Errorf("ensure reconciliation schema: %w", err)
+	}
+	reconcileCancel()
+	reconciliationRepo = reconciliation.NewRepository(pool)
+
+	// Launch automated Escrow Timeout Keeper background daemon.
+	keeper := reconciliation.NewEscrowKeeper(pool, log, 1*time.Minute)
+	go keeper.Run(ctx)
+
+	// Launch continuous Global Zero-Sum Ledger Solvency verification daemon.
+	go func() {
+		log.Info("ledger solvency daemon started", "interval", "5m")
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+
+		// Initial audit on startup
+		if rep, err := ledgerSvc.VerifySolvency(ctx); err != nil {
+			log.Error("initial ledger solvency check failed", "err", err)
+		} else {
+			log.Info("initial ledger solvency verified",
+				"global_balanced", rep.GlobalBalanced,
+				"total_entries", rep.TotalEntries,
+				"audit_hash", rep.AuditHash,
+			)
 		}
 
-		reconcileCancel()
-		reconciliationRepo = reconciliation.NewRepository(pool)
+		for {
+			select {
+			case <-ctx.Done():
+				log.Info("stopping ledger solvency daemon")
+				return
+			case <-ticker.C:
+				rep, err := ledgerSvc.VerifySolvency(ctx)
+				if err != nil {
+					log.Error("periodic ledger solvency check failed", "err", err)
+					continue
+				}
+				if !rep.GlobalBalanced {
+					log.Error("CRITICAL: ledger solvency imbalance detected",
+						"audit_hash", rep.AuditHash,
+						"currencies", len(rep.Currencies),
+					)
+				} else {
+					log.Info("periodic ledger solvency verified",
+						"global_balanced", rep.GlobalBalanced,
+						"total_entries", rep.TotalEntries,
+						"audit_hash", rep.AuditHash,
+					)
+				}
+			}
+		}
+	}()
+
+	if cfg.ReconciliationEnabled {
 		reconciliationPoller, err = reconciliation.NewPoller(
 			cfg.ReconciliationRPCURL,
 			reconciliationRepo,

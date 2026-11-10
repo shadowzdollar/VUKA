@@ -16,6 +16,8 @@ id_ed25519
 *.dump
 backups/
 /tmp/
+main
+/ENGINE/go-bridge-core/main
 
 # Python gateway virtualenv (99MB of site-packages — not source)
 ENGINE/python-iso-gateway/.venv/

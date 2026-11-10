@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { Play, CheckCircle2, ArrowRight, ShieldCheck, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Play, CheckCircle2, ArrowRight, ShieldCheck, RefreshCw, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { corridors } from "@/lib/api/endpoints";
 import { useLangCopy } from "@/lib/i18n";
 
 const COPY = {
@@ -19,6 +20,9 @@ const COPY = {
     running: "Simulating trade...",
     completed: "Trade Cycle Completed Successfully!",
     resetBtn: "Reset Simulation",
+    liveEngine: "Live Go-Bridge Engine",
+    fxRateLabel: "Corridor Rate",
+    closeBtn: "Close",
   },
   fr: {
     title: "Simulateur de commerce en 1 clic",
@@ -35,6 +39,9 @@ const COPY = {
     running: "Simulation en cours...",
     completed: "Cycle commercial terminé avec succès !",
     resetBtn: "Réinitialiser la simulation",
+    liveEngine: "Moteur Go-Bridge en direct",
+    fxRateLabel: "Taux du corridor",
+    closeBtn: "Fermer",
   },
   sw: {
     title: "Kielelezo cha Biashara cha Mbofyo 1",
@@ -51,6 +58,9 @@ const COPY = {
     running: "Inaendesha biashara...",
     completed: "Mzunguko wa biashara umekamilika kikamilifu!",
     resetBtn: "Anza Upya",
+    liveEngine: "Mtambo wa Go-Bridge Moja kwa Moja",
+    fxRateLabel: "Kiwango cha Ubadilishaji",
+    closeBtn: "Funga",
   },
   pt: {
     title: "Simulador de Comércio com 1 Clique",
@@ -67,6 +77,9 @@ const COPY = {
     running: "A simular transação...",
     completed: "Ciclo comercial concluído com sucesso!",
     resetBtn: "Reiniciar Simulação",
+    liveEngine: "Motor Go-Bridge ao Vivo",
+    fxRateLabel: "Taxa do Corredor",
+    closeBtn: "Fechar",
   },
   rw: {
     title: "Icyitegererezo cy'Ubucuruzi ku Kanda Rimwe",
@@ -83,6 +96,9 @@ const COPY = {
     running: "Birimo gukora...",
     completed: "Ubucuruzi bwarangiye neza!",
     resetBtn: "Ongera utangire",
+    liveEngine: "Mudasobwa ya Go-Bridge Ikora",
+    fxRateLabel: "Igipimo cy'Ihererekanya",
+    closeBtn: "Funga",
   },
 };
 
@@ -90,17 +106,35 @@ export function TradeSimulatorModal({ open, onClose }: { open: boolean; onClose:
   const c = useLangCopy(COPY);
   const [activeStep, setActiveStep] = useState(0);
   const [running, setRunning] = useState(false);
+  const [fxRate, setFxRate] = useState<number>(9.5);
+  const [fxUpdated, setFxUpdated] = useState<string>("");
+
+  useEffect(() => {
+    if (open) {
+      corridors
+        .fx()
+        .then((res) => {
+          if (res?.rate) {
+            setFxRate(res.rate);
+            setFxUpdated(res.updated || new Date().toISOString());
+          }
+        })
+        .catch(() => {
+          // fallback default rate
+        });
+    }
+  }, [open]);
 
   if (!open) return null;
 
   async function runSimulation() {
     setRunning(true);
     setActiveStep(1);
-    await new Promise((r) => setTimeout(r, 1200));
+    await new Promise((r) => setTimeout(r, 1000));
     setActiveStep(2);
-    await new Promise((r) => setTimeout(r, 1400));
-    setActiveStep(3);
     await new Promise((r) => setTimeout(r, 1200));
+    setActiveStep(3);
+    await new Promise((r) => setTimeout(r, 1000));
     setActiveStep(4);
     setRunning(false);
   }
@@ -109,6 +143,9 @@ export function TradeSimulatorModal({ open, onClose }: { open: boolean; onClose:
     setActiveStep(0);
     setRunning(false);
   }
+
+  const simulatedKes = 10000;
+  const simulatedRwf = Math.round(simulatedKes * fxRate);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
@@ -131,37 +168,99 @@ export function TradeSimulatorModal({ open, onClose }: { open: boolean; onClose:
           </button>
         </div>
 
-        <div className="mt-6 space-y-4">
-          <div className={`rounded-xl border p-3.5 transition-all ${activeStep >= 1 ? "border-[#79b200] bg-[#f6fce8]" : "border-border bg-muted/20"}`}>
+        {/* Live Engine & FX Bar */}
+        <div className="mt-4 flex items-center justify-between rounded-xl border border-[#c2f74d]/30 bg-[#c2f74d]/10 px-3 py-2 text-xs">
+          <div className="flex items-center gap-1.5 font-semibold text-[#151515]">
+            <Zap className="size-3.5 text-[#79b200]" />
+            <span>{c.liveEngine}</span>
+          </div>
+          <div className="font-mono text-[11px] text-[#151515]">
+            <span className="text-muted-foreground">{c.fxRateLabel}: </span>
+            <span className="font-bold text-[#4d7500]">1 KES = {fxRate} RWF</span>
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {/* Step 1 */}
+          <div
+            className={`rounded-xl border p-3.5 transition-all ${
+              activeStep >= 1 ? "border-[#79b200] bg-[#f6fce8]" : "border-border bg-muted/20"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <span className="font-semibold text-sm">{c.step1}</span>
               {activeStep >= 1 ? <CheckCircle2 className="size-4 text-[#79b200]" /> : null}
             </div>
             <p className="mt-1 text-xs text-muted-foreground">{c.step1Desc}</p>
+            {activeStep >= 1 && (
+              <div className="mt-2 rounded-lg border border-border/60 bg-white/70 px-2.5 py-1.5 font-mono text-[11px]">
+                <span className="text-muted-foreground">INV-SIM-2026-8812: </span>
+                <span className="font-bold text-[#151515]">
+                  {simulatedKes.toLocaleString()} KES ({simulatedRwf.toLocaleString()} RWF)
+                </span>
+              </div>
+            )}
           </div>
 
-          <div className={`rounded-xl border p-3.5 transition-all ${activeStep >= 2 ? "border-[#79b200] bg-[#f6fce8]" : "border-border bg-muted/20"}`}>
+          {/* Step 2 */}
+          <div
+            className={`rounded-xl border p-3.5 transition-all ${
+              activeStep >= 2 ? "border-[#79b200] bg-[#f6fce8]" : "border-border bg-muted/20"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <span className="font-semibold text-sm">{c.step2}</span>
               {activeStep >= 2 ? <CheckCircle2 className="size-4 text-[#79b200]" /> : null}
             </div>
             <p className="mt-1 text-xs text-muted-foreground">{c.step2Desc}</p>
+            {activeStep >= 2 && (
+              <div className="mt-2 flex items-center justify-between rounded-lg border border-border/60 bg-white/70 px-2.5 py-1.5 font-mono text-[11px]">
+                <span className="text-muted-foreground">MoMo PUSH: SUCCESS</span>
+                <span className="text-[10px] text-muted-foreground">Lock: 0x8b3f...e412</span>
+              </div>
+            )}
           </div>
 
-          <div className={`rounded-xl border p-3.5 transition-all ${activeStep >= 3 ? "border-[#79b200] bg-[#f6fce8]" : "border-border bg-muted/20"}`}>
+          {/* Step 3 */}
+          <div
+            className={`rounded-xl border p-3.5 transition-all ${
+              activeStep >= 3 ? "border-[#79b200] bg-[#f6fce8]" : "border-border bg-muted/20"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <span className="font-semibold text-sm">{c.step3}</span>
               {activeStep >= 3 ? <CheckCircle2 className="size-4 text-[#79b200]" /> : null}
             </div>
             <p className="mt-1 text-xs text-muted-foreground">{c.step3Desc}</p>
+            {activeStep >= 3 && (
+              <div className="mt-2 rounded-lg border border-border/60 bg-white/70 px-2.5 py-1.5 font-mono text-[11px]">
+                <span className="text-muted-foreground">Border Post Checkpoint: </span>
+                <span className="font-bold text-[#4d7500]">Waybill Verified (NBO-KGL)</span>
+              </div>
+            )}
           </div>
 
-          <div className={`rounded-xl border p-3.5 transition-all ${activeStep >= 4 ? "border-[#79b200] bg-[#f6fce8]" : "border-border bg-muted/20"}`}>
+          {/* Step 4 */}
+          <div
+            className={`rounded-xl border p-3.5 transition-all ${
+              activeStep >= 4 ? "border-[#79b200] bg-[#f6fce8]" : "border-border bg-muted/20"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <span className="font-semibold text-sm">{c.step4}</span>
               {activeStep >= 4 ? <CheckCircle2 className="size-4 text-[#79b200]" /> : null}
             </div>
             <p className="mt-1 text-xs text-muted-foreground">{c.step4Desc}</p>
+            {activeStep >= 4 && (
+              <div className="mt-2 flex items-center justify-between rounded-lg border border-border/60 bg-white/70 px-2.5 py-1.5 font-mono text-[11px]">
+                <span className="font-semibold text-[#151515]">
+                  Cleared {simulatedRwf.toLocaleString()} RWF to Amina
+                </span>
+                <span className="rounded bg-[#c2f74d] px-1.5 py-0.5 text-[10px] font-bold text-[#151515]">
+                  Trust +15
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -173,7 +272,12 @@ export function TradeSimulatorModal({ open, onClose }: { open: boolean; onClose:
 
         <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
           {activeStep === 4 ? (
-            <Button variant="outline" size="sm" onClick={reset} className="gap-1.5 rounded-lg text-xs">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={reset}
+              className="gap-1.5 rounded-lg text-xs"
+            >
               <RefreshCw className="size-3.5" /> {c.resetBtn}
             </Button>
           ) : (
@@ -182,7 +286,7 @@ export function TradeSimulatorModal({ open, onClose }: { open: boolean; onClose:
 
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={onClose} className="rounded-lg text-xs">
-              Close
+              {c.closeBtn}
             </Button>
             {activeStep < 4 ? (
               <Button

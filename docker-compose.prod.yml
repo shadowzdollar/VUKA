@@ -1,0 +1,96 @@
+# ============================================================================
+# VUKA Turnkey Production Orchestration
+# ============================================================================
+# Services:
+#   1. postgres: PostgreSQL 16 Alpine double-entry ledger database
+#   2. engine:   Go-Bridge Core API & Ledger with background daemons (solvency + keeper)
+#   3. frontend: TanStack Start / Nitro production SSR web app
+#   4. adminer:  Lightweight database inspector for audits
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up --build -d
+# ============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vuka-prod-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vuka}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vuka_secure_prod_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-vuka}
+    ports:
+      - "5432:5432"
+    volumes:
+      - vuka_prod_pgdata:/var/lib/postgresql/data
+      - ./ENGINE/deploy/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vuka} -d ${POSTGRES_DB:-vuka}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  engine:
+    build:
+      context: .
+      dockerfile: ENGINE/deploy/Dockerfile
+    container_name: vuka-prod-engine
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      VUKA_DATABASE_URL: postgres://${POSTGRES_USER:-vuka}:${POSTGRES_PASSWORD:-vuka_secure_prod_2026}@postgres:5432/${POSTGRES_DB:-vuka}?sslmode=disable
+      VUKA_HTTP_ADDR: ":8080"
+      VUKA_GRPC_ADDR: ":50051"
+      VUKA_CORS_ORIGINS: "http://localhost:3000,http://127.0.0.1:3000,http://frontend:3000"
+      VUKA_CROSS_SITE_COOKIES: "false"
+      MTN_SIM_MODE: "success"
+      MTN_SIM_DELAY_MS: "5"
+      VUKA_FX_RWF_KES: "9.5"
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./FRONTEND
+      dockerfile: Dockerfile
+    container_name: vuka-prod-frontend
+    restart: unless-stopped
+    depends_on:
+      engine:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      VUKA_API_PROXY_TARGET: http://engine:8080
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  adminer:
+    image: adminer:latest
+    container_name: vuka-prod-adminer
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8081:8080"
+
+volumes:
+  vuka_prod_pgdata:
