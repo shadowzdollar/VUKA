@@ -1,4 +1,4 @@
-import { Languages, Moon, Sun } from "lucide-react";
+import { Languages } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -8,13 +8,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LANGUAGES, useI18n, useT, type Lang } from "@/lib/i18n";
-import { useTheme } from "@/lib/theme";
 
-/** Language menu + theme toggle, for pages that don't carry the full site header. */
+/** Language menu, for pages that don't carry the full site header. */
 export function SiteControls() {
   const t = useT();
   const { lang, setLang } = useI18n();
-  const { resolved, setPreference } = useTheme();
   return (
     <div className="flex items-center gap-1">
       <DropdownMenu>
@@ -38,19 +36,6 @@ export function SiteControls() {
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-9 rounded-none"
-        aria-label={t("shell.theme")}
-        onClick={() => setPreference(resolved === "dark" ? "light" : "dark")}
-      >
-        {resolved === "dark" ? (
-          <Sun className="size-4" aria-hidden="true" />
-        ) : (
-          <Moon className="size-4" aria-hidden="true" />
-        )}
-      </Button>
     </div>
   );
 }

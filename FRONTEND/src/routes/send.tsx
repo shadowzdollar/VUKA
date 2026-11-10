@@ -38,6 +38,7 @@ import { ApiError, describeError, isApiError, newIdempotencyKey } from "@/lib/ap
 import { corridors as corridorApi, ledger, platform, workflows } from "@/lib/api/endpoints";
 import type { Account, Recipient, Transfer, Workflow } from "@/lib/api/types";
 import { fromMinor, money, shortId, toMinor, truncMid, when } from "@/lib/format";
+import { useLangCopy, type Lang } from "@/lib/i18n";
 import { DIAL } from "@/lib/markets";
 import { readRecentWorkflows, rememberWorkflow } from "@/lib/recent-workflows";
 import { useTrader } from "@/lib/session";
@@ -70,11 +71,496 @@ type SendResult =
   | { kind: "domestic"; transfer: Transfer }
   | { kind: "workflow"; workflow?: Workflow; error?: string };
 
-const WIZARD_STEPS = [
-  { title: "Recipient & Corridor", sub: "Verify supplier MSISDN & destination vault" },
-  { title: "Amount & Invoice", sub: "Lock corridor FX rate & link trade invoice" },
-  { title: "Review & Dispatch", sub: "Confirm collection rail & execute settlement" },
-] as const;
+const COPY: Record<
+  Lang,
+  {
+    step1Title: string;
+    step1Sub: string;
+    step2Title: string;
+    step2Sub: string;
+    step3Title: string;
+    step3Sub: string;
+    stepLabel: (n: number) => string;
+    bannerBadge: string;
+    replaySafe: string;
+    bannerTitle: string;
+    bannerDesc: string;
+    sourceVault: string;
+    availableLiquidity: string;
+    topUp: string;
+    settlementEngine: string;
+    feeLabel: (bps: number) => string;
+    liveFx: string;
+    dispatchWorkbench: string;
+    stepOf: (curr: number, tot: number) => string;
+    marketsBar: string;
+    msisdnLabel: string;
+    msisdnHint: string;
+    btnVerifying: string;
+    btnVerifyTrader: string;
+    verifiedCounterparty: string;
+    vaultsCount: (n: number) => string;
+    destVaultLabel: string;
+    continueToQuote: string;
+    sourceVaultSelect: string;
+    amountLabel: (curr: string) => string;
+    availLabel: (v: string) => string;
+    linkInvoiceLabel: string;
+    noLinkedInvoice: string;
+    linkInvoiceHint: string;
+    lockingRate: string;
+    firmQuoteLocked: string;
+    supplierReceives: string;
+    domesticBookSettlement: string;
+    domesticBookDesc: (curr: string) => string;
+    btnBack: string;
+    btnReviewTicket: string;
+    principalAmount: string;
+    linkedInvoice: string;
+    collectionRail: string;
+    vaultBalanceTitle: string;
+    vaultBalanceDesc: string;
+    momoRailTitle: string;
+    momoRailDesc: string;
+    payerPhoneLabel: string;
+    authRefLabel: string;
+    authRefPlaceholder: string;
+    authRefDesc: string;
+    btnDispatching: string;
+    btnConfirmDispatch: string;
+    liveTicket: string;
+    originVault: string;
+    targetVault: string;
+    supplierReceivesNet: string;
+    idempotencyKey: string;
+    changeRecipient: string;
+    telemetryTitle: string;
+    realtimeStateMachine: string;
+    paymentSettledMsg: string;
+    paymentPausedMsg: string;
+    btnSendAnother: string;
+    domesticTitle: string;
+    paymentSettledHeader: string;
+    transferredTo: (amt: string, name: string) => string;
+    totalSettled: string;
+    ledgerTransferId: string;
+    recentWorkflows: string;
+    recentTracked: (n: number) => string;
+    recentEmpty: string;
+  }
+> = {
+  en: {
+    step1Title: "Recipient & Corridor",
+    step1Sub: "Verify supplier MSISDN & destination vault",
+    step2Title: "Amount & Invoice",
+    step2Sub: "Lock corridor FX rate & link trade invoice",
+    step3Title: "Review & Dispatch",
+    step3Sub: "Confirm collection rail & execute settlement",
+    stepLabel: (n) => `Step 0${n}`,
+    bannerBadge: "Cross-Border Settlement Desk",
+    replaySafe: "Replay-Safe Idempotency",
+    bannerTitle: "Send Supplier Payment",
+    bannerDesc:
+      "Lock a deterministic corridor FX quote and settle across borders in three atomic hops (Mobile Money Collection → Double-Entry Ledger → Supplier Rail Payout), or settle same-currency transfers instantly on the ledger.",
+    sourceVault: "Source Business Vault",
+    availableLiquidity: "Available Liquidity",
+    topUp: "Top up →",
+    settlementEngine: "Settlement Engine",
+    feeLabel: (bps) => `Fee ${(bps / 100).toFixed(2)}% (${bps} bps)`,
+    liveFx: "Live FX",
+    dispatchWorkbench: "Cross-Border Payment Dispatch Workbench",
+    stepOf: (curr, tot) => `Step 0${curr} of 0${tot}`,
+    marketsBar: "10 Launch Markets · Click a country dial prefix to pre-fill",
+    msisdnLabel: "Recipient Mobile Money Number (MSISDN)",
+    msisdnHint:
+      "Enter the supplier's registered VUKA phone number with international dialing code (e.g. +254 for Kenya, +250 for Rwanda).",
+    btnVerifying: "Verifying…",
+    btnVerifyTrader: "Verify Trader",
+    verifiedCounterparty: "Verified Counterparty",
+    vaultsCount: (n) => `${n} Business ${n === 1 ? "Vault" : "Vaults"}`,
+    destVaultLabel: "Destination Supplier Vault",
+    continueToQuote: "Continue to Amount & Quote",
+    sourceVaultSelect: "Source Business Trade Vault",
+    amountLabel: (curr) => `Amount ${curr ? `(${curr})` : ""}`,
+    availLabel: (v) => `Avail: ${v}`,
+    linkInvoiceLabel: "Link Trade Invoice (Optional)",
+    noLinkedInvoice: "No linked invoice",
+    linkInvoiceHint:
+      "Linking an invoice marks it settled on the ledger and boosts your Invoice-Discipline trust factor.",
+    lockingRate: "Locking live corridor exchange rate…",
+    firmQuoteLocked: "Firm Corridor Quote Locked",
+    supplierReceives: "Supplier receives",
+    domesticBookSettlement: "Instant Domestic Book Settlement:",
+    domesticBookDesc: (curr) =>
+      `Both vaults are denominated in ${curr}. Zero FX conversion and zero protocol fee.`,
+    btnBack: "Back",
+    btnReviewTicket: "Review Settlement Ticket",
+    principalAmount: "Principal Amount",
+    linkedInvoice: "Linked Invoice",
+    collectionRail: "Settlement Collection Rail",
+    vaultBalanceTitle: "VUKA Business Vault Balance",
+    vaultBalanceDesc: "Instant double-entry book settlement · zero FX spread, zero fee",
+    momoRailTitle: "Mobile Money Collection → Ledger → Supplier Payout",
+    momoRailDesc: "Authorized push collection from your registered mobile money account",
+    payerPhoneLabel: "Your Mobile Money Number (Collection MSISDN)",
+    authRefLabel: "Provider Authorization Reference",
+    authRefPlaceholder: "Reference from your MTN / M-Pesa prompt",
+    authRefDesc:
+      "VUKA never collects or stores your mobile-money PIN. Complete the challenge with your provider, then paste the reference it gives you.",
+    btnDispatching: "Dispatching Settlement…",
+    btnConfirmDispatch: "Confirm & Dispatch Payment",
+    liveTicket: "Live Settlement Ticket",
+    originVault: "Origin Vault",
+    targetVault: "Target Vault",
+    supplierReceivesNet: "Supplier Receives Net",
+    idempotencyKey: "Idempotency Key",
+    changeRecipient: "Change",
+    telemetryTitle: "Live Cross-Border Settlement Telemetry",
+    realtimeStateMachine: "Real-Time State Machine",
+    paymentSettledMsg:
+      "This cross-border payment has settled on the double-entry ledger and supplier payout rail.",
+    paymentPausedMsg:
+      "This payment workflow has paused — inspect the step status above for recovery options.",
+    btnSendAnother: "Send another payment",
+    domesticTitle: "Instant Domestic Ledger Settlement",
+    paymentSettledHeader: "Payment Settled on Ledger",
+    transferredTo: (amt, name) => `${amt} transferred to ${name}.`,
+    totalSettled: "Total Settled",
+    ledgerTransferId: "Ledger Transfer ID",
+    recentWorkflows: "Recent Cross-Border Workflows",
+    recentTracked: (n) => `${n} tracked`,
+    recentEmpty:
+      "Cross-border workflows you dispatch from this browser appear here for instant live tracking.",
+  },
+  fr: {
+    step1Title: "Destinataire & Corridor",
+    step1Sub: "Vérifier le numéro MSISDN & le coffre cible",
+    step2Title: "Montant & Facture",
+    step2Sub: "Verrouiller le taux de change & lier une facture",
+    step3Title: "Vérification & Envoi",
+    step3Sub: "Confirmer le rail de collecte & exécuter le règlement",
+    stepLabel: (n) => `Étape 0${n}`,
+    bannerBadge: "Guichet de Règlement Transfrontalier",
+    replaySafe: "Idempotence Sécurisée Anti-Rejeu",
+    bannerTitle: "Payer un Fournisseur",
+    bannerDesc:
+      "Verrouillez un devis de change ferme et réglez au-delà des frontières en trois étapes atomiques (Collecte Mobile Money → Grand Livre en Partie Double → Versement Fournisseur).",
+    sourceVault: "Coffre Entreprise Source",
+    availableLiquidity: "Liquidité Disponible",
+    topUp: "Recharger →",
+    settlementEngine: "Moteur de Règlement",
+    feeLabel: (bps) => `Frais ${(bps / 100).toFixed(2)}% (${bps} bps)`,
+    liveFx: "Taux en Direct",
+    dispatchWorkbench: "Poste d'Envoi des Règlements Transfrontaliers",
+    stepOf: (curr, tot) => `Étape 0${curr} sur 0${tot}`,
+    marketsBar: "10 Marchés Régionaux · Cliquez sur un indicatif pour pré-remplir",
+    msisdnLabel: "Numéro Mobile Money du Destinataire (MSISDN)",
+    msisdnHint:
+      "Entrez le numéro VUKA enregistré du fournisseur avec l'indicatif international (+250 Rwanda, +254 Kenya, etc.).",
+    btnVerifying: "Vérification…",
+    btnVerifyTrader: "Vérifier le Commerçant",
+    verifiedCounterparty: "Contrepartie Vérifiée",
+    vaultsCount: (n) => `${n} Coffre${n > 1 ? "s" : ""} Entreprise`,
+    destVaultLabel: "Coffre Fournisseur Cible",
+    continueToQuote: "Continuer vers Montant & Devis",
+    sourceVaultSelect: "Coffre Commercial Source",
+    amountLabel: (curr) => `Montant ${curr ? `(${curr})` : ""}`,
+    availLabel: (v) => `Dispo : ${v}`,
+    linkInvoiceLabel: "Lier une Facture Commerciale (Optionnel)",
+    noLinkedInvoice: "Aucune facture liée",
+    linkInvoiceHint:
+      "Lier une facture la marque comme réglée sur le grand livre et renforce votre score de confiance.",
+    lockingRate: "Verrouillage du taux de change en direct…",
+    firmQuoteLocked: "Devis Ferme de Corridor Verrouillé",
+    supplierReceives: "Le fournisseur reçoit",
+    domesticBookSettlement: "Règlement Interne Immédiat :",
+    domesticBookDesc: (curr) =>
+      `Les deux coffres sont libellés en ${curr}. Zéro conversion de change et zéro frais de protocole.`,
+    btnBack: "Retour",
+    btnReviewTicket: "Examiner le Billet de Règlement",
+    principalAmount: "Montant Principal",
+    linkedInvoice: "Facture Liée",
+    collectionRail: "Rail de Collecte du Règlement",
+    vaultBalanceTitle: "Solde du Coffre Commercial VUKA",
+    vaultBalanceDesc: "Règlement comptable instantané · aucun écart de change, zéro frais",
+    momoRailTitle: "Collecte Mobile Money → Grand Livre → Versement Fournisseur",
+    momoRailDesc: "Collecte push autorisée depuis votre compte mobile money enregistré",
+    payerPhoneLabel: "Votre Numéro Mobile Money (MSISDN Débit)",
+    authRefLabel: "Référence d'Autorisation de l'Opérateur",
+    authRefPlaceholder: "Référence de l'invite MTN / M-Pesa",
+    authRefDesc:
+      "VUKA ne collecte jamais votre code PIN. Validez l'invite sur votre téléphone, puis collez la référence.",
+    btnDispatching: "Envoi du Règlement…",
+    btnConfirmDispatch: "Confirmer & Envoyer le Paiement",
+    liveTicket: "Billet de Règlement en Direct",
+    originVault: "Coffre d'Origine",
+    targetVault: "Coffre Cible",
+    supplierReceivesNet: "Fournisseur Reçoit Net",
+    idempotencyKey: "Clé d'Idempotence",
+    changeRecipient: "Modifier",
+    telemetryTitle: "Télémétrie en Direct du Règlement",
+    realtimeStateMachine: "Machine à États Temps Réel",
+    paymentSettledMsg:
+      "Ce paiement transfrontalier a été réglé sur le grand livre et versé sur le rail du fournisseur.",
+    paymentPausedMsg:
+      "Ce workflow de paiement est en pause — examinez le statut de l'étape pour les options de reprise.",
+    btnSendAnother: "Effectuer un autre paiement",
+    domesticTitle: "Règlement Interne Immédiat",
+    paymentSettledHeader: "Paiement Réglé sur le Grand Livre",
+    transferredTo: (amt, name) => `${amt} transférés à ${name}.`,
+    totalSettled: "Total Réglé",
+    ledgerTransferId: "Identifiant du Virement",
+    recentWorkflows: "Workflows Transfrontaliers Récents",
+    recentTracked: (n) => `${n} suivis`,
+    recentEmpty: "Les workflows de paiement envoyés depuis ce navigateur apparaissent ici.",
+  },
+  sw: {
+    step1Title: "Mpokeaji & Njia ya Malipo",
+    step1Sub: "Thibitisha nambari ya simu & pochi lengwa",
+    step2Title: "Kiasi & Ankara",
+    step2Sub: "Funga bei ya sarafu & unganisha ankara",
+    step3Title: "Kagua & Tuma",
+    step3Sub: "Thibitisha njia ya kukusanya & kamilisha malipo",
+    stepLabel: (n) => `Hatua 0${n}`,
+    bannerBadge: "Kitengo cha Malipo ya Mpakani",
+    replaySafe: "Ulinzi Dhidi ya Malipo ya Marudio",
+    bannerTitle: "Tuma Malipo kwa Mtoa Huduma",
+    bannerDesc:
+      "Funga bei thabiti ya sarafu na ulipe kuvuka mipaka kwa hatua tatu (Kukusanya Pesa kwa Simu → Leja ya Maingizo Maradufu → Malipo kwa Mtoa Huduma).",
+    sourceVault: "Pochi ya Biashara ya Kutuma",
+    availableLiquidity: "Pesa Zinazopatikana",
+    topUp: "Weka fedha →",
+    settlementEngine: "Mfumo wa Malipo",
+    feeLabel: (bps) => `Ada ${(bps / 100).toFixed(2)}% (${bps} bps)`,
+    liveFx: "Viwango vya Moja kwa Moja",
+    dispatchWorkbench: "Dawati la Kutuma Malipo ya Mpakani",
+    stepOf: (curr, tot) => `Hatua 0${curr} kati ya 0${tot}`,
+    marketsBar: "Masoko 10 ya Kuanzia · Bofya kiambishi awali cha nchi kujaza",
+    msisdnLabel: "Nambari ya Simu ya Mpokeaji (MSISDN)",
+    msisdnHint:
+      "Weka nambari ya simu ya VUKA ya msambazaji ikiwa na msimbo wa kimataifa (mf. +254 Kenya, +250 Rwanda).",
+    btnVerifying: "Inathibitisha…",
+    btnVerifyTrader: "Thibitisha Mfanyabiashara",
+    verifiedCounterparty: "Mshirika Aliyethibitishwa",
+    vaultsCount: (n) => `Pochi ${n} za Biashara`,
+    destVaultLabel: "Pochi Lengwa ya Msambazaji",
+    continueToQuote: "Endelea hadi Kiasi na Bei",
+    sourceVaultSelect: "Pochi ya Biashara ya Kutoa Pesa",
+    amountLabel: (curr) => `Kiasi ${curr ? `(${curr})` : ""}`,
+    availLabel: (v) => `Zilizopo: ${v}`,
+    linkInvoiceLabel: "Unganisha Ankara ya Biashara (Hiari)",
+    noLinkedInvoice: "Hakuna ankara iliyounganishwa",
+    linkInvoiceHint:
+      "Kuunganisha ankara huifanya ionekane kuwa imelipwa na huongeza alama zako za uaminifu.",
+    lockingRate: "Inafunga kiwango cha ubadilishaji wa sarafu…",
+    firmQuoteLocked: "Bei Thabiti ya Njia Imefungwa",
+    supplierReceives: "Msambazaji anapokea",
+    domesticBookSettlement: "Malipo ya Papo Hapo ya Ndani:",
+    domesticBookDesc: (curr) =>
+      `Pochi zote mbili ziko katika ${curr}. Hakuna ada wala ubadilishaji wa sarafu.`,
+    btnBack: "Rudi",
+    btnReviewTicket: "Kagua Tiketi ya Malipo",
+    principalAmount: "Kiasi Kikuu",
+    linkedInvoice: "Ankara Iliyounganishwa",
+    collectionRail: "Njia ya Kukusanya Malipo",
+    vaultBalanceTitle: "Salio la Pochi ya Biashara ya VUKA",
+    vaultBalanceDesc: "Ulipaji wa papo hapo kwenye leja · hakuna ada wala upotevu wa thamani",
+    momoRailTitle: "Kukusanya Pesa kwa Simu → Leja → Malipo kwa Msambazaji",
+    momoRailDesc: "Kukusanya fedha kutoka kwa pochi yako ya simu kwa idhini yako",
+    payerPhoneLabel: "Nambari Yako ya Simu ya Kukatwa (MSISDN)",
+    authRefLabel: "Nambari ya Uthibitisho wa Mtandao",
+    authRefPlaceholder: "Rejeleo kutoka kwenye ujumbe wa MTN / M-Pesa",
+    authRefDesc:
+      "VUKA kamwe haikusanyi nambari yako ya siri ya PIN. Kamilisha uthibitisho kisha weka rejeleo hapa.",
+    btnDispatching: "Inatuma Malipo…",
+    btnConfirmDispatch: "Thibitisha & Tuma Malipo",
+    liveTicket: "Tiketi ya Malipo ya Moja kwa Moja",
+    originVault: "Pochi ya Kutoka",
+    targetVault: "Pochi Lengwa",
+    supplierReceivesNet: "Kiasi Halisi Anachopokea Msambazaji",
+    idempotencyKey: "Ufunguo wa Usalama wa Muamala",
+    changeRecipient: "Badilisha",
+    telemetryTitle: "Ufuatiliaji wa Moja kwa Moja wa Malipo",
+    realtimeStateMachine: "Hali ya Mfumo kwa Wakati Halisi",
+    paymentSettledMsg:
+      "Malipo haya yamekamilika kwenye leja na fedha zimetumwa kwa msambazaji.",
+    paymentPausedMsg:
+      "Mchakato wa malipo umesimama — kagua hatua zilizo hapo juu kwa chaguo la kuendelea.",
+    btnSendAnother: "Tuma malipo mengine",
+    domesticTitle: "Malipo ya Ndani ya Papo Hapo",
+    paymentSettledHeader: "Malipo Yamekamilika kwenye Leja",
+    transferredTo: (amt, name) => `${amt} zimetumwa kwa ${name}.`,
+    totalSettled: "Jumla Iliyolipwa",
+    ledgerTransferId: "Nambari ya Uhamisho wa Leja",
+    recentWorkflows: "Miamala ya Hivi Karibuni ya Mpakani",
+    recentTracked: (n) => `Miamala ${n}`,
+    recentEmpty: "Miamala unayotuma kutoka kwa kivinjari hiki itaonekana hapa.",
+  },
+  pt: {
+    step1Title: "Destinatário & Corredor",
+    step1Sub: "Verificar MSISDN & cofre de destino",
+    step2Title: "Montante & Fatura",
+    step2Sub: "Fixar taxa de câmbio & associar fatura",
+    step3Title: "Revisão & Envio",
+    step3Sub: "Confirmar canal de cobrança & liquidar",
+    stepLabel: (n) => `Passo 0${n}`,
+    bannerBadge: "Mesa de Liquidação Transfronteiriça",
+    replaySafe: "Idempotência com Proteção Anti-Repetição",
+    bannerTitle: "Enviar Pagamento a Fornecedor",
+    bannerDesc:
+      "Fixe uma cotação cambial firme e liquide através das fronteiras em três etapas atómicas (Cobrança Mobile Money → Razão de Partida Dobrada → Pagamento ao Fornecedor).",
+    sourceVault: "Cofre Comercial de Origem",
+    availableLiquidity: "Liquidez Disponível",
+    topUp: "Carregar →",
+    settlementEngine: "Motor de Liquidação",
+    feeLabel: (bps) => `Taxa ${(bps / 100).toFixed(2)}% (${bps} bps)`,
+    liveFx: "Câmbio em Direto",
+    dispatchWorkbench: "Bancada de Expedição de Pagamentos",
+    stepOf: (curr, tot) => `Passo 0${curr} de 0${tot}`,
+    marketsBar: "10 Mercados Regionais · Clique no indicativo para preencher",
+    msisdnLabel: "Número Mobile Money do Destinatário (MSISDN)",
+    msisdnHint:
+      "Introduza o número VUKA do fornecedor com o indicativo internacional (+254 Quénia, +250 Ruanda, etc.).",
+    btnVerifying: "A verificar…",
+    btnVerifyTrader: "Verificar Comerciante",
+    verifiedCounterparty: "Contraparte Verificada",
+    vaultsCount: (n) => `${n} Cofre${n > 1 ? "s" : ""} Comercial${n > 1 ? "is" : ""}`,
+    destVaultLabel: "Cofre Fornecedor de Destino",
+    continueToQuote: "Continuar para Montante & Cotação",
+    sourceVaultSelect: "Cofre Comercial de Origem",
+    amountLabel: (curr) => `Montante ${curr ? `(${curr})` : ""}`,
+    availLabel: (v) => `Disp: ${v}`,
+    linkInvoiceLabel: "Associar Fatura Comercial (Opcional)",
+    noLinkedInvoice: "Nenhuma fatura associada",
+    linkInvoiceHint:
+      "Vincular uma fatura marca-a como liquidada no razão e reforça o seu fator de confiança.",
+    lockingRate: "A fixar taxa de câmbio em tempo real…",
+    firmQuoteLocked: "Cotação Firme do Corredor Fixada",
+    supplierReceives: "O fornecedor recebe",
+    domesticBookSettlement: "Liquidação Interna Instantânea:",
+    domesticBookDesc: (curr) =>
+      `Ambos os cofres são denominados em ${curr}. Sem conversão cambial e sem comissões.`,
+    btnBack: "Voltar",
+    btnReviewTicket: "Rever Bilhete de Liquidação",
+    principalAmount: "Montante Principal",
+    linkedInvoice: "Fatura Associada",
+    collectionRail: "Canal de Cobrança do Pagamento",
+    vaultBalanceTitle: "Saldo do Cofre Comercial VUKA",
+    vaultBalanceDesc: "Liquidação imediata no razão · sem spread cambial nem taxas",
+    momoRailTitle: "Cobrança Mobile Money → Razão → Pagamento ao Fornecedor",
+    momoRailDesc: "Cobrança autorizada na sua conta de dinheiro móvel registada",
+    payerPhoneLabel: "O Seu Número Mobile Money (MSISDN de Débito)",
+    authRefLabel: "Referência de Autorização do Fornecedor",
+    authRefPlaceholder: "Referência da notificação MTN / M-Pesa",
+    authRefDesc:
+      "O VUKA nunca recolhe o seu código PIN. Aprove a notificação no seu telemóvel e introduza a referência recebida.",
+    btnDispatching: "A enviar liquidação…",
+    btnConfirmDispatch: "Confirmar & Enviar Pagamento",
+    liveTicket: "Bilhete de Liquidação em Tempo Real",
+    originVault: "Cofre de Origem",
+    targetVault: "Cofre de Destino",
+    supplierReceivesNet: "O Fornecedor Recebe Líquido",
+    idempotencyKey: "Chave de Idempotência",
+    changeRecipient: "Alterar",
+    telemetryTitle: "Telemetria de Liquidação em Tempo Real",
+    realtimeStateMachine: "Máquina de Estados em Tempo Real",
+    paymentSettledMsg:
+      "Este pagamento foi liquidado no razão de partida dobrada e no canal do fornecedor.",
+    paymentPausedMsg:
+      "O fluxo de pagamento foi pausado — verifique o estado do passo para opções de recuperação.",
+    btnSendAnother: "Enviar outro pagamento",
+    domesticTitle: "Liquidação Interna Instantânea",
+    paymentSettledHeader: "Pagamento Liquidado no Razão",
+    transferredTo: (amt, name) => `${amt} transferidos para ${name}.`,
+    totalSettled: "Total Liquidado",
+    ledgerTransferId: "ID da Transferência no Razão",
+    recentWorkflows: "Fluxos Transfronteiriços Recentes",
+    recentTracked: (n) => `${n} rastreados`,
+    recentEmpty: "Os pagamentos que enviar a partir deste navegador aparecerão aqui.",
+  },
+  rw: {
+    step1Title: "Uwohererezwa & Inzira",
+    step1Sub: "Emeza nimero ya telefoni & konti yo kubikaho",
+    step2Title: "Amafaranga & Fagitire",
+    step2Sub: "Funga igipimo cy'ivunjisha & huza fagitire",
+    step3Title: "Gusuzuma & Kohereza",
+    step3Sub: "Emeza uburyo bwo gukata & kora ubwishyu",
+    stepLabel: (n) => `Intambwe 0${n}`,
+    bannerBadge: "Ibiro by'Ubwishyu bw'Imipaka",
+    replaySafe: "Umutekano wo Kudasubiramo Ubwishyu",
+    bannerTitle: "Kwishyura Umucuruzi / Umuterankunga",
+    bannerDesc:
+      "Funga igiciro gihamye cy'ivunjisha maze wishyure hakurya y'umupaka mu ntambwe eshatu z'ingenzi (Gukata kuri Mobile Money → Igitabo cy'Ihererekanya → Kwishyura Umucuruzi).",
+    sourceVault: "Konti y'Ubucuruzi Yishyura",
+    availableLiquidity: "Amafaranga Ahari",
+    topUp: "Gushyiraho amafaranga →",
+    settlementEngine: "Moteri y'Ubwishyu",
+    feeLabel: (bps) => `Amafaranga ${(bps / 100).toFixed(2)}% (${bps} bps)`,
+    liveFx: "Igipimo cy'ako kanya",
+    dispatchWorkbench: "Aho Kohereza Ubwishyu bw'Imipaka",
+    stepOf: (curr, tot) => `Intambwe 0${curr} kuri 0${tot}`,
+    marketsBar: "Amasoko 10 yo gutangiriraho · Kanda ku kode y'igihugu",
+    msisdnLabel: "Nimero ya Mobile Money y'Uwakira (MSISDN)",
+    msisdnHint:
+      "Shyiramo nimero ya telefoni ya VUKA y'uwoherezwa iriho kode y'igihugu (urugero: +254 Kenya, +250 u Rwanda).",
+    btnVerifying: "Gusuzuma…",
+    btnVerifyTrader: "Suzuma Umucuruzi",
+    verifiedCounterparty: "Umucuruzi Wemejwe",
+    vaultsCount: (n) => `Konti ${n} z'Ubucuruzi`,
+    destVaultLabel: "Konti y'Ubucuruzi y'Uwakira",
+    continueToQuote: "Komeza ku Mafaranga & Igiciro",
+    sourceVaultSelect: "Konti y'Ubucuruzi yo Gukuraho Amafaranga",
+    amountLabel: (curr) => `Amafaranga ${curr ? `(${curr})` : ""}`,
+    availLabel: (v) => `Ahari: ${v}`,
+    linkInvoiceLabel: "Huza na Fagitire y'Ubucuruzi (Bihitwamo)",
+    noLinkedInvoice: "Nta fagitire ihuje",
+    linkInvoiceHint:
+      "Guhuza fagitire bituma yandikwa nk'iyishyuwe mu gitabo kandi bikongera icyizere cyawe mu bucuruzi.",
+    lockingRate: "Gufunga igipimo cy'ivunjisha cy'ako kanya…",
+    firmQuoteLocked: "Igiciro Gihamye cy'Inzira Cyafunzwe",
+    supplierReceives: "Uwoherejwe azahabwa",
+    domesticBookSettlement: "Kwishyura Ako Kanya Imbere mu Gihugu:",
+    domesticBookDesc: (curr) =>
+      `Konti zombi ziri mu ifaranga rya ${curr}. Nta vunjisha kandi nta kiguzi k'inyongera.`,
+    btnBack: "Gusubira inyuma",
+    btnReviewTicket: "Kureba Inyandiko y'Ubwishyu",
+    principalAmount: "Amafaranga Nyayo",
+    linkedInvoice: "Fagitire Ihujwe",
+    collectionRail: "Umuyoboro wo Gukuraho Amafaranga",
+    vaultBalanceTitle: "Konti y'Ubucuruzi muri VUKA",
+    vaultBalanceDesc: "Kwishyurana ako kanya mu gitabo · nta kiguzi cyangwa igihombo mu ivunjisha",
+    momoRailTitle: "Gukata kuri Mobile Money → Igitabo → Guha Umucuruzi",
+    momoRailDesc: "Gukata amafaranga byemejwe kuri konti yawe ya telefoni igendanwa",
+    payerPhoneLabel: "Nimero Yawe ya Mobile Money yo Gukataho (MSISDN)",
+    authRefLabel: "Nimero y'Icyemezo cya Serivisi y'Itumanaho",
+    authRefPlaceholder: "Nimero y'icyemezo ivuye kuri MTN / M-Pesa",
+    authRefDesc:
+      "VUKA ntabwo ibika cyangwa ngo isabe umubare wawe w'ibanga wa PIN. Emeza kuri telefoni yawe maze ushyiremo nimero y'icyemezo hano.",
+    btnDispatching: "Kwohereza Ubwishyu…",
+    btnConfirmDispatch: "Emeza & Ohereza Ubwishyu",
+    liveTicket: "Inyandiko y'Ubwishyu bw'ako Kanya",
+    originVault: "Konti Ivaho",
+    targetVault: "Konti Yerekezaho",
+    supplierReceivesNet: "Amafaranga Nyayo Uwakira Azafata",
+    idempotencyKey: "Urufunguzo rw'Umutekano w'Ihererekanya",
+    changeRecipient: "Guhindura",
+    telemetryTitle: "Ubugenzuzi bw'Imigendekere y'Ubwishyu",
+    realtimeStateMachine: "Uko Byifashe Ako Kanya",
+    paymentSettledMsg:
+      "Ubu bwishyu bwambukiranya imipaka bwamaze kwandikwa mu gitabo no koherezwa ku wakira.",
+    paymentPausedMsg:
+      "Iri hererekanya ryahagaze gato — reba amakuru y'intambwe haruguru kugira ngo ukemure ikibazo.",
+    btnSendAnother: "Kora ubundi bwishyu",
+    domesticTitle: "Kwishyura Ako Kanya Imbere mu Gihugu",
+    paymentSettledHeader: "Ubwishyu Bwamaze Kwandikwa mu Gitabo",
+    transferredTo: (amt, name) => `${amt} yoherejwe kuri ${name}.`,
+    totalSettled: "Amafaranga Yose Yishyuwe",
+    ledgerTransferId: "Nimero y'Ihererekanya mu Gitabo",
+    recentWorkflows: "Ihererekanya ry'Imipaka riheruka",
+    recentTracked: (n) => `Ibikorwa ${n}`,
+    recentEmpty: "Ibikorwa byo kwishyura uheruka gukora muri iyi mudasobwa biraboneka hano.",
+  },
+};
 
 function useDebounced<T>(value: T, ms = 400): T {
   const [v, setV] = useState(value);
@@ -92,10 +578,23 @@ function workflowFromError(e: unknown): Workflow | undefined {
   return body?.workflow?.id ? body.workflow : undefined;
 }
 
-function StepRail({ step, onJump }: { step: number; onJump: (target: number) => void }) {
+function StepRail({
+  step,
+  onJump,
+}: {
+  step: number;
+  onJump: (target: number) => void;
+}) {
+  const t = useLangCopy(COPY);
+  const steps = [
+    { title: t.step1Title, sub: t.step1Sub },
+    { title: t.step2Title, sub: t.step2Sub },
+    { title: t.step3Title, sub: t.step3Sub },
+  ];
+
   return (
     <div className="mb-7 grid gap-3 sm:grid-cols-3">
-      {WIZARD_STEPS.map((s, i) => {
+      {steps.map((s, i) => {
         const n = i + 1;
         const done = n < step;
         const current = n === step;
@@ -131,7 +630,7 @@ function StepRail({ step, onJump }: { step: number; onJump: (target: number) => 
                   current ? "text-[#c2f74d]" : done ? "text-[#4d7500]" : "text-muted-foreground",
                 )}
               >
-                Step 0{n}
+                {t.stepLabel(n)}
               </div>
               <div
                 className={cn(
@@ -158,6 +657,7 @@ function StepRail({ step, onJump }: { step: number; onJump: (target: number) => 
 }
 
 function SendPayment() {
+  const t = useLangCopy(COPY);
   const trader = useTrader();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -424,20 +924,18 @@ function SendPayment() {
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-[#c2f74d]/40 bg-[#c2f74d]/15 px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[#c2f74d]">
                 <span className="size-1.5 rounded-full bg-[#c2f74d]" />
-                Cross-Border Settlement Desk
+                {t.bannerBadge}
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-white/75">
-                <Lock className="size-3 text-[#c2f74d]" /> Replay-Safe Idempotency
+                <Lock className="size-3 text-[#c2f74d]" /> {t.replaySafe}
               </span>
             </div>
 
             <h1 className="mt-4 text-2xl font-bold tracking-tight text-white sm:text-4xl">
-              Send Supplier Payment
+              {t.bannerTitle}
             </h1>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/70">
-              Lock a deterministic corridor FX quote and settle across borders in three atomic hops
-              (Mobile Money Collection → Double-Entry Ledger → Supplier Rail Payout), or settle
-              same-currency transfers instantly on the ledger.
+              {t.bannerDesc}
             </p>
           </div>
 
@@ -446,7 +944,7 @@ function SendPayment() {
             <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-4 backdrop-blur-md">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/55">
-                  Source Business Vault
+                  {t.sourceVault}
                 </span>
                 {sourceCountry ? <Flag code={sourceCountry} className="w-4 rounded-[2px]" /> : null}
               </div>
@@ -454,9 +952,9 @@ function SendPayment() {
                 {source ? money(balance, source.currency) : "—"}
               </div>
               <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2 font-mono text-[10px] text-white/60">
-                <span>Available Liquidity</span>
+                <span>{t.availableLiquidity}</span>
                 <Link to="/wallets" className="text-[#c2f74d] hover:underline">
-                  Top up →
+                  {t.topUp}
                 </Link>
               </div>
             </div>
@@ -464,7 +962,7 @@ function SendPayment() {
             <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-4 backdrop-blur-md">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/55">
-                  Settlement Engine
+                  {t.settlementEngine}
                 </span>
                 <Globe2 className="size-4 text-[#c2f74d]" />
               </div>
@@ -478,10 +976,10 @@ function SendPayment() {
               <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2 font-mono text-[10px] text-white/60">
                 <span>
                   {corridor
-                    ? `Fee ${(corridor.fees_bps / 100).toFixed(2)}% (${corridor.fees_bps} bps)`
+                    ? t.feeLabel(corridor.fees_bps)
                     : "0.80% Intra · 1.20% Cross"}
                 </span>
-                <span className="text-[#c2f74d]">Live FX</span>
+                <span className="text-[#c2f74d]">{t.liveFx}</span>
               </div>
             </div>
           </div>
@@ -506,10 +1004,10 @@ function SendPayment() {
         <div className="grid gap-5 lg:grid-cols-[1.2fr_430px] lg:items-start">
           {/* Left Column: 3-Step Interactive Dispatch Workbench */}
           <Panel
-            title="Cross-Border Payment Dispatch Workbench"
+            title={t.dispatchWorkbench}
             meta={
               <Chip tone="live">
-                <ShieldCheck className="size-3" /> Step 0{step} of 03
+                <ShieldCheck className="size-3" /> {t.stepOf(step, 3)}
               </Chip>
             }
           >
@@ -528,7 +1026,7 @@ function SendPayment() {
                     {markets.length > 0 ? (
                       <div className="rounded-2xl border border-border/80 bg-muted/20 p-4">
                         <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                          10 Launch Markets · Click a country dial prefix to pre-fill
+                          {t.marketsBar}
                         </div>
                         <div className="mt-2.5 flex flex-wrap gap-1.5">
                           {markets.map((m) => {
@@ -564,7 +1062,7 @@ function SendPayment() {
 
                     <div className="space-y-2">
                       <Label className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">
-                        Recipient Mobile Money Number (MSISDN)
+                        {t.msisdnLabel}
                       </Label>
                       <div className="flex gap-2">
                         <Input
@@ -589,12 +1087,11 @@ function SendPayment() {
                           disabled={!phone.trim() || lookup.isPending}
                           onClick={() => lookup.mutate()}
                         >
-                          {lookup.isPending ? "Verifying…" : "Verify Trader"}
+                          {lookup.isPending ? t.btnVerifying : t.btnVerifyTrader}
                         </Button>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Enter the supplier&apos;s registered VUKA phone number with international
-                        dialing code (e.g. +254 for Kenya, +250 for Rwanda).
+                        {t.msisdnHint}
                       </p>
 
                       {recipient ? (
@@ -608,11 +1105,10 @@ function SendPayment() {
                                 <span className="text-sm font-bold">
                                   {recipient.user.full_name}
                                 </span>
-                                <Chip tone="live">Verified Counterparty</Chip>
+                                <Chip tone="live">{t.verifiedCounterparty}</Chip>
                               </div>
                               <div className="mt-0.5 font-mono text-xs opacity-75">
-                                {recipient.user.phone_number} · {destOptions.length} Business{" "}
-                                {destOptions.length === 1 ? "Vault" : "Vaults"}
+                                {recipient.user.phone_number} · {t.vaultsCount(destOptions.length)}
                               </div>
                             </div>
                           </div>
@@ -623,7 +1119,7 @@ function SendPayment() {
                     {recipient && destOptions.length > 1 ? (
                       <div className="space-y-1.5">
                         <Label className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">
-                          Destination Supplier Vault
+                          {t.destVaultLabel}
                         </Label>
                         <Select value={dest?.id ?? ""} onValueChange={setDestId}>
                           <SelectTrigger
@@ -654,7 +1150,7 @@ function SendPayment() {
                       disabled={!recipient || !dest}
                       onClick={() => setStep(2)}
                     >
-                      Continue to Amount &amp; Quote <ArrowRight className="ml-1.5 size-4" />
+                      {t.continueToQuote} <ArrowRight className="ml-1.5 size-4" />
                     </Button>
                   </div>
                 ) : null}
@@ -671,7 +1167,7 @@ function SendPayment() {
 
                     <div className="space-y-1.5">
                       <Label className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">
-                        Source Business Trade Vault
+                        {t.sourceVaultSelect}
                       </Label>
                       <Select value={source?.id ?? ""} onValueChange={setSourceId}>
                         <SelectTrigger
@@ -695,11 +1191,11 @@ function SendPayment() {
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
                           <Label className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">
-                            Amount {source ? `(${source.currency})` : ""}
+                            {t.amountLabel(source?.currency ?? "")}
                           </Label>
                           {source ? (
                             <span className="font-mono text-[10px] text-muted-foreground">
-                              Avail: {money(balance, source.currency)}
+                              {t.availLabel(money(balance, source.currency))}
                             </span>
                           ) : null}
                         </div>
@@ -736,7 +1232,7 @@ function SendPayment() {
 
                       <div className="space-y-1.5">
                         <Label className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">
-                          Link Trade Invoice (Optional)
+                          {t.linkInvoiceLabel}
                         </Label>
                         <Select value={invoiceNumber || "none"} onValueChange={pickInvoice}>
                           <SelectTrigger
@@ -746,7 +1242,7 @@ function SendPayment() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent className="rounded-xl">
-                            <SelectItem value="none">No linked invoice</SelectItem>
+                            <SelectItem value="none">{t.noLinkedInvoice}</SelectItem>
                             {unpaidInvoices.map((i) => (
                               <SelectItem key={i.id} value={i.number}>
                                 {i.number} · {money(invoiceTotal(i), i.currency)}
@@ -755,8 +1251,7 @@ function SendPayment() {
                           </SelectContent>
                         </Select>
                         <p className="text-[11px] text-muted-foreground">
-                          Linking an invoice marks it settled on the ledger and boosts your
-                          Invoice-Discipline trust factor.
+                          {t.linkInvoiceHint}
                         </p>
                       </div>
                     </div>
@@ -766,16 +1261,16 @@ function SendPayment() {
                       <div className="rounded-2xl border border-[#79b200]/40 bg-[#f6fce8] p-4 text-xs text-[#151515] dark:bg-[#1b2410] dark:text-foreground">
                         {quote.isFetching && !q ? (
                           <span className="font-mono text-muted-foreground">
-                            Locking live corridor exchange rate…
+                            {t.lockingRate}
                           </span>
                         ) : q ? (
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
                               <div className="font-mono text-[10px] font-bold uppercase tracking-wider text-[#4d7500]">
-                                Firm Corridor Quote Locked
+                                {t.firmQuoteLocked}
                               </div>
                               <div className="mt-1 text-sm font-bold">
-                                Supplier receives{" "}
+                                {t.supplierReceives}{" "}
                                 <span className="font-mono text-base underline decoration-[#79b200]">
                                   {money(fromMinor(q.deliver_amount_minor), q.to_currency)}
                                 </span>
@@ -799,11 +1294,10 @@ function SendPayment() {
                     ) : mode === "domestic" && amountValid ? (
                       <div className="rounded-2xl border border-border bg-muted/30 p-4 text-xs">
                         <span className="font-mono font-semibold text-foreground">
-                          Instant Domestic Book Settlement:{" "}
+                          {t.domesticBookSettlement}{" "}
                         </span>
                         <span className="text-muted-foreground">
-                          Both vaults are denominated in {source?.currency}. Zero FX conversion and
-                          zero protocol fee.
+                          {t.domesticBookDesc(source?.currency ?? "")}
                         </span>
                       </div>
                     ) : null}
@@ -823,14 +1317,14 @@ function SendPayment() {
                         className="h-11 rounded-xl px-5 font-mono text-xs uppercase"
                         onClick={() => setStep(1)}
                       >
-                        Back
+                        {t.btnBack}
                       </Button>
                       <Button
                         className="h-11 flex-1 rounded-xl bg-[#151515] font-mono text-xs font-bold uppercase tracking-wider text-[#c2f74d] hover:bg-[#151515]/90"
                         disabled={!!problem}
                         onClick={() => setStep(3)}
                       >
-                        Review Settlement Ticket <ArrowRight className="ml-1.5 size-4" />
+                        {t.btnReviewTicket} <ArrowRight className="ml-1.5 size-4" />
                       </Button>
                     </div>
                   </div>
@@ -850,7 +1344,7 @@ function SendPayment() {
                     <div className="rounded-2xl border border-border bg-muted/20 p-4 text-sm">
                       <div className="flex items-center justify-between">
                         <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                          Principal Amount
+                          {t.principalAmount}
                         </span>
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-base font-bold">
@@ -869,7 +1363,7 @@ function SendPayment() {
                       {invoiceNumber ? (
                         <div className="mt-2.5 flex items-center justify-between border-t border-border/60 pt-2.5">
                           <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                            Linked Invoice
+                            {t.linkedInvoice}
                           </span>
                           <span className="inline-flex items-center gap-1.5 rounded-md bg-[#c2f74d]/35 px-2 py-0.5 font-mono text-xs font-semibold">
                             <FileText className="size-3" /> {invoiceNumber}
@@ -881,7 +1375,7 @@ function SendPayment() {
                     {/* Payment Collection Rail */}
                     <div className="space-y-2">
                       <Label className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">
-                        Settlement Collection Rail
+                        {t.collectionRail}
                       </Label>
                       {mode === "domestic" ? (
                         <div className="flex items-center gap-3.5 rounded-2xl border border-[#79b200]/50 bg-[#f6fce8] p-4 text-[#151515] dark:bg-[#1b2410] dark:text-foreground">
@@ -889,9 +1383,9 @@ function SendPayment() {
                             <Wallet className="size-5" aria-hidden="true" />
                           </span>
                           <div className="min-w-0 flex-1">
-                            <div className="text-sm font-bold">VUKA Business Vault Balance</div>
+                            <div className="text-sm font-bold">{t.vaultBalanceTitle}</div>
                             <p className="text-xs text-muted-foreground">
-                              Instant double-entry book settlement · zero FX spread, zero fee
+                              {t.vaultBalanceDesc}
                             </p>
                           </div>
                           <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#151515] text-[#c2f74d]">
@@ -906,10 +1400,10 @@ function SendPayment() {
                             </span>
                             <div className="min-w-0 flex-1">
                               <div className="text-sm font-bold">
-                                Mobile Money Collection → Ledger → Supplier Payout
+                                {t.momoRailTitle}
                               </div>
                               <p className="text-xs text-muted-foreground">
-                                Authorized push collection from your registered mobile money account
+                                {t.momoRailDesc}
                               </p>
                             </div>
                             <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#151515] text-[#c2f74d]">
@@ -921,7 +1415,7 @@ function SendPayment() {
                               htmlFor="payer-phone"
                               className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em]"
                             >
-                              Your Mobile Money Number (Collection MSISDN)
+                              {t.payerPhoneLabel}
                             </Label>
                             <Input
                               id="payer-phone"
@@ -938,17 +1432,16 @@ function SendPayment() {
                     {needsAuth ? (
                       <div className="space-y-2 rounded-2xl border-2 border-[#151515] bg-muted/30 p-4">
                         <Label className="font-mono text-[10px] font-bold uppercase tracking-[0.16em]">
-                          Provider Authorization Reference
+                          {t.authRefLabel}
                         </Label>
                         <Input
                           value={authRef}
                           onChange={(e) => setAuthRef(e.target.value)}
-                          placeholder="Reference from your MTN / M-Pesa prompt"
+                          placeholder={t.authRefPlaceholder}
                           className="h-10 rounded-xl font-mono"
                         />
                         <p className="text-[11px] text-muted-foreground">
-                          VUKA never collects or stores your mobile-money PIN. Complete the
-                          challenge with your provider, then paste the reference it gives you.
+                          {t.authRefDesc}
                         </p>
                       </div>
                     ) : null}
@@ -965,7 +1458,7 @@ function SendPayment() {
                         className="h-11 rounded-xl px-5 font-mono text-xs uppercase"
                         onClick={() => setStep(2)}
                       >
-                        Back
+                        {t.btnBack}
                       </Button>
                       <Button
                         className="h-11 flex-1 rounded-xl bg-[#151515] font-mono text-xs font-bold uppercase tracking-wider text-[#c2f74d] hover:bg-[#151515]/90"
@@ -978,7 +1471,7 @@ function SendPayment() {
                         onClick={() => send.mutate()}
                       >
                         <Send className="mr-1.5 size-3.5" />
-                        {send.isPending ? "Dispatching Settlement…" : "Confirm & Dispatch Payment"}
+                        {send.isPending ? t.btnDispatching : t.btnConfirmDispatch}
                       </Button>
                     </div>
                   </div>
@@ -1000,7 +1493,7 @@ function SendPayment() {
                 <div className="flex items-center justify-between border-b border-white/10 pb-4">
                   <div>
                     <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#c2f74d]">
-                      Live Settlement Ticket
+                      {t.liveTicket}
                     </div>
                     <div className="mt-0.5 font-mono text-xs text-white/70">
                       {corridor
@@ -1019,7 +1512,7 @@ function SendPayment() {
                 <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-3.5">
                   <div>
                     <div className="font-mono text-[9px] uppercase tracking-wider text-white/45">
-                      Origin Vault
+                      {t.originVault}
                     </div>
                     <div className="mt-1 flex items-center gap-1.5 font-mono text-xs font-bold">
                       {sourceCountry ? (
@@ -1041,7 +1534,7 @@ function SendPayment() {
 
                   <div className="text-right">
                     <div className="font-mono text-[9px] uppercase tracking-wider text-white/45">
-                      Target Vault
+                      {t.targetVault}
                     </div>
                     <div className="mt-1 flex items-center justify-end gap-1.5 font-mono text-xs font-bold">
                       {destCountry ? (
@@ -1062,12 +1555,12 @@ function SendPayment() {
                       {source && dest ? (
                         <div className="space-y-2">
                           <TicketRow
-                            k="Principal"
+                            k={t.principalAmount}
                             v={amountValid ? money(value, source.currency) : "0.00"}
                           />
                           <TicketRow k="Protocol Fee" v="0.00 (Same currency)" />
                           <div className="flex items-baseline justify-between border-t border-white/10 pt-2.5 text-sm">
-                            <span className="text-white/70">Supplier Receives</span>
+                            <span className="text-white/70">{t.supplierReceives}</span>
                             <span className="font-bold text-[#c2f74d]">
                               {amountValid ? money(value, source.currency) : "—"}
                             </span>
@@ -1102,10 +1595,10 @@ function SendPayment() {
                         k="Locked FX Rate"
                         v={`1 ${q.from_currency} = ${q.inverse_rate.toPrecision(5)} ${q.to_currency}`}
                       />
-                      {invoiceNumber ? <TicketRow k="Linked Invoice" v={invoiceNumber} /> : null}
+                      {invoiceNumber ? <TicketRow k={t.linkedInvoice} v={invoiceNumber} /> : null}
                       <div className="flex items-baseline justify-between border-t border-white/15 pt-3 text-sm">
                         <dt className="font-sans text-xs font-semibold text-white/80">
-                          Supplier Receives Net
+                          {t.supplierReceivesNet}
                         </dt>
                         <dd className="font-mono text-lg font-bold tabular-nums text-[#c2f74d]">
                           {money(fromMinor(q.deliver_amount_minor), q.to_currency)}
@@ -1130,7 +1623,7 @@ function SendPayment() {
                 {/* Idempotency & Security Footer */}
                 <div className="mt-4 flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 font-mono text-[10px] text-white/55">
                   <span className="inline-flex items-center gap-1.5">
-                    <Sparkles className="size-3 text-[#c2f74d]" /> Idempotency Key
+                    <Sparkles className="size-3 text-[#c2f74d]" /> {t.idempotencyKey}
                   </span>
                   <span>{truncMid(keyRef.current, 8, 6)}</span>
                 </div>
@@ -1165,6 +1658,7 @@ function RecipientSummary({
   countryForCurrency: (currency: string) => string | undefined;
   onEdit: () => void;
 }) {
+  const t = useLangCopy(COPY);
   if (!recipient) return null;
   const cc = dest ? countryForCurrency(dest.currency) : undefined;
   return (
@@ -1187,7 +1681,7 @@ function RecipientSummary({
         onClick={onEdit}
         className="inline-flex items-center gap-1 rounded-lg border border-black/15 bg-white/80 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase hover:bg-white dark:border-white/15 dark:bg-black/30"
       >
-        <Pencil className="size-3" aria-hidden="true" /> Change
+        <Pencil className="size-3" aria-hidden="true" /> {t.changeRecipient}
       </button>
     </div>
   );
@@ -1204,6 +1698,7 @@ function ProcessingPanel({
   payerPhone: string;
   onReset: () => void;
 }) {
+  const t = useLangCopy(COPY);
   const wf = useQuery({
     queryKey: ["workflow", id],
     queryFn: () => workflows.get(id),
@@ -1215,10 +1710,10 @@ function ProcessingPanel({
   return (
     <>
       <Panel
-        title="Live Cross-Border Settlement Telemetry"
+        title={t.telemetryTitle}
         meta={
           <Chip tone="live">
-            <Zap className="size-3" /> Real-Time State Machine
+            <Zap className="size-3" /> {t.realtimeStateMachine}
           </Chip>
         }
       >
@@ -1227,15 +1722,13 @@ function ProcessingPanel({
       {settled ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-5">
           <p className="text-sm font-medium text-muted-foreground">
-            {completed
-              ? "This cross-border payment has settled on the double-entry ledger and supplier payout rail."
-              : "This payment workflow has paused — inspect the step status above for recovery options."}
+            {completed ? t.paymentSettledMsg : t.paymentPausedMsg}
           </p>
           <Button
             className="rounded-xl bg-[#151515] font-mono text-xs font-bold uppercase text-[#c2f74d] hover:bg-[#151515]/90"
             onClick={onReset}
           >
-            <RotateCcw className="mr-1.5 size-3.5" aria-hidden="true" /> Send another payment
+            <RotateCcw className="mr-1.5 size-3.5" aria-hidden="true" /> {t.btnSendAnother}
           </Button>
         </div>
       ) : null}
@@ -1254,26 +1747,27 @@ function DomesticSuccessPanel({
   recipientName: string;
   onReset: () => void;
 }) {
+  const t = useLangCopy(COPY);
   const [copied, setCopied] = useState(false);
   return (
-    <Panel title="Instant Domestic Ledger Settlement" meta={<Chip tone="live">Settled</Chip>}>
+    <Panel title={t.domesticTitle} meta={<Chip tone="live">Settled</Chip>}>
       <div className="flex flex-col items-center py-6 text-center">
         <span className="flex size-16 items-center justify-center rounded-2xl bg-[#151515] text-[#c2f74d] shadow-lg">
           <Check className="size-8" aria-hidden="true" />
         </span>
-        <h3 className="mt-4 text-xl font-bold">Payment Settled on Ledger</h3>
+        <h3 className="mt-4 text-xl font-bold">{t.paymentSettledHeader}</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          {money(transfer.amount, transfer.currency)} transferred to {recipientName}.
+          {t.transferredTo(money(transfer.amount, transfer.currency), recipientName)}
         </p>
         <dl className="mt-6 w-full max-w-md space-y-2.5 rounded-2xl border border-border bg-muted/20 p-5 text-left font-mono text-xs">
           <Line k="Amount" v={money(transfer.amount, transfer.currency)} />
           <Line k="Protocol Fee" v="0.00 (Same-currency book transfer)" />
           <div className="flex justify-between border-t border-border pt-2.5 text-sm font-bold">
-            <dt>Total Settled</dt>
+            <dt>{t.totalSettled}</dt>
             <dd className="tabular-nums">{money(transfer.amount, transfer.currency)}</dd>
           </div>
           <div className="flex items-center justify-between gap-2 border-t border-border pt-2.5">
-            <dt className="text-muted-foreground">Ledger Transfer ID</dt>
+            <dt className="text-muted-foreground">{t.ledgerTransferId}</dt>
             <dd className="flex items-center gap-1.5 font-semibold">
               <span>{shortId(transfer.id, 14)}</span>
               <button
@@ -1300,7 +1794,7 @@ function DomesticSuccessPanel({
           className="mt-6 h-11 rounded-xl bg-[#151515] px-6 font-mono text-xs font-bold uppercase text-[#c2f74d] hover:bg-[#151515]/90"
           onClick={onReset}
         >
-          <RotateCcw className="mr-1.5 size-3.5" aria-hidden="true" /> Send another payment
+          <RotateCcw className="mr-1.5 size-3.5" aria-hidden="true" /> {t.btnSendAnother}
         </Button>
       </div>
     </Panel>
@@ -1317,6 +1811,7 @@ function Line({ k, v }: { k: string; v: string }) {
 }
 
 function RecentPayments({ ids, onOpen }: { ids: string[]; onOpen: (id: string) => void }) {
+  const t = useLangCopy(COPY);
   const results = useQueries({
     queries: ids.slice(0, 6).map((id) => ({
       queryKey: ["workflow", id],
@@ -1324,11 +1819,10 @@ function RecentPayments({ ids, onOpen }: { ids: string[]; onOpen: (id: string) =
     })),
   });
   return (
-    <Panel title="Recent Cross-Border Workflows" meta={<Chip>{ids.length} tracked</Chip>}>
+    <Panel title={t.recentWorkflows} meta={<Chip>{t.recentTracked(ids.length)}</Chip>}>
       {ids.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          Cross-border workflows you dispatch from this browser appear here for instant live
-          tracking.
+          {t.recentEmpty}
         </p>
       ) : (
         <ul className="divide-y divide-border/60">

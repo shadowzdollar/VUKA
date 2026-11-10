@@ -10,10 +10,59 @@ import {
 import { ArrowLeft, ArrowRight, Crosshair, Pause, Play } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useLangCopy } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import { AFRICA, ATLAS_ID, byId, countries } from "./geo";
 
 export { ATLAS_ID } from "./geo";
+
+const GLOBE_COPY = {
+  en: {
+    canvasLabel: (count: number, names: string) =>
+      `Globe of Africa showing ${count} launch markets connected by payment corridors: ${names}.`,
+    rotateWest: "Rotate globe west",
+    recentre: "Re-centre on Africa",
+    rotateEast: "Rotate globe east",
+    resumeMotion: "Resume gentle motion",
+    pauseMotion: "Pause gentle motion",
+  },
+  fr: {
+    canvasLabel: (count: number, names: string) =>
+      `Globe de l'Afrique montrant ${count} marchés de lancement reliés par des corridors de paiement : ${names}.`,
+    rotateWest: "Faire pivoter le globe vers l'ouest",
+    recentre: "Recentrer sur l'Afrique",
+    rotateEast: "Faire pivoter le globe vers l'est",
+    resumeMotion: "Reprendre le mouvement doux",
+    pauseMotion: "Mettre en pause le mouvement doux",
+  },
+  sw: {
+    canvasLabel: (count: number, names: string) =>
+      `Globu ya Afrika inayoonyesha masoko ${count} ya uzinduzi yaliyounganishwa kwa njia za malipo: ${names}.`,
+    rotateWest: "Zungusha globu magharibi",
+    recentre: "Rudisha katikati kwenye Afrika",
+    rotateEast: "Zungusha globu mashariki",
+    resumeMotion: "Endeleza mwendo wa taratibu",
+    pauseMotion: "Simamisha mwendo wa taratibu",
+  },
+  pt: {
+    canvasLabel: (count: number, names: string) =>
+      `Globo de África mostrando ${count} mercados de lançamento ligados por corredores de pagamento: ${names}.`,
+    rotateWest: "Rodar globo para oeste",
+    recentre: "Recentrar em África",
+    rotateEast: "Rodar globo para leste",
+    resumeMotion: "Retomar movimento suave",
+    pauseMotion: "Pausar movimento suave",
+  },
+  rw: {
+    canvasLabel: (count: number, names: string) =>
+      `Umubumbe w'Afurika ugaragaza amasoko ${count} y'itangiriro ahujwe n'inzira z'ubwishyu: ${names}.`,
+    rotateWest: "Zengurutsa umubumbe iburengerazuba",
+    recentre: "Subiza hagati kuri Afurika",
+    rotateEast: "Zengurutsa umubumbe iburasirazuba",
+    resumeMotion: "Subukura kwinyeganyeza buhoro",
+    pauseMotion: "Hagarika kwinyeganyeza buhoro",
+  },
+};
 
 /**
  * An engraved-style orthographic globe drawn on canvas.
@@ -60,6 +109,7 @@ export default function Globe({ markets, arcs, activeCode, onActive, className }
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const { resolved } = useTheme();
+  const copy = useLangCopy(GLOBE_COPY);
   const [paused, setPaused] = useState(false);
   const state = useRef({
     lambda: -20,
@@ -448,7 +498,7 @@ export default function Globe({ markets, arcs, activeCode, onActive, className }
       <canvas
         ref={canvas}
         role="img"
-        aria-label={`Globe of Africa showing ${markets.length} launch markets connected by payment corridors: ${markets.map((m) => m.name).join(", ")}.`}
+        aria-label={copy.canvasLabel(markets.length, markets.map((m) => m.name).join(", "))}
         className="h-full w-full cursor-grab touch-pan-y select-none"
       />
       <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-background/85 p-1 shadow-float backdrop-blur">
@@ -457,7 +507,8 @@ export default function Globe({ markets, arcs, activeCode, onActive, className }
           size="icon"
           className="size-8 rounded-lg"
           onClick={() => nudge(-18)}
-          aria-label="Rotate globe west"
+          aria-label={copy.rotateWest}
+          title={copy.rotateWest}
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
         </Button>
@@ -470,7 +521,8 @@ export default function Globe({ markets, arcs, activeCode, onActive, className }
             state.current.phi = -6;
             if (reduce()) drawRef.current(performance.now());
           }}
-          aria-label="Re-centre on Africa"
+          aria-label={copy.recentre}
+          title={copy.recentre}
         >
           <Crosshair className="size-4" aria-hidden="true" />
         </Button>
@@ -479,7 +531,8 @@ export default function Globe({ markets, arcs, activeCode, onActive, className }
           size="icon"
           className="size-8 rounded-lg"
           onClick={() => nudge(18)}
-          aria-label="Rotate globe east"
+          aria-label={copy.rotateEast}
+          title={copy.rotateEast}
         >
           <ArrowRight className="size-4" aria-hidden="true" />
         </Button>
@@ -488,7 +541,8 @@ export default function Globe({ markets, arcs, activeCode, onActive, className }
           size="icon"
           className="size-8 rounded-lg"
           onClick={() => setPaused((p) => !p)}
-          aria-label={paused ? "Resume gentle motion" : "Pause gentle motion"}
+          aria-label={paused ? copy.resumeMotion : copy.pauseMotion}
+          title={paused ? copy.resumeMotion : copy.pauseMotion}
           aria-pressed={paused}
         >
           {paused ? (

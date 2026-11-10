@@ -4,69 +4,41 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useState,
   type ReactNode,
 } from "react";
 
-export type ThemePreference = "light" | "dark" | "system";
-const KEY = "vuka.theme";
+export type ThemePreference = "light";
 
 /**
- * Runs before first paint (inlined in <head>) so a dark-mode user never sees a white flash.
- * Kept dependency-free and wrapped in try/catch: storage can be blocked in private windows.
+ * Ensures the document is always in light mode before first paint, clearing any legacy dark state.
  */
-export const themeInitScript = `(function(){try{var p=localStorage.getItem("${KEY}")||"system";var d=p==="dark"||(p==="system"&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.classList.toggle("dark",d)}catch(e){}})();`;
+export const themeInitScript = `(function(){try{document.documentElement.classList.remove("dark");localStorage.removeItem("vuka.theme")}catch(e){}})();`;
 
 interface ThemeContextValue {
   preference: ThemePreference;
-  resolved: "light" | "dark";
+  resolved: "light";
   setPreference: (p: ThemePreference) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-function systemPrefersDark(): boolean {
-  return typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
-
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [preference, setPref] = useState<ThemePreference>("system");
-  const [resolved, setResolved] = useState<"light" | "dark">("light");
-
   useEffect(() => {
+    document.documentElement.classList.remove("dark");
     try {
-      const stored = window.localStorage.getItem(KEY);
-      if (stored === "light" || stored === "dark" || stored === "system") setPref(stored);
+      window.localStorage.removeItem("vuka.theme");
     } catch {
-      /* storage unavailable: stay on system */
+      /* storage unavailable */
     }
   }, []);
 
-  useEffect(() => {
-    const apply = () => {
-      const dark = preference === "dark" || (preference === "system" && systemPrefersDark());
-      document.documentElement.classList.toggle("dark", dark);
-      setResolved(dark ? "dark" : "light");
-    };
-    apply();
-    if (preference !== "system") return;
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, [preference]);
-
-  const setPreference = useCallback((p: ThemePreference) => {
-    setPref(p);
-    try {
-      window.localStorage.setItem(KEY, p);
-    } catch {
-      /* preference applies for this session only */
-    }
+  const setPreference = useCallback(() => {
+    document.documentElement.classList.remove("dark");
   }, []);
 
   const value = useMemo(
-    () => ({ preference, resolved, setPreference }),
-    [preference, resolved, setPreference],
+    () => ({ preference: "light" as const, resolved: "light" as const, setPreference }),
+    [setPreference],
   );
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

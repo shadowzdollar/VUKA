@@ -1,5 +1,104 @@
 import { useId, type ReactNode } from "react";
+import { pickLang, useLangCopy, type Lang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+
+const VIZ_COPY = {
+  en: {
+    noDataPeriod: "No data in this period.",
+    noActivityPeriod: "No activity in this period.",
+    noCrossCurrencyPeriod: "No cross-currency payments in this period.",
+    days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    cellTitle: (day: string, hour: string, n: number) =>
+      `${day} ${hour}:00 UTC — ${n} payment${n === 1 ? "" : "s"}`,
+    heatmapFooter: (slot: string) =>
+      `Payments by weekday and hour (UTC). Busiest slot: ${slot}.`,
+    heatmapCaption: "Payments by weekday and hour (UTC)",
+    weekdayCol: "Weekday",
+    hoursActivityCol: "Hours with activity",
+    none: "none",
+    matrixCaption:
+      "Payment volume by source currency (rows) and destination currency (columns), in USD equivalent",
+    fromToHeader: "from ↓ / to →",
+    matrixCellTitle: (from: string, to: string, vol: string, count: number) =>
+      `${from} → ${to}: ${vol} in ${count} payment${count === 1 ? "" : "s"}`,
+  },
+  fr: {
+    noDataPeriod: "Aucune donnée sur cette période.",
+    noActivityPeriod: "Aucune activité sur cette période.",
+    noCrossCurrencyPeriod: "Aucun paiement inter-devises sur cette période.",
+    days: ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"],
+    cellTitle: (day: string, hour: string, n: number) =>
+      `${day} ${hour}:00 UTC — ${n} paiement${n === 1 ? "" : "s"}`,
+    heatmapFooter: (slot: string) =>
+      `Paiements par jour et par heure (UTC). Créneau le plus actif : ${slot}.`,
+    heatmapCaption: "Paiements par jour et par heure (UTC)",
+    weekdayCol: "Jour",
+    hoursActivityCol: "Heures actives",
+    none: "aucun",
+    matrixCaption:
+      "Volume de paiements par devise source (lignes) et devise de destination (colonnes), en équivalent USD",
+    fromToHeader: "de ↓ / vers →",
+    matrixCellTitle: (from: string, to: string, vol: string, count: number) =>
+      `${from} → ${to} : ${vol} en ${count} paiement${count === 1 ? "" : "s"}`,
+  },
+  sw: {
+    noDataPeriod: "Hakuna data katika kipindi hiki.",
+    noActivityPeriod: "Hakuna shughuli katika kipindi hiki.",
+    noCrossCurrencyPeriod: "Hakuna malipo ya kubadilisha sarafu katika kipindi hiki.",
+    days: ["Jtt", "Jnn", "Jtn", "Alh", "Ijm", "Jms", "Jpi"],
+    cellTitle: (day: string, hour: string, n: number) =>
+      `${day} ${hour}:00 UTC — malipo ${n}`,
+    heatmapFooter: (slot: string) =>
+      `Malipo kwa siku ya wiki na saa (UTC). Wakati wenye shughuli nyingi: ${slot}.`,
+    heatmapCaption: "Malipo kwa siku ya wiki na saa (UTC)",
+    weekdayCol: "Siku ya wiki",
+    hoursActivityCol: "Saa zenye shughuli",
+    none: "hakuna",
+    matrixCaption:
+      "Kiasi cha malipo kwa sarafu ya asili (safu mlalo) na sarafu ya mwisho (safu wima), sawa na USD",
+    fromToHeader: "kutoka ↓ / kwenda →",
+    matrixCellTitle: (from: string, to: string, vol: string, count: number) =>
+      `${from} → ${to}: ${vol} katika malipo ${count}`,
+  },
+  pt: {
+    noDataPeriod: "Sem dados neste período.",
+    noActivityPeriod: "Sem atividade neste período.",
+    noCrossCurrencyPeriod: "Sem pagamentos entre moedas neste período.",
+    days: ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"],
+    cellTitle: (day: string, hour: string, n: number) =>
+      `${day} ${hour}:00 UTC — ${n} pagamento${n === 1 ? "" : "s"}`,
+    heatmapFooter: (slot: string) =>
+      `Pagamentos por dia da semana e hora (UTC). Horário mais movimentado: ${slot}.`,
+    heatmapCaption: "Pagamentos por dia da semana e hora (UTC)",
+    weekdayCol: "Dia da semana",
+    hoursActivityCol: "Horas com atividade",
+    none: "nenhuma",
+    matrixCaption:
+      "Volume de pagamentos por moeda de origem (linhas) e moeda de destino (colunas), em equivalente USD",
+    fromToHeader: "de ↓ / para →",
+    matrixCellTitle: (from: string, to: string, vol: string, count: number) =>
+      `${from} → ${to}: ${vol} em ${count} pagamento${count === 1 ? "" : "s"}`,
+  },
+  rw: {
+    noDataPeriod: "Nta makuru aboneka muri iki gihe.",
+    noActivityPeriod: "Nta bikorwa byabaye muri iki gihe.",
+    noCrossCurrencyPeriod: "Nta bwishyu bwambukiranya amafaranga bwabaye muri iki gihe.",
+    days: ["Mbe", "Kab", "Gat", "Kan", "Gtn", "Gtd", "Cyu"],
+    cellTitle: (day: string, hour: string, n: number) =>
+      `${day} ${hour}:00 UTC — ubwishyu ${n}`,
+    heatmapFooter: (slot: string) =>
+      `Ubwishyu ku munsi w'icyumweru n'isaha (UTC). Igihe cyakozwemo cyane: ${slot}.`,
+    heatmapCaption: "Ubwishyu ku munsi w'icyumweru n'isaha (UTC)",
+    weekdayCol: "Umunsi",
+    hoursActivityCol: "Amasaha yakozwemo",
+    none: "ntacyo",
+    matrixCaption:
+      "Ingano y'ubwishyu ukurikije ifaranga ryoherejwe (imirongo) n'ifaranga ryakiriwe (inkingi), mu gaciro ka USD",
+    fromToHeader: "kuva ↓ / kujya →",
+    matrixCellTitle: (from: string, to: string, vol: string, count: number) =>
+      `${from} → ${to}: ${vol} mu bwishyu ${count}`,
+  },
+} as const;
 
 /**
  * Lightweight (no chart library) visual primitives. All monochrome: value is encoded by length,
@@ -103,13 +202,15 @@ export interface RankedItem {
 export function RankedBars({
   items,
   ariaLabel,
-  empty = "No data in this period.",
+  empty,
 }: {
   items: RankedItem[];
   ariaLabel: string;
   empty?: string;
 }) {
-  if (items.length === 0) return <p className="text-xs text-muted-foreground">{empty}</p>;
+  const copy = useLangCopy(VIZ_COPY);
+  const emptyText = empty ?? copy.noDataPeriod;
+  if (items.length === 0) return <p className="text-xs text-muted-foreground">{emptyText}</p>;
   const max = Math.max(...items.map((i) => i.value), 1e-9);
   return (
     <ul className="space-y-3.5" aria-label={ariaLabel}>
@@ -190,10 +291,11 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 /** Weekday x hour activity heatmap; opacity encodes volume and each cell has a text label. */
 export function ActivityHeatmap({ grid }: { grid: number[][] }) {
   const id = useId();
+  const copy = useLangCopy(VIZ_COPY);
   const max = Math.max(1, ...grid.flat());
   const total = grid.flat().reduce((a, b) => a + b, 0);
   if (total === 0)
-    return <p className="text-xs text-muted-foreground">No activity in this period.</p>;
+    return <p className="text-xs text-muted-foreground">{copy.noActivityPeriod}</p>;
   return (
     <div>
       <div role="img" aria-labelledby={id} className="overflow-x-auto">
@@ -212,7 +314,7 @@ export function ActivityHeatmap({ grid }: { grid: number[][] }) {
           {grid.map((row, d) => (
             <div key={DAYS[d]} className="mt-px flex items-center gap-1" aria-hidden="true">
               <span className="w-8 shrink-0 font-mono text-[10px] text-muted-foreground">
-                {DAYS[d]}
+                {copy.days[d]}
               </span>
               <div
                 className="grid flex-1 gap-px"
@@ -221,7 +323,7 @@ export function ActivityHeatmap({ grid }: { grid: number[][] }) {
                 {row.map((n, h) => (
                   <span
                     key={h}
-                    title={`${DAYS[d]} ${String(h).padStart(2, "0")}:00 UTC — ${n} payment${n === 1 ? "" : "s"}`}
+                    title={copy.cellTitle(copy.days[d] ?? DAYS[d]!, String(h).padStart(2, "0"), n)}
                     className="aspect-square border border-border/60 bg-foreground"
                     style={{ opacity: n === 0 ? 0.03 : 0.15 + (n / max) * 0.85 }}
                   />
@@ -232,26 +334,26 @@ export function ActivityHeatmap({ grid }: { grid: number[][] }) {
         </div>
       </div>
       <p id={id} className="mt-2 text-[11px] text-muted-foreground">
-        Payments by weekday and hour (UTC). Busiest slot: {busiest(grid)}.
+        {copy.heatmapFooter(busiest(grid, copy.days))}
       </p>
       <div className="sr-only">
         <table className="sr-only">
-          <caption>Payments by weekday and hour (UTC)</caption>
+          <caption>{copy.heatmapCaption}</caption>
           <thead>
             <tr>
-              <th scope="col">Weekday</th>
-              <th scope="col">Hours with activity</th>
+              <th scope="col">{copy.weekdayCol}</th>
+              <th scope="col">{copy.hoursActivityCol}</th>
             </tr>
           </thead>
           <tbody>
             {grid.map((row, d) => (
               <tr key={DAYS[d]}>
-                <th scope="row">{DAYS[d]}</th>
+                <th scope="row">{copy.days[d]}</th>
                 <td>
                   {row
                     .map((n, h) => (n ? `${h}:00 ×${n}` : null))
                     .filter(Boolean)
-                    .join(", ") || "none"}
+                    .join(", ") || copy.none}
                 </td>
               </tr>
             ))}
@@ -262,10 +364,14 @@ export function ActivityHeatmap({ grid }: { grid: number[][] }) {
   );
 }
 
-export function busiest(grid: number[][]): string {
+export function busiest(grid: number[][], days: readonly string[] = DAYS): string {
   let best = { d: 0, h: 0, n: 0 };
   grid.forEach((row, d) => row.forEach((n, h) => n > best.n && (best = { d, h, n })));
-  return best.n === 0 ? "—" : `${DAYS[best.d]} ${String(best.h).padStart(2, "0")}:00 (${best.n})`;
+  return best.n === 0 ? "—" : `${days[best.d] ?? DAYS[best.d]} ${String(best.h).padStart(2, "0")}:00 (${best.n})`;
+}
+
+export function busiestForLang(grid: number[][], lang: Lang = "en"): string {
+  return busiest(grid, pickLang(lang, VIZ_COPY).days);
 }
 
 /**
@@ -288,9 +394,10 @@ export function FlowMatrix({
   flows: { from: string; to: string; volume_usd: number; count: number }[];
   format: (usd: number) => string;
 }) {
+  const copy = useLangCopy(VIZ_COPY);
   if (flows.length === 0)
     return (
-      <p className="text-xs text-muted-foreground">No cross-currency payments in this period.</p>
+      <p className="text-xs text-muted-foreground">{copy.noCrossCurrencyPeriod}</p>
     );
   const cur = Array.from(new Set(flows.flatMap((f) => [f.from, f.to]))).sort();
   const cell = new Map(flows.map((f) => [`${f.from}>${f.to}`, f]));
@@ -299,8 +406,7 @@ export function FlowMatrix({
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-xs">
         <caption className="sr-only">
-          Payment volume by source currency (rows) and destination currency (columns), in USD
-          equivalent
+          {copy.matrixCaption}
         </caption>
         <thead>
           <tr>
@@ -308,7 +414,7 @@ export function FlowMatrix({
               scope="col"
               className="p-1.5 text-left font-mono text-[10px] font-normal text-muted-foreground"
             >
-              from ↓ / to →
+              {copy.fromToHeader}
             </th>
             {cur.map((c) => (
               <th
@@ -343,14 +449,14 @@ export function FlowMatrix({
                         style={{
                           background: `color-mix(in oklab, var(--color-foreground) ${shade(f.volume_usd / max).pct}%, var(--color-background))`,
                         }}
-                        title={`${r} → ${c}: ${format(f.volume_usd)} in ${f.count} payment${f.count === 1 ? "" : "s"}`}
+                        title={copy.matrixCellTitle(r, c, format(f.volume_usd), f.count)}
                       >
                         {format(f.volume_usd)}
                       </div>
                     ) : (
                       <div
                         className="h-10 text-center leading-10 text-muted-foreground/40"
-                        aria-label="none"
+                        aria-label={copy.none}
                       >
                         ·
                       </div>

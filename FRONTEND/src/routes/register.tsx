@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { AUTH_BUTTON, AUTH_INPUT, AuthError, AuthField, AuthShell } from "@/components/vuka/auth-shared";
 import { describeError, isApiError } from "@/lib/api/client";
 import { auth } from "@/lib/api/endpoints";
+import { useLangCopy, type Lang } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
@@ -53,7 +54,354 @@ const COUNTRIES = [
   { code: "ET", name: "Ethiopia", currency: "ETB", dial: "+251" },
 ];
 
+interface RegisterCopy {
+  kicker: string;
+  title: string;
+  step0Lead: string;
+  businessTitle: string;
+  businessDesc: string;
+  individualTitle: string;
+  individualDesc: string;
+  continueBtn: string;
+  fullNameLabel: string;
+  fullNamePlaceholder: string;
+  businessNameLabel: string;
+  businessNamePlaceholder: string;
+  regNumberLabel: string;
+  regNumberHint: string;
+  regNumberPlaceholder: string;
+  countryLabel: string;
+  currencyLabel: string;
+  phoneLabel: string;
+  backBtn: string;
+  nextSecurityBtn: string;
+  createPasswordLabel: string;
+  passwordPlaceholder: string;
+  hidePassword: string;
+  showPassword: string;
+  confirmPasswordLabel: string;
+  confirmPasswordPlaceholder: string;
+  goodSecurity: string;
+  min8Chars: string;
+  agreePrefix: string;
+  termsLink: string;
+  agreeMid: string;
+  privacyLink: string;
+  agreeSuffix: string;
+  reviewDetailsBtn: string;
+  summaryAccountType: string;
+  summaryFullName: string;
+  summaryBusiness: string;
+  summaryCountryCurrency: string;
+  summaryPhone: string;
+  editBtn: string;
+  creatingAccount: string;
+  completeRegBtn: string;
+  haveAccount: string;
+  signIn: string;
+  welcomeTitle: string;
+  welcomeBody: string;
+  goToDashboard: string;
+  createdToast: string;
+  errFullName: string;
+  errBusinessName: string;
+  errPhone: string;
+  errPasswordLen: string;
+  errPasswordMatch: string;
+  errAgreeTerms: string;
+  errConflict: string;
+}
+
+const COPY: Record<Lang, RegisterCopy> = {
+  en: {
+    kicker: "Get started",
+    title: "Create your account",
+    step0Lead: "Select the structure that matches your trade operations:",
+    businessTitle: "Registered business",
+    businessDesc: "For registered companies, freight forwarders, manufacturers and trade houses.",
+    individualTitle: "Individual trader",
+    individualDesc: "For sole proprietors, independent brokers and individual merchant importers.",
+    continueBtn: "Continue",
+    fullNameLabel: "Full name",
+    fullNamePlaceholder: "e.g. Samuel Mugisha",
+    businessNameLabel: "Business / company name",
+    businessNamePlaceholder: "e.g. Great Lakes Logistics Ltd",
+    regNumberLabel: "Business reg. / TIN (optional)",
+    regNumberHint: "Helps speed up settlement limit verification.",
+    regNumberPlaceholder: "e.g. 100234567",
+    countryLabel: "Primary country",
+    currencyLabel: "Operating currency",
+    phoneLabel: "Mobile phone (login & OTP)",
+    backBtn: "Back",
+    nextSecurityBtn: "Next: Security",
+    createPasswordLabel: "Create password",
+    passwordPlaceholder: "At least 8 characters",
+    hidePassword: "Hide password",
+    showPassword: "Show password",
+    confirmPasswordLabel: "Confirm password",
+    confirmPasswordPlaceholder: "Repeat your password",
+    goodSecurity: "Good security level",
+    min8Chars: "Minimum 8 characters",
+    agreePrefix: "I agree to the ",
+    termsLink: "Terms of Trade",
+    agreeMid: " and acknowledge the ",
+    privacyLink: "Privacy Policy",
+    agreeSuffix: ".",
+    reviewDetailsBtn: "Review details",
+    summaryAccountType: "Account type",
+    summaryFullName: "Full name",
+    summaryBusiness: "Business",
+    summaryCountryCurrency: "Country & currency",
+    summaryPhone: "Mobile phone",
+    editBtn: "Edit",
+    creatingAccount: "Creating account...",
+    completeRegBtn: "Complete registration",
+    haveAccount: "Already have an account?",
+    signIn: "Sign in",
+    welcomeTitle: "Welcome to VUKA",
+    welcomeBody: "Your trader account has been created. You're ready to start trading across corridors.",
+    goToDashboard: "Go to dashboard",
+    createdToast: "Account created successfully!",
+    errFullName: "Please enter your full name.",
+    errBusinessName: "Please enter your business or trading entity name.",
+    errPhone: "Please provide a valid mobile phone number for verification.",
+    errPasswordLen: "Password must be at least 8 characters long.",
+    errPasswordMatch: "Passwords do not match.",
+    errAgreeTerms: "Please accept the terms of trade and platform policy to continue.",
+    errConflict: "A trader account with this phone number already exists.",
+  },
+  fr: {
+    kicker: "Commencer",
+    title: "Créez votre compte",
+    step0Lead: "Sélectionnez la structure correspondant à vos opérations commerciales :",
+    businessTitle: "Entreprise enregistrée",
+    businessDesc: "Pour les sociétés immatriculées, transitaires, fabricants et maisons de négoce.",
+    individualTitle: "Commerçant individuel",
+    individualDesc: "Pour les entrepreneurs individuels, courtiers indépendants et importateurs.",
+    continueBtn: "Continuer",
+    fullNameLabel: "Nom complet",
+    fullNamePlaceholder: "ex. Samuel Mugisha",
+    businessNameLabel: "Nom de l'entreprise / société",
+    businessNamePlaceholder: "ex. Great Lakes Logistics Ltd",
+    regNumberLabel: "N° d'immatriculation / NIF (facultatif)",
+    regNumberHint: "Accélère la vérification des plafonds de règlement.",
+    regNumberPlaceholder: "ex. 100234567",
+    countryLabel: "Pays principal",
+    currencyLabel: "Devise d'exploitation",
+    phoneLabel: "Téléphone mobile (connexion et OTP)",
+    backBtn: "Retour",
+    nextSecurityBtn: "Suivant : Sécurité",
+    createPasswordLabel: "Créer un mot de passe",
+    passwordPlaceholder: "Au moins 8 caractères",
+    hidePassword: "Masquer le mot de passe",
+    showPassword: "Afficher le mot de passe",
+    confirmPasswordLabel: "Confirmer le mot de passe",
+    confirmPasswordPlaceholder: "Répétez votre mot de passe",
+    goodSecurity: "Bon niveau de sécurité",
+    min8Chars: "Minimum 8 caractères",
+    agreePrefix: "J'accepte les ",
+    termsLink: "Conditions commerciales",
+    agreeMid: " et prends acte de la ",
+    privacyLink: "Politique de confidentialité",
+    agreeSuffix: ".",
+    reviewDetailsBtn: "Vérifier les informations",
+    summaryAccountType: "Type de compte",
+    summaryFullName: "Nom complet",
+    summaryBusiness: "Entreprise",
+    summaryCountryCurrency: "Pays et devise",
+    summaryPhone: "Téléphone mobile",
+    editBtn: "Modifier",
+    creatingAccount: "Création du compte...",
+    completeRegBtn: "Terminer l'inscription",
+    haveAccount: "Vous avez déjà un compte ?",
+    signIn: "Se connecter",
+    welcomeTitle: "Bienvenue sur VUKA",
+    welcomeBody: "Votre compte commerçant a été créé. Vous êtes prêt à commercer entre corridors.",
+    goToDashboard: "Aller au tableau de bord",
+    createdToast: "Compte créé avec succès !",
+    errFullName: "Veuillez saisir votre nom complet.",
+    errBusinessName: "Veuillez saisir le nom de votre entreprise ou entité commerciale.",
+    errPhone: "Veuillez fournir un numéro de téléphone mobile valide.",
+    errPasswordLen: "Le mot de passe doit contenir au moins 8 caractères.",
+    errPasswordMatch: "Les mots de passe ne correspondent pas.",
+    errAgreeTerms: "Veuillez accepter les conditions commerciales et la politique de la plateforme pour continuer.",
+    errConflict: "Un compte commerçant avec ce numéro de téléphone existe déjà.",
+  },
+  sw: {
+    kicker: "Anza sasa",
+    title: "Fungua akaunti yako",
+    step0Lead: "Chagua muundo unaolingana na shughuli zako za biashara:",
+    businessTitle: "Biashara iliyosajiliwa",
+    businessDesc: "Kwa kampuni zilizosajiliwa, mawakala wa mizigo, wazalishaji na makampuni ya biashara.",
+    individualTitle: "Mfanyabiashara binafsi",
+    individualDesc: "Kwa wamiliki pekee, madalali huru na waagizaji binafsi wa bidhaa.",
+    continueBtn: "Endelea",
+    fullNameLabel: "Jina kamili",
+    fullNamePlaceholder: "mf. Samuel Mugisha",
+    businessNameLabel: "Jina la biashara / kampuni",
+    businessNamePlaceholder: "mf. Great Lakes Logistics Ltd",
+    regNumberLabel: "Nambari ya usajili / TIN (hiari)",
+    regNumberHint: "Inasaidia kuharakisha uthibitisho wa viwango vya malipo.",
+    regNumberPlaceholder: "mf. 100234567",
+    countryLabel: "Nchi kuu",
+    currencyLabel: "Sarafu ya uendeshaji",
+    phoneLabel: "Simu ya mkononi (kuingia na OTP)",
+    backBtn: "Rudi",
+    nextSecurityBtn: "Inayofuata: Usalama",
+    createPasswordLabel: "Unda nenosiri",
+    passwordPlaceholder: "Angalau herufi 8",
+    hidePassword: "Ficha nenosiri",
+    showPassword: "Onyesha nenosiri",
+    confirmPasswordLabel: "Thibitisha nenosiri",
+    confirmPasswordPlaceholder: "Rudia nenosiri lako",
+    goodSecurity: "Kiwango kizuri cha usalama",
+    min8Chars: "Kima cha chini herufi 8",
+    agreePrefix: "Ninakubali ",
+    termsLink: "Masharti ya Biashara",
+    agreeMid: " na ninatambua ",
+    privacyLink: "Sera ya Faragha",
+    agreeSuffix: ".",
+    reviewDetailsBtn: "Kagua maelezo",
+    summaryAccountType: "Aina ya akaunti",
+    summaryFullName: "Jina kamili",
+    summaryBusiness: "Biashara",
+    summaryCountryCurrency: "Nchi na sarafu",
+    summaryPhone: "Simu ya mkononi",
+    editBtn: "Hariri",
+    creatingAccount: "Inafungua akaunti...",
+    completeRegBtn: "Kamilisha usajili",
+    haveAccount: "Tayari una akaunti?",
+    signIn: "Ingia",
+    welcomeTitle: "Karibu VUKA",
+    welcomeBody: "Akaunti yako ya mfanyabiashara imefunguliwa. Uko tayari kuanza biashara kati ya nchi.",
+    goToDashboard: "Nenda kwenye dashibodi",
+    createdToast: "Akaunti imefunguliwa kikamilifu!",
+    errFullName: "Tafadhali weka jina lako kamili.",
+    errBusinessName: "Tafadhali weka jina la biashara au kampuni yako.",
+    errPhone: "Tafadhali weka nambari sahihi ya simu ya mkononi kwa ajili ya uthibitisho.",
+    errPasswordLen: "Nenosiri lazima liwe na angalau herufi 8.",
+    errPasswordMatch: "Manenosiri hayalingani.",
+    errAgreeTerms: "Tafadhali kubali masharti ya biashara na sera ya jukwaa ili kuendelea.",
+    errConflict: "Akaunti ya mfanyabiashara yenye nambari hii ya simu tayari ipo.",
+  },
+  pt: {
+    kicker: "Começar",
+    title: "Crie a sua conta",
+    step0Lead: "Selecione a estrutura que corresponde às suas operações comerciais:",
+    businessTitle: "Empresa registada",
+    businessDesc: "Para empresas registadas, transitários, fabricantes e casas comerciais.",
+    individualTitle: "Comerciante individual",
+    individualDesc: "Para empresários em nome individual, corretores independentes e importadores.",
+    continueBtn: "Continuar",
+    fullNameLabel: "Nome completo",
+    fullNamePlaceholder: "ex. Samuel Mugisha",
+    businessNameLabel: "Nome da empresa / negócio",
+    businessNamePlaceholder: "ex. Great Lakes Logistics Ltd",
+    regNumberLabel: "Registo comercial / NIF (opcional)",
+    regNumberHint: "Ajuda a acelerar a verificação dos limites de liquidação.",
+    regNumberPlaceholder: "ex. 100234567",
+    countryLabel: "País principal",
+    currencyLabel: "Moeda de operação",
+    phoneLabel: "Telemóvel (início de sessão e OTP)",
+    backBtn: "Voltar",
+    nextSecurityBtn: "Seguinte: Segurança",
+    createPasswordLabel: "Criar palavra-passe",
+    passwordPlaceholder: "Pelo menos 8 caracteres",
+    hidePassword: "Ocultar palavra-passe",
+    showPassword: "Mostrar palavra-passe",
+    confirmPasswordLabel: "Confirmar palavra-passe",
+    confirmPasswordPlaceholder: "Repita a sua palavra-passe",
+    goodSecurity: "Bom nível de segurança",
+    min8Chars: "Mínimo de 8 caracteres",
+    agreePrefix: "Concordo com os ",
+    termsLink: "Termos de Comércio",
+    agreeMid: " e reconheço a ",
+    privacyLink: "Política de Privacidade",
+    agreeSuffix: ".",
+    reviewDetailsBtn: "Rever dados",
+    summaryAccountType: "Tipo de conta",
+    summaryFullName: "Nome completo",
+    summaryBusiness: "Empresa",
+    summaryCountryCurrency: "País e moeda",
+    summaryPhone: "Telemóvel",
+    editBtn: "Editar",
+    creatingAccount: "A criar conta...",
+    completeRegBtn: "Concluir registo",
+    haveAccount: "Já tem uma conta?",
+    signIn: "Iniciar sessão",
+    welcomeTitle: "Bem-vindo à VUKA",
+    welcomeBody: "A sua conta de comerciante foi criada. Está pronto para começar a comerciar entre corredores.",
+    goToDashboard: "Ir para o painel",
+    createdToast: "Conta criada com sucesso!",
+    errFullName: "Por favor, introduza o seu nome completo.",
+    errBusinessName: "Por favor, introduza o nome da sua empresa ou entidade comercial.",
+    errPhone: "Por favor, forneça um número de telemóvel válido para verificação.",
+    errPasswordLen: "A palavra-passe deve ter pelo menos 8 caracteres.",
+    errPasswordMatch: "As palavras-passe não coincidem.",
+    errAgreeTerms: "Por favor, aceite os termos de comércio e a política da plataforma para continuar.",
+    errConflict: "Já existe uma conta de comerciante com este número de telefone.",
+  },
+  rw: {
+    kicker: "Tangira",
+    title: "Fungura konti yawe",
+    step0Lead: "Hitamo imiterere ihuye n'ubucuruzi bwawe:",
+    businessTitle: "Ubucuruzi bwanditse",
+    businessDesc: "Ku masosiyete yanditse, abashinzwe ubwikorezi, inganda n'amazu y'ubucuruzi.",
+    individualTitle: "Umucuruzi ku giti cye",
+    individualDesc: "Ku bikorera ku giti cyabo, abahuza bigenga n'abatumiza ibicuruzwa mu mahanga.",
+    continueBtn: "Komeza",
+    fullNameLabel: "Amazina yose",
+    fullNamePlaceholder: "urugero: Samuel Mugisha",
+    businessNameLabel: "Izina ry'ubucuruzi / ikigo",
+    businessNamePlaceholder: "urugero: Great Lakes Logistics Ltd",
+    regNumberLabel: "Nimero y'ubucuruzi / TIN (si itegeko)",
+    regNumberHint: "Bifasha kwihutisha igenzura ry'imbago z'ubwishyu.",
+    regNumberPlaceholder: "urugero: 100234567",
+    countryLabel: "Igihugu cy'ibanze",
+    currencyLabel: "Ifaranga rikoreshwa",
+    phoneLabel: "Telefone igendanwa (kwinjira na OTP)",
+    backBtn: "Subira inyuma",
+    nextSecurityBtn: "Igikurikira: Umutekano",
+    createPasswordLabel: "Shyiraho ijambo ry'ibanga",
+    passwordPlaceholder: "Nibura inyuguti 8",
+    hidePassword: "Hisha ijambo ry'ibanga",
+    showPassword: "Erekana ijambo ry'ibanga",
+    confirmPasswordLabel: "Emeza ijambo ry'ibanga",
+    confirmPasswordPlaceholder: "Subiramo ijambo ryawe ry'ibanga",
+    goodSecurity: "Urwego rwiza rw'umutekano",
+    min8Chars: "Nibura inyuguti 8",
+    agreePrefix: "Nemeye ",
+    termsLink: "Amabwiriza y'ubucuruzi",
+    agreeMid: " kandi namenye ",
+    privacyLink: "Politiki y'ibanga",
+    agreeSuffix: ".",
+    reviewDetailsBtn: "Suzuma amakuru",
+    summaryAccountType: "Ubwoko bwa konti",
+    summaryFullName: "Amazina yose",
+    summaryBusiness: "Ubucuruzi",
+    summaryCountryCurrency: "Igihugu n'ifaranga",
+    summaryPhone: "Telefone igendanwa",
+    editBtn: "Hindura",
+    creatingAccount: "Konti irimo gufungurwa...",
+    completeRegBtn: "Soza kwiyandikisha",
+    haveAccount: "Usanzwe ufite konti?",
+    signIn: "Injira",
+    welcomeTitle: "Ikaze kuri VUKA",
+    welcomeBody: "Konti yawe y'umucuruzi yafunguwe. Witeguye gutangira gucuruza wambukiranya imipaka.",
+    goToDashboard: "Jya ku rubuga rw'ibanze",
+    createdToast: "Konti yafunguwe neza!",
+    errFullName: "Turagusaba kwandika amazina yawe yose.",
+    errBusinessName: "Turagusaba kwandika izina ry'ubucuruzi cyangwa ikigo cyawe.",
+    errPhone: "Turagusaba gutanga nimero ya telefone igendanwa yemewe.",
+    errPasswordLen: "Ijambo ry'ibanga rigomba kugira nibura inyuguti 8.",
+    errPasswordMatch: "Amagambo y'ibanga ntabwo ahura.",
+    errAgreeTerms: "Turagusaba kwemera amabwiriza y'ubucuruzi na politiki y'urubuga kugira ngo ukomeze.",
+    errConflict: "Konti y'umucuruzi ikoresha iyi nimero ya telefone isanzwe iriho.",
+  },
+};
+
 function Register() {
+  const copy = useLangCopy(COPY);
   const { session, refresh } = useSession();
   const navigate = useNavigate();
 
@@ -104,16 +452,16 @@ function Register() {
 
     if (s === 1) {
       if (!form.fullName.trim()) {
-        setError("Please enter your full name.");
+        setError(copy.errFullName);
         return false;
       }
       if (form.accountType === "business" && !form.businessName.trim()) {
-        setError("Please enter your business or trading entity name.");
+        setError(copy.errBusinessName);
         return false;
       }
       const rawPhone = form.phone.replace(/\s+/g, "");
       if (rawPhone.length < 8) {
-        setError("Please provide a valid mobile phone number for verification.");
+        setError(copy.errPhone);
         return false;
       }
       return true;
@@ -121,15 +469,15 @@ function Register() {
 
     if (s === 2) {
       if (form.password.length < 8) {
-        setError("Password must be at least 8 characters long.");
+        setError(copy.errPasswordLen);
         return false;
       }
       if (form.password !== form.confirmPassword) {
-        setError("Passwords do not match.");
+        setError(copy.errPasswordMatch);
         return false;
       }
       if (!form.agreeTerms) {
-        setError("Please accept the terms of trade and platform policy to continue.");
+        setError(copy.errAgreeTerms);
         return false;
       }
       return true;
@@ -181,11 +529,11 @@ function Register() {
       }
 
       setCompleted(true);
-      toast.success("Account created successfully!");
+      toast.success(copy.createdToast);
     } catch (err) {
       setError(
         isApiError(err) && err.code === "conflict"
-          ? "A trader account with this phone number already exists."
+          ? copy.errConflict
           : describeError(err),
       );
     } finally {
@@ -200,13 +548,11 @@ function Register() {
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-success/15 text-success">
             <CheckCircle2 className="h-7 w-7" />
           </div>
-          <h1 className="mt-4 text-2xl font-semibold tracking-tight">Welcome to VUKA</h1>
-          <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-            Your trader account has been created. You're ready to start trading across corridors.
-          </p>
+          <h1 className="mt-4 text-2xl font-semibold tracking-tight">{copy.welcomeTitle}</h1>
+          <p className="mt-2 max-w-sm text-sm text-muted-foreground">{copy.welcomeBody}</p>
           <div className="mt-6 w-full max-w-sm">
             <Button onClick={() => void navigate({ to: "/" })} className={cn("w-full group", AUTH_BUTTON)}>
-              Go to dashboard
+              {copy.goToDashboard}
               <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
             </Button>
           </div>
@@ -217,8 +563,8 @@ function Register() {
 
   return (
     <AuthShell page="register">
-      <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-muted-foreground">Get started</p>
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight">Create your account</h1>
+      <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-muted-foreground">{copy.kicker}</p>
+      <h1 className="mt-2 text-3xl font-semibold tracking-tight">{copy.title}</h1>
 
       <div className="mt-6 mb-6 flex items-center gap-1.5">
         {[0, 1, 2, 3].map((i) => (
@@ -228,7 +574,7 @@ function Register() {
 
       {step === 0 ? (
         <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">Select the structure that matches your trade operations:</p>
+          <p className="text-sm text-muted-foreground">{copy.step0Lead}</p>
           <div className="grid grid-cols-1 gap-3">
             <button
               type="button"
@@ -248,12 +594,10 @@ function Register() {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold">Registered business</span>
+                  <span className="text-sm font-semibold">{copy.businessTitle}</span>
                   {form.accountType === "business" ? <Check className="h-3.5 w-3.5" /> : null}
                 </div>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  For registered companies, freight forwarders, manufacturers and trade houses.
-                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{copy.businessDesc}</p>
               </div>
             </button>
 
@@ -275,18 +619,16 @@ function Register() {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold">Individual trader</span>
+                  <span className="text-sm font-semibold">{copy.individualTitle}</span>
                   {form.accountType === "individual" ? <Check className="h-3.5 w-3.5" /> : null}
                 </div>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  For sole proprietors, independent brokers and individual merchant importers.
-                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{copy.individualDesc}</p>
               </div>
             </button>
           </div>
 
           <Button type="button" onClick={nextStep} className={cn("w-full group", AUTH_BUTTON)}>
-            Continue
+            {copy.continueBtn}
             <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
           </Button>
         </div>
@@ -294,10 +636,10 @@ function Register() {
 
       {step === 1 ? (
         <div className="space-y-3.5">
-          <AuthField id="fullName" label="Full name">
+          <AuthField id="fullName" label={copy.fullNameLabel}>
             <Input
               id="fullName"
-              placeholder="e.g. Samuel Mugisha"
+              placeholder={copy.fullNamePlaceholder}
               className={AUTH_INPUT}
               value={form.fullName}
               onChange={(e) => update("fullName", e.target.value)}
@@ -308,10 +650,10 @@ function Register() {
 
           {form.accountType === "business" ? (
             <>
-              <AuthField id="businessName" label="Business / company name">
+              <AuthField id="businessName" label={copy.businessNameLabel}>
                 <Input
                   id="businessName"
-                  placeholder="e.g. Great Lakes Logistics Ltd"
+                  placeholder={copy.businessNamePlaceholder}
                   className={AUTH_INPUT}
                   value={form.businessName}
                   onChange={(e) => update("businessName", e.target.value)}
@@ -321,12 +663,12 @@ function Register() {
 
               <AuthField
                 id="registrationNumber"
-                label="Business reg. / TIN (optional)"
-                hint="Helps speed up settlement limit verification."
+                label={copy.regNumberLabel}
+                hint={copy.regNumberHint}
               >
                 <Input
                   id="registrationNumber"
-                  placeholder="e.g. 100234567"
+                  placeholder={copy.regNumberPlaceholder}
                   className={AUTH_INPUT}
                   value={form.registrationNumber}
                   onChange={(e) => update("registrationNumber", e.target.value)}
@@ -336,7 +678,7 @@ function Register() {
           ) : null}
 
           <div className="grid grid-cols-2 gap-3">
-            <AuthField id="country" label="Primary country">
+            <AuthField id="country" label={copy.countryLabel}>
               <select
                 id="country"
                 value={form.country}
@@ -351,12 +693,12 @@ function Register() {
               </select>
             </AuthField>
 
-            <AuthField id="currency" label="Operating currency">
+            <AuthField id="currency" label={copy.currencyLabel}>
               <Input id="currency" value={form.currency} readOnly className={cn("bg-muted text-muted-foreground", AUTH_INPUT)} />
             </AuthField>
           </div>
 
-          <AuthField id="phone" label="Mobile phone (login & OTP)">
+          <AuthField id="phone" label={copy.phoneLabel}>
             <div className="relative">
               <Input
                 id="phone"
@@ -377,10 +719,10 @@ function Register() {
 
           <div className="flex items-center gap-3 pt-2">
             <Button type="button" variant="outline" onClick={prevStep} className="h-11 px-4 text-xs font-semibold">
-              <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Back
+              <ArrowLeft className="h-3.5 w-3.5 mr-1" /> {copy.backBtn}
             </Button>
             <Button type="button" onClick={nextStep} className={cn("flex-1 group", AUTH_BUTTON)}>
-              Next: Security
+              {copy.nextSecurityBtn}
               <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
             </Button>
           </div>
@@ -389,12 +731,12 @@ function Register() {
 
       {step === 2 ? (
         <div className="space-y-3.5">
-          <AuthField id="password" label="Create password">
+          <AuthField id="password" label={copy.createPasswordLabel}>
             <div className="relative">
               <Input
                 id="password"
                 type={showPassword ? "text" : "password"}
-                placeholder="At least 8 characters"
+                placeholder={copy.passwordPlaceholder}
                 className={cn("pr-10", AUTH_INPUT)}
                 value={form.password}
                 onChange={(e) => update("password", e.target.value)}
@@ -403,6 +745,7 @@ function Register() {
               <button
                 type="button"
                 onClick={() => setShowPassword((p) => !p)}
+                aria-label={showPassword ? copy.hidePassword : copy.showPassword}
                 className="absolute inset-y-0 right-3 flex items-center text-muted-foreground hover:text-foreground"
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -410,11 +753,11 @@ function Register() {
             </div>
           </AuthField>
 
-          <AuthField id="confirmPassword" label="Confirm password">
+          <AuthField id="confirmPassword" label={copy.confirmPasswordLabel}>
             <Input
               id="confirmPassword"
               type={showPassword ? "text" : "password"}
-              placeholder="Repeat your password"
+              placeholder={copy.confirmPasswordPlaceholder}
               className={AUTH_INPUT}
               value={form.confirmPassword}
               onChange={(e) => update("confirmPassword", e.target.value)}
@@ -439,7 +782,7 @@ function Register() {
               />
             </div>
             <span className="text-[10px] text-muted-foreground">
-              {form.password.length >= 8 ? "Good security level" : "Minimum 8 characters"}
+              {form.password.length >= 8 ? copy.goodSecurity : copy.min8Chars}
             </span>
           </div>
 
@@ -451,15 +794,15 @@ function Register() {
               className="mt-0.5 h-4 w-4 rounded border-input accent-foreground focus:ring-0 cursor-pointer"
             />
             <span className="text-xs leading-snug text-muted-foreground">
-              I agree to the{" "}
+              {copy.agreePrefix}
               <Link to="/terms" className="underline underline-offset-2 text-foreground">
-                Terms of Trade
-              </Link>{" "}
-              and acknowledge the{" "}
-              <Link to="/privacy" className="underline underline-offset-2 text-foreground">
-                Privacy Policy
+                {copy.termsLink}
               </Link>
-              .
+              {copy.agreeMid}
+              <Link to="/privacy" className="underline underline-offset-2 text-foreground">
+                {copy.privacyLink}
+              </Link>
+              {copy.agreeSuffix}
             </span>
           </label>
 
@@ -467,10 +810,10 @@ function Register() {
 
           <div className="flex items-center gap-3 pt-2">
             <Button type="button" variant="outline" onClick={prevStep} className="h-11 px-4 text-xs font-semibold">
-              <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Back
+              <ArrowLeft className="h-3.5 w-3.5 mr-1" /> {copy.backBtn}
             </Button>
             <Button type="button" onClick={nextStep} className={cn("flex-1 group", AUTH_BUTTON)}>
-              Review details
+              {copy.reviewDetailsBtn}
               <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
             </Button>
           </div>
@@ -481,29 +824,29 @@ function Register() {
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-2.5 rounded-xl border border-border bg-muted/40 p-4 text-xs">
             <div className="flex justify-between border-b border-border pb-2">
-              <span className="text-muted-foreground">Account type</span>
-              <span className="font-semibold capitalize">
-                {form.accountType === "business" ? "Registered business" : "Individual trader"}
+              <span className="text-muted-foreground">{copy.summaryAccountType}</span>
+              <span className="font-semibold">
+                {form.accountType === "business" ? copy.businessTitle : copy.individualTitle}
               </span>
             </div>
             <div className="flex justify-between border-b border-border pb-2">
-              <span className="text-muted-foreground">Full name</span>
+              <span className="text-muted-foreground">{copy.summaryFullName}</span>
               <span className="font-semibold">{form.fullName}</span>
             </div>
             {form.accountType === "business" ? (
               <div className="flex justify-between border-b border-border pb-2">
-                <span className="text-muted-foreground">Business</span>
+                <span className="text-muted-foreground">{copy.summaryBusiness}</span>
                 <span className="font-semibold">{form.businessName}</span>
               </div>
             ) : null}
             <div className="flex justify-between border-b border-border pb-2">
-              <span className="text-muted-foreground">Country &amp; currency</span>
+              <span className="text-muted-foreground">{copy.summaryCountryCurrency}</span>
               <span className="font-semibold">
                 {COUNTRIES.find((c) => c.code === form.country)?.name} ({form.currency})
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Mobile phone</span>
+              <span className="text-muted-foreground">{copy.summaryPhone}</span>
               <span className="font-mono font-semibold">{form.phone}</span>
             </div>
           </div>
@@ -512,10 +855,10 @@ function Register() {
 
           <div className="flex items-center gap-3 pt-2">
             <Button type="button" variant="outline" onClick={prevStep} disabled={busy} className="h-11 px-4 text-xs font-semibold">
-              <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Edit
+              <ArrowLeft className="h-3.5 w-3.5 mr-1" /> {copy.editBtn}
             </Button>
             <Button type="submit" disabled={busy} className={cn("flex-1 group", AUTH_BUTTON)}>
-              {busy ? "Creating account..." : "Complete registration"}
+              {busy ? copy.creatingAccount : copy.completeRegBtn}
               {!busy ? <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-1" /> : null}
             </Button>
           </div>
@@ -523,9 +866,9 @@ function Register() {
       ) : null}
 
       <p className="mt-8 text-center text-sm text-muted-foreground">
-        Already have an account?{" "}
+        {copy.haveAccount}{" "}
         <Link to="/login" className="font-semibold text-foreground underline underline-offset-4">
-          Sign in
+          {copy.signIn}
         </Link>
       </p>
     </AuthShell>

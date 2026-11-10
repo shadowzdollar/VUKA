@@ -1,7 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { useLangCopy } from "@/lib/i18n";
 import { PhoneMockup } from "./landing/phone-mockup";
 import { VukaLogo } from "./brand";
+import { SiteControls } from "./site-controls";
 
 export const AUTH_INPUT =
   "h-11 rounded-lg border border-input bg-background px-3.5 text-sm text-foreground shadow-none transition-colors " +
@@ -10,6 +12,49 @@ export const AUTH_INPUT =
 export const AUTH_BUTTON =
   "h-11 rounded-lg bg-primary text-sm font-medium text-primary-foreground shadow-sm transition-opacity " +
   "hover:opacity-90 active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none";
+
+const COPY = {
+  en: {
+    homeAria: "VUKA home",
+    noAccount: "Don't have an account?",
+    createOne: "Create one",
+    haveAccount: "Already have an account?",
+    signIn: "Sign in",
+    helpSupport: "Help & support",
+  },
+  fr: {
+    homeAria: "Accueil VUKA",
+    noAccount: "Pas encore de compte ?",
+    createOne: "Créer un compte",
+    haveAccount: "Vous avez déjà un compte ?",
+    signIn: "Se connecter",
+    helpSupport: "Aide et assistance",
+  },
+  sw: {
+    homeAria: "Mwanzo wa VUKA",
+    noAccount: "Huna akaunti?",
+    createOne: "Fungua akaunti",
+    haveAccount: "Tayari una akaunti?",
+    signIn: "Ingia",
+    helpSupport: "Msaada na usaidizi",
+  },
+  pt: {
+    homeAria: "Início VUKA",
+    noAccount: "Não tem uma conta?",
+    createOne: "Criar conta",
+    haveAccount: "Já tem uma conta?",
+    signIn: "Iniciar sessão",
+    helpSupport: "Ajuda e suporte",
+  },
+  rw: {
+    homeAria: "Ahabanza kuri VUKA",
+    noAccount: "Nta konti ufite?",
+    createOne: "Fungura konti",
+    haveAccount: "Usanzwe ufite konti?",
+    signIn: "Injira",
+    helpSupport: "Ubufasha",
+  },
+};
 
 /**
  * Centered auth layout: logo + form on the left, an illustrative device preview on the right
@@ -23,34 +68,38 @@ export function AuthShell({
   children: ReactNode;
   page?: "login" | "register";
 }) {
+  const copy = useLangCopy(COPY);
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       <div className="flex flex-col px-6 py-8 sm:px-10">
-        <div className="flex items-center justify-between">
-          <Link to="/" aria-label="VUKA home">
+        <div className="flex items-center justify-between gap-2">
+          <Link to="/" aria-label={copy.homeAria}>
             <VukaLogo size="md" />
           </Link>
-          {page === "login" ? (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="hidden sm:inline">Don't have an account?</span>
-              <Link to="/register" className="font-medium text-foreground underline underline-offset-4">
-                Create one
-              </Link>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="hidden sm:inline">Already have an account?</span>
-              <Link to="/login" className="font-medium text-foreground underline underline-offset-4">
-                Sign in
-              </Link>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <SiteControls />
+            {page === "login" ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="hidden sm:inline">{copy.noAccount}</span>
+                <Link to="/register" className="font-medium text-foreground underline underline-offset-4">
+                  {copy.createOne}
+                </Link>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="hidden sm:inline">{copy.haveAccount}</span>
+                <Link to="/login" className="font-medium text-foreground underline underline-offset-4">
+                  {copy.signIn}
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
         <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-10">{children}</main>
         <div className="flex items-center justify-between border-t border-border pt-4 text-xs text-muted-foreground">
           <span>© {new Date().getFullYear()} VUKA</span>
           <Link to="/support" className="hover:text-foreground">
-            Help &amp; support
+            {copy.helpSupport}
           </Link>
         </div>
       </div>

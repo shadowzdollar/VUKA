@@ -1,5 +1,6 @@
 import { Info, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
+import { useLangCopy } from "@/lib/i18n";
 import type { Insight } from "@/lib/insights";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +11,29 @@ export const usd0 = (n: number) => `$${n.toLocaleString("en-US", { maximumFracti
 export const usdCompact = (n: number) =>
   `$${n.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 1 })}`;
 
+const COPY = {
+  en: {
+    reportingPeriod: "Reporting period",
+    worthAttention: " (worth attention)",
+  },
+  fr: {
+    reportingPeriod: "Période de rapport",
+    worthAttention: " (à surveiller)",
+  },
+  sw: {
+    reportingPeriod: "Kipindi cha ripoti",
+    worthAttention: " (inahitaji umakini)",
+  },
+  pt: {
+    reportingPeriod: "Período de relatório",
+    worthAttention: " (requer atenção)",
+  },
+  rw: {
+    reportingPeriod: "Igihe cya raporo",
+    worthAttention: " (bisaba kwitabwaho)",
+  },
+} as const;
+
 /** Accessible segmented control (a radio group) for the reporting period. */
 export function PeriodPicker({
   value,
@@ -18,10 +42,11 @@ export function PeriodPicker({
   value: Period;
   onChange: (p: Period) => void;
 }) {
+  const copy = useLangCopy(COPY);
   return (
     <div
       role="radiogroup"
-      aria-label="Reporting period"
+      aria-label={copy.reportingPeriod}
       className="inline-flex rounded-xl border border-border bg-muted/40 p-1"
     >
       {PERIODS.map((p) => (
@@ -46,6 +71,7 @@ export function PeriodPicker({
 }
 
 export function InsightList({ items }: { items: Insight[] }) {
+  const copy = useLangCopy(COPY);
   return (
     <ul className="grid gap-3 md:grid-cols-2">
       {items.map((i) => {
@@ -73,7 +99,7 @@ export function InsightList({ items }: { items: Insight[] }) {
             <div>
               <div className="text-sm font-semibold">
                 {i.title}
-                {i.tone === "watch" ? <span className="sr-only"> (worth attention)</span> : null}
+                {i.tone === "watch" ? <span className="sr-only">{copy.worthAttention}</span> : null}
               </div>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{i.body}</p>
             </div>

@@ -71,6 +71,7 @@ func TestProductionAcceptsProtectedReadOnlyMode(t *testing.T) {
 	t.Setenv("VUKA_OPERATOR_PASSWORD", "a-production-password")
 	t.Setenv("VUKA_CORS_ORIGINS", "https://console.example.com")
 	t.Setenv("VUKA_READ_ONLY", "true")
+	t.Setenv("VUKA_LOCAL_SYNTHETIC_EXECUTION_ENABLED", "false")
 	t.Setenv("MTN_SIM_MODE", "")
 	t.Setenv("MTN_SIM_FAIL_RATE", "0")
 	t.Setenv("VUKA_QUOTE_SIGNING_KEY", "0123456789abcdef0123456789abcdef")

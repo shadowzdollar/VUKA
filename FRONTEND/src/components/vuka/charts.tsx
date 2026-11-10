@@ -18,6 +18,110 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useLangCopy } from "@/lib/i18n";
+
+const CHART_COPY = {
+  en: {
+    flowAria: (cur: string) => `Money in and out by week, in ${cur}`,
+    flowCaption: (cur: string) => `Money in and out by week (${cur})`,
+    moneyIn: "Money in",
+    moneyOut: "Money out",
+    week: "Week",
+    inCol: "In",
+    outCol: "Out",
+    stateAria: "Escrow value by state",
+    tokenUnits: "Token units",
+    stateCol: "State",
+    amountCol: "Amount",
+    other: "Other",
+    noDataPeriod: "No data in this period.",
+    rangeCol: "Range",
+    dateCol: "Date",
+    potential: "Potential",
+    current: "Current",
+    factorCol: "Factor",
+  },
+  fr: {
+    flowAria: (cur: string) => `Entrées et sorties par semaine, en ${cur}`,
+    flowCaption: (cur: string) => `Entrées et sorties par semaine (${cur})`,
+    moneyIn: "Entrées",
+    moneyOut: "Sorties",
+    week: "Semaine",
+    inCol: "Entrées",
+    outCol: "Sorties",
+    stateAria: "Valeur sous séquestre par état",
+    tokenUnits: "Unités de jeton",
+    stateCol: "État",
+    amountCol: "Montant",
+    other: "Autre",
+    noDataPeriod: "Aucune donnée sur cette période.",
+    rangeCol: "Plage",
+    dateCol: "Date",
+    potential: "Potentiel",
+    current: "Actuel",
+    factorCol: "Facteur",
+  },
+  sw: {
+    flowAria: (cur: string) => `Pesa zinazoingia na kutoka kwa wiki, katika ${cur}`,
+    flowCaption: (cur: string) => `Pesa zinazoingia na kutoka kwa wiki (${cur})`,
+    moneyIn: "Pesa zinazoingia",
+    moneyOut: "Pesa zinazotoka",
+    week: "Wiki",
+    inCol: "Zinazoingia",
+    outCol: "Zinazotoka",
+    stateAria: "Thamani ya escrow kulingana na hali",
+    tokenUnits: "Vitengo vya tokeni",
+    stateCol: "Hali",
+    amountCol: "Kiasi",
+    other: "Nyingine",
+    noDataPeriod: "Hakuna data katika kipindi hiki.",
+    rangeCol: "Kiwango",
+    dateCol: "Tarehe",
+    potential: "Uwezo",
+    current: "Sasa",
+    factorCol: "Sababu",
+  },
+  pt: {
+    flowAria: (cur: string) => `Entradas e saídas por semana, em ${cur}`,
+    flowCaption: (cur: string) => `Entradas e saídas por semana (${cur})`,
+    moneyIn: "Entradas",
+    moneyOut: "Saídas",
+    week: "Semana",
+    inCol: "Entrada",
+    outCol: "Saída",
+    stateAria: "Valor em caução por estado",
+    tokenUnits: "Unidades de token",
+    stateCol: "Estado",
+    amountCol: "Montante",
+    other: "Outro",
+    noDataPeriod: "Sem dados neste período.",
+    rangeCol: "Intervalo",
+    dateCol: "Data",
+    potential: "Potencial",
+    current: "Atual",
+    factorCol: "Fator",
+  },
+  rw: {
+    flowAria: (cur: string) => `Amafaranga yinjira n'asohoka buri cyumweru, mu ${cur}`,
+    flowCaption: (cur: string) => `Amafaranga yinjira n'asohoka buri cyumweru (${cur})`,
+    moneyIn: "Ayinjira",
+    moneyOut: "Asohoka",
+    week: "Icyumweru",
+    inCol: "Ayinjira",
+    outCol: "Asohoka",
+    stateAria: "Agaciro ka escrow ukurikije imiterere",
+    tokenUnits: "Ingano ya tokeni",
+    stateCol: "Imiterere",
+    amountCol: "Umubare",
+    other: "Ibindi",
+    noDataPeriod: "Nta makuru aboneka muri iki gihe.",
+    rangeCol: "Urwego",
+    dateCol: "Itariki",
+    potential: "Igishoboka",
+    current: "Ubu",
+    factorCol: "Ingingo",
+  },
+} as const;
 
 /**
  * Monochrome charts (frontend_color_guidelines.md: no hue). Series are told apart by tone AND by
@@ -46,11 +150,12 @@ function tooltipStyle() {
 }
 
 export function FlowChart({ data, currencyLabel }: { data: FlowPoint[]; currencyLabel: string }) {
+  const copy = useLangCopy(CHART_COPY);
   return (
     <figure className="m-0">
       <div
         role="img"
-        aria-label={`Money in and out by week, in ${currencyLabel}`}
+        aria-label={copy.flowAria(currencyLabel)}
         className="h-60 w-full"
       >
         <div aria-hidden="true" className="h-full w-full">
@@ -87,20 +192,20 @@ export function FlowChart({ data, currencyLabel }: { data: FlowPoint[]; currency
               />
               <Tooltip contentStyle={tooltipStyle()} cursor={{ fill: "var(--color-accent)", opacity: 0.45 }} />
               <Legend wrapperStyle={{ fontSize: 11, fontFamily: "var(--font-mono)", paddingTop: 8 }} />
-              <Bar dataKey="in" name="Money in" fill="url(#vukaFlowIn)" radius={[6, 6, 0, 0]} />
-              <Bar dataKey="out" name="Money out" fill="url(#vukaFlowOut)" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="in" name={copy.moneyIn} fill="url(#vukaFlowIn)" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="out" name={copy.moneyOut} fill="url(#vukaFlowOut)" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
       <div className="sr-only">
         <table className="sr-only">
-          <caption>Money in and out by week ({currencyLabel})</caption>
+          <caption>{copy.flowCaption(currencyLabel)}</caption>
           <thead>
             <tr>
-              <th scope="col">Week</th>
-              <th scope="col">In</th>
-              <th scope="col">Out</th>
+              <th scope="col">{copy.week}</th>
+              <th scope="col">{copy.inCol}</th>
+              <th scope="col">{copy.outCol}</th>
             </tr>
           </thead>
           <tbody>
@@ -124,9 +229,10 @@ interface StatePoint {
 }
 
 export function StateChart({ data }: { data: StatePoint[] }) {
+  const copy = useLangCopy(CHART_COPY);
   return (
     <figure className="m-0">
-      <div role="img" aria-label="Escrow value by state" className="h-56 w-full">
+      <div role="img" aria-label={copy.stateAria} className="h-56 w-full">
         <div aria-hidden="true" className="h-full w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
@@ -152,18 +258,18 @@ export function StateChart({ data }: { data: StatePoint[] }) {
                 width={84}
               />
               <Tooltip contentStyle={tooltipStyle()} cursor={{ fill: "var(--color-accent)" }} />
-              <Bar dataKey="amount" name="Token units" fill="var(--chart-1)" />
+              <Bar dataKey="amount" name={copy.tokenUnits} fill="var(--chart-1)" />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
       <div className="sr-only">
         <table className="sr-only">
-          <caption>Escrow value by state</caption>
+          <caption>{copy.stateAria}</caption>
           <thead>
             <tr>
-              <th scope="col">State</th>
-              <th scope="col">Amount</th>
+              <th scope="col">{copy.stateCol}</th>
+              <th scope="col">{copy.amountCol}</th>
             </tr>
           </thead>
           <tbody>
@@ -195,11 +301,11 @@ const TONES = [
 ];
 
 /** Groups everything past the 4th slice into "Other" so five tones stay distinguishable. */
-function topSlices(data: DonutDatum[]): DonutDatum[] {
+function topSlices(data: DonutDatum[], otherLabel = "Other"): DonutDatum[] {
   const sorted = [...data].filter((d) => d.value > 0).sort((a, b) => b.value - a.value);
   if (sorted.length <= 5) return sorted;
   const rest = sorted.slice(4).reduce((s, d) => s + d.value, 0);
-  return [...sorted.slice(0, 4), { label: "Other", value: rest }];
+  return [...sorted.slice(0, 4), { label: otherLabel, value: rest }];
 }
 
 export function DonutChart({
@@ -213,9 +319,10 @@ export function DonutChart({
   center: { value: string; label: string };
   format: (v: number) => string;
 }) {
-  const slices = topSlices(data);
+  const copy = useLangCopy(CHART_COPY);
+  const slices = topSlices(data, copy.other);
   const total = slices.reduce((s, d) => s + d.value, 0);
-  if (total === 0) return <p className="text-xs text-muted-foreground">No data in this period.</p>;
+  if (total === 0) return <p className="text-xs text-muted-foreground">{copy.noDataPeriod}</p>;
   return (
     <figure className="m-0 grid items-center gap-4 sm:grid-cols-[180px_1fr]">
       <div role="img" aria-label={ariaLabel} className="relative mx-auto h-44 w-44">
@@ -281,6 +388,7 @@ export function HistogramChart({
   ariaLabel: string;
   unit?: string;
 }) {
+  const copy = useLangCopy(CHART_COPY);
   return (
     <figure className="m-0">
       <div role="img" aria-label={ariaLabel} className="h-56 w-full">
@@ -325,7 +433,7 @@ export function HistogramChart({
           <caption>{ariaLabel}</caption>
           <thead>
             <tr>
-              <th scope="col">Range</th>
+              <th scope="col">{copy.rangeCol}</th>
               <th scope="col">{unit}</th>
             </tr>
           </thead>
@@ -363,6 +471,7 @@ export function TrendChart({
   bName?: string;
   format: (v: number) => string;
 }) {
+  const copy = useLangCopy(CHART_COPY);
   return (
     <figure className="m-0">
       <div role="img" aria-label={ariaLabel} className="h-64 w-full">
@@ -435,7 +544,7 @@ export function TrendChart({
           <caption>{ariaLabel}</caption>
           <thead>
             <tr>
-              <th scope="col">Date</th>
+              <th scope="col">{copy.dateCol}</th>
               <th scope="col">{aName}</th>
               {bName ? <th scope="col">{bName}</th> : null}
             </tr>
@@ -463,6 +572,7 @@ export function RadarView({
   data: { axis: string; value: number; potential: number }[];
   ariaLabel: string;
 }) {
+  const copy = useLangCopy(CHART_COPY);
   return (
     <figure className="m-0">
       <div role="img" aria-label={ariaLabel} className="h-72 w-full">
@@ -476,7 +586,7 @@ export function RadarView({
               />
               <PolarRadiusAxis angle={90} domain={[0, 100]} tick={false} axisLine={false} />
               <Radar
-                name="Potential"
+                name={copy.potential}
                 dataKey="potential"
                 stroke="var(--chart-3)"
                 strokeDasharray="4 3"
@@ -485,7 +595,7 @@ export function RadarView({
                 isAnimationActive={true} animationDuration={700}
               />
               <Radar
-                name="Current"
+                name={copy.current}
                 dataKey="value"
                 stroke="var(--chart-1)"
                 strokeWidth={2}
@@ -504,9 +614,9 @@ export function RadarView({
           <caption>{ariaLabel}</caption>
           <thead>
             <tr>
-              <th scope="col">Factor</th>
-              <th scope="col">Current</th>
-              <th scope="col">Potential</th>
+              <th scope="col">{copy.factorCol}</th>
+              <th scope="col">{copy.current}</th>
+              <th scope="col">{copy.potential}</th>
             </tr>
           </thead>
           <tbody>

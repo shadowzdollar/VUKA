@@ -4,6 +4,35 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ChainScope } from "@/lib/api/endpoints";
 import { scopeReady } from "@/lib/chain-scope";
+import { useLangCopy } from "@/lib/i18n";
+
+const COPY = {
+  en: {
+    escrowContract: "Escrow contract",
+    chainId: "Chain id",
+    apply: "Apply",
+  },
+  fr: {
+    escrowContract: "Contrat de séquestre",
+    chainId: "ID de chaîne",
+    apply: "Appliquer",
+  },
+  sw: {
+    escrowContract: "Mkataba wa escrow",
+    chainId: "Kitambulisho cha mnyororo",
+    apply: "Tumia",
+  },
+  pt: {
+    escrowContract: "Contrato de caução",
+    chainId: "ID da cadeia",
+    apply: "Aplicar",
+  },
+  rw: {
+    escrowContract: "Amasezerano ya escrow",
+    chainId: "ID y'urutsinga",
+    apply: "Shyiraho",
+  },
+} as const;
 
 /**
  * Escrow, dispute and reconciliation reads are scoped to a contract on a chain. The engine does
@@ -16,6 +45,7 @@ export function ChainScopeBar({
   scope: ChainScope;
   onChange: (s: ChainScope) => void;
 }) {
+  const copy = useLangCopy(COPY);
   const [contract, setContract] = useState(scope.contract);
   const [chain, setChain] = useState(String(scope.chain_id ?? 80002));
   const dirty = contract.trim() !== scope.contract || Number(chain) !== scope.chain_id;
@@ -29,7 +59,7 @@ export function ChainScopeBar({
           className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[#c2f74d]"
         >
           <Link2 className="size-3" aria-hidden="true" />
-          Escrow contract
+          {copy.escrowContract}
         </label>
         <Input
           id="scope-contract"
@@ -45,7 +75,7 @@ export function ChainScopeBar({
           className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-white/65"
         >
           <Layers className="size-3 text-[#c2f74d]" aria-hidden="true" />
-          Chain id
+          {copy.chainId}
         </label>
         <Input
           id="scope-chain"
@@ -62,7 +92,7 @@ export function ChainScopeBar({
         onClick={() => onChange({ contract: contract.trim(), chain_id: Number(chain) })}
       >
         <CheckCircle2 className="size-3.5" aria-hidden="true" />
-        Apply
+        {copy.apply}
       </Button>
     </div>
   );

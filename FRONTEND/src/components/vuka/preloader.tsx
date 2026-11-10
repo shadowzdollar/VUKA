@@ -1,13 +1,65 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { VukaMark } from "@/components/vuka/brand";
+import { useLangCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-const BOOT_STAGES = [
-  "MOUNTING DOUBLE-ENTRY LEDGER KERNEL",
-  "SYNCHRONIZING 10 AFRICAN CORRIDOR RAILS",
-  "ATTESTING POLYGON ESCROW READ MODEL",
-  "VUKA SETTLEMENT MESH ONLINE",
-] as const;
+const COPY = {
+  en: {
+    stages: [
+      "MOUNTING DOUBLE-ENTRY LEDGER KERNEL",
+      "SYNCHRONIZING 10 AFRICAN CORRIDOR RAILS",
+      "ATTESTING POLYGON ESCROW READ MODEL",
+      "VUKA SETTLEMENT MESH ONLINE",
+    ],
+    topStamp: "VUKA OS v2.4 · PAN-AFRICAN SETTLEMENT MESH",
+    subtitle: "Cross-Border Trade Settlement & Escrow",
+    enterWorkspace: "Enter Workspace →",
+  },
+  fr: {
+    stages: [
+      "MONTAGE DU NOYAU DU REGISTRE À DOUBLE ENTRÉE",
+      "SYNCHRONISATION DES 10 CORRIDORS AFRICAINS",
+      "ATTESTATION DU MODÈLE DE SÉQUESTRE POLYGON",
+      "RÉSEAU DE RÈGLEMENT VUKA EN LIGNE",
+    ],
+    topStamp: "VUKA OS v2.4 · RÉSEAU DE RÈGLEMENT PANAFRICAIN",
+    subtitle: "Règlement commercial transfrontalier et séquestre",
+    enterWorkspace: "Entrer dans l'espace →",
+  },
+  sw: {
+    stages: [
+      "INAWEKA MSINGI WA LEJA YA KUINGIZA MARA MBILI",
+      "INASAWANISHA NJIA 10 ZA MALIPO ZA KIAFRIKA",
+      "INATHIBITISHA MFUMO WA KUSOMA ESCROW WA POLYGON",
+      "MTANDAO WA MALIPO WA VUKA UKO HEWANI",
+    ],
+    topStamp: "VUKA OS v2.4 · MTANDAO WA MALIPO WA AFRIKA NZIMA",
+    subtitle: "Malipo ya Biashara ya Mipakani na Escrow",
+    enterWorkspace: "Ingia Kwenye Mfumo →",
+  },
+  pt: {
+    stages: [
+      "A MONTAR NÚCLEO DO RAZÃO DE PARTIDA DOBRADA",
+      "A SINCRONIZAR 10 CORREDORES AFRICANOS",
+      "A ATESTAR MODELO DE LEITURA DE CAUÇÃO POLYGON",
+      "MALHA DE LIQUIDAÇÃO VUKA ATIVA",
+    ],
+    topStamp: "VUKA OS v2.4 · MALHA DE LIQUIDAÇÃO PAN-AFRICANA",
+    subtitle: "Liquidação Comercial Transfronteiriça e Caução",
+    enterWorkspace: "Entrar no Espaço →",
+  },
+  rw: {
+    stages: [
+      "GUTANGIZA IGITABO CY'UBWISHYU BUBiri",
+      "GUHUZA INZIRA 10 Z'UBWISHYU MURI AFURIKA",
+      "KWEMEZA ICYITEGEREREZO CYA POLYGON ESCROW",
+      "URUSOBE RW'UBWISHYU RWA VUKA RURAKORA",
+    ],
+    topStamp: "VUKA OS v2.4 · URUSOBE RW'UBWISHYU NYAFURIKA",
+    subtitle: "Ubwishyu bw'Ubucuruzi Mpuzamahanga na Escrow",
+    enterWorkspace: "Injira Aho Ukorera →",
+  },
+} as const;
 
 const ORBIT_HUBS = [
   { code: "KGL", angle: 0 },
@@ -34,11 +86,12 @@ export function VukaPreloadCanvas({
   children?: ReactNode;
   onSkip?: () => void;
 }) {
+  const copy = useLangCopy(COPY);
   const stageIdx = Math.min(
-    BOOT_STAGES.length - 1,
-    Math.floor((progress / 100) * BOOT_STAGES.length),
+    copy.stages.length - 1,
+    Math.floor((progress / 100) * copy.stages.length),
   );
-  const activeStage = stageText ?? BOOT_STAGES[stageIdx];
+  const activeStage = stageText ?? copy.stages[stageIdx];
 
   return (
     <div
@@ -98,7 +151,7 @@ export function VukaPreloadCanvas({
       {/* Top Corner Telemetry Stamps */}
       <div className="pointer-events-none absolute left-6 top-6 hidden items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45 sm:flex">
         <span className="size-2 rounded-full bg-[#c2f74d] shadow-[0_0_10px_#c2f74d]" />
-        <span>VUKA OS v2.4 · PAN-AFRICAN SETTLEMENT MESH</span>
+        <span>{copy.topStamp}</span>
       </div>
       <div className="pointer-events-none absolute right-6 top-6 hidden font-mono text-[10px] uppercase tracking-[0.22em] text-white/45 sm:block">
         <span>EAC · ECOWAS · SADC · HORN</span>
@@ -183,7 +236,7 @@ export function VukaPreloadCanvas({
           <span className="size-2 rounded-full bg-[#c2f74d] shadow-[0_0_10px_#c2f74d]" />
         </div>
         <p className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.26em] text-[#c2f74d]">
-          Cross-Border Trade Settlement & Escrow
+          {copy.subtitle}
         </p>
 
         {/* Progress Bar */}
@@ -214,7 +267,7 @@ export function VukaPreloadCanvas({
             onClick={onSkip}
             className="mt-6 rounded-full border border-white/15 bg-white/[0.04] px-3.5 py-1 font-mono text-[9px] uppercase tracking-[0.22em] text-white/50 transition-colors hover:border-[#c2f74d]/40 hover:text-white"
           >
-            Enter Workspace →
+            {copy.enterWorkspace}
           </button>
         ) : null}
       </div>

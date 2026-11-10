@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Languages, Menu, Moon, Sun } from "lucide-react";
+import { Languages, Menu } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,24 +10,96 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
-import { LANGUAGES, useI18n, useT, type Lang } from "@/lib/i18n";
-import { useTheme } from "@/lib/theme";
+import { LANGUAGES, useI18n, useLangCopy, useT, type Lang } from "@/lib/i18n";
 import { VukaLogo } from "./brand";
 
-const NAV = [
-  { href: "/#journey", label: "How it works" },
-  { href: "/#estimate", label: "Cost estimator" },
-  { href: "/#escrow", label: "Escrow" },
-  { href: "/#mobile", label: "On mobile" },
-  { href: "/#markets", label: "Markets" },
-  { href: "/#trust", label: "Trust score" },
-  { href: "/#faq", label: "FAQ" },
-];
+const COPY = {
+  en: {
+    homeAria: "VUKA — home",
+    siteNavAria: "Site",
+    mobileNavAria: "Site (mobile)",
+    navDescription: "Site navigation",
+    joinShort: "Join",
+    nav: [
+      { href: "/#journey", label: "How it works" },
+      { href: "/#estimate", label: "Cost estimator" },
+      { href: "/#escrow", label: "Escrow" },
+      { href: "/#mobile", label: "On mobile" },
+      { href: "/#markets", label: "Markets" },
+      { href: "/#trust", label: "Trust score" },
+      { href: "/#faq", label: "FAQ" },
+    ],
+  },
+  fr: {
+    homeAria: "VUKA — accueil",
+    siteNavAria: "Site",
+    mobileNavAria: "Site (mobile)",
+    navDescription: "Navigation du site",
+    joinShort: "Rejoindre",
+    nav: [
+      { href: "/#journey", label: "Comment ça marche" },
+      { href: "/#estimate", label: "Simulateur de coûts" },
+      { href: "/#escrow", label: "Séquestre" },
+      { href: "/#mobile", label: "Sur mobile" },
+      { href: "/#markets", label: "Marchés" },
+      { href: "/#trust", label: "Score de confiance" },
+      { href: "/#faq", label: "FAQ" },
+    ],
+  },
+  sw: {
+    homeAria: "VUKA — mwanzo",
+    siteNavAria: "Tovuti",
+    mobileNavAria: "Tovuti (simu)",
+    navDescription: "Urambazaji wa tovuti",
+    joinShort: "Jiunge",
+    nav: [
+      { href: "/#journey", label: "Jinsi inavyofanya kazi" },
+      { href: "/#estimate", label: "Kikokotoo cha gharama" },
+      { href: "/#escrow", label: "Escrow" },
+      { href: "/#mobile", label: "Kwenye simu" },
+      { href: "/#markets", label: "Masoko" },
+      { href: "/#trust", label: "Alama ya uaminifu" },
+      { href: "/#faq", label: "Maswali" },
+    ],
+  },
+  pt: {
+    homeAria: "VUKA — início",
+    siteNavAria: "Site",
+    mobileNavAria: "Site (móvel)",
+    navDescription: "Navegação do site",
+    joinShort: "Registar",
+    nav: [
+      { href: "/#journey", label: "Como funciona" },
+      { href: "/#estimate", label: "Simulador de custos" },
+      { href: "/#escrow", label: "Caução" },
+      { href: "/#mobile", label: "No telemóvel" },
+      { href: "/#markets", label: "Mercados" },
+      { href: "/#trust", label: "Pontuação de confiança" },
+      { href: "/#faq", label: "FAQ" },
+    ],
+  },
+  rw: {
+    homeAria: "VUKA — ahabanza",
+    siteNavAria: "Urubuga",
+    mobileNavAria: "Urubuga (telefone)",
+    navDescription: "Kugendana ku rubuga",
+    joinShort: "Iyandikishe",
+    nav: [
+      { href: "/#journey", label: "Uko bikora" },
+      { href: "/#estimate", label: "Ibara ry'ikiguzi" },
+      { href: "/#escrow", label: "Escrow" },
+      { href: "/#mobile", label: "Kuri telefone" },
+      { href: "/#markets", label: "Amasoko" },
+      { href: "/#trust", label: "Amanota y'icyizere" },
+      { href: "/#faq", label: "Ibibazo" },
+    ],
+  },
+};
 
 export function SiteHeader() {
   const t = useT();
   const { lang, setLang } = useI18n();
-  const { resolved, setPreference } = useTheme();
+  const copy = useLangCopy(COPY);
   const [open, setOpen] = useState(false);
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
@@ -41,11 +113,11 @@ export function SiteHeader() {
         >
           <Menu className="size-5" aria-hidden="true" />
         </Button>
-        <Link to="/" aria-label="VUKA — home">
+        <Link to="/" aria-label={copy.homeAria}>
           <VukaLogo tagline={t("app.tagline")} />
         </Link>
-        <nav aria-label="Site" className="ml-6 hidden items-center gap-1 xl:flex">
-          {NAV.map((n) => (
+        <nav aria-label={copy.siteNavAria} className="ml-6 hidden items-center gap-1 xl:flex">
+          {copy.nav.map((n) => (
             <a
               key={n.href}
               href={n.href}
@@ -78,19 +150,6 @@ export function SiteHeader() {
             </DropdownMenuContent>
           </DropdownMenu>
           <Button
-            variant="ghost"
-            size="icon"
-            className="size-9"
-            aria-label={t("shell.theme")}
-            onClick={() => setPreference(resolved === "dark" ? "light" : "dark")}
-          >
-            {resolved === "dark" ? (
-              <Sun className="size-4" aria-hidden="true" />
-            ) : (
-              <Moon className="size-4" aria-hidden="true" />
-            )}
-          </Button>
-          <Button
             asChild
             variant="outline"
             size="sm"
@@ -100,7 +159,7 @@ export function SiteHeader() {
           </Button>
           <Button asChild size="sm" className="rounded-lg font-mono text-[11px] uppercase">
             <Link to="/register">
-              <span className="sm:hidden">Join</span>
+              <span className="sm:hidden">{copy.joinShort}</span>
               <span className="hidden sm:inline">{t("landing.cta.register")}</span>
             </Link>
           </Button>
@@ -109,9 +168,9 @@ export function SiteHeader() {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="left" className="w-72 p-0">
           <SheetTitle className="sr-only">{t("shell.menu")}</SheetTitle>
-          <SheetDescription className="sr-only">Site navigation</SheetDescription>
-          <nav aria-label="Site (mobile)" className="flex flex-col p-5 pt-12">
-            {NAV.map((n) => (
+          <SheetDescription className="sr-only">{copy.navDescription}</SheetDescription>
+          <nav aria-label={copy.mobileNavAria} className="flex flex-col p-5 pt-12">
+            {copy.nav.map((n) => (
               <a
                 key={n.href}
                 href={n.href}

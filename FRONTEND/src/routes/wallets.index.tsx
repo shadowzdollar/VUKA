@@ -42,7 +42,8 @@ import { describeError, newIdempotencyKey } from "@/lib/api/client";
 import { ledger } from "@/lib/api/endpoints";
 import type { Account, Transfer } from "@/lib/api/types";
 import { downloadCsv, money, shortId, when } from "@/lib/format";
-import { accountLabel, directionFor, useTransfers, useWallet } from "@/lib/trader-data";
+import { useLangCopy } from "@/lib/i18n";
+import { directionFor, useTransfers, useWallet } from "@/lib/trader-data";
 
 export const Route = createFileRoute("/wallets/")({
   head: () => ({
@@ -58,13 +59,331 @@ export const Route = createFileRoute("/wallets/")({
   component: Wallets,
 });
 
+const COPY = {
+  en: {
+    bannerPill1: "Double-Entry Ledger Engine",
+    bannerPill2: "ISO 20022 camt.053 Statements",
+    title: "Wallets & Immutable Ledger",
+    description:
+      "Trade capital sits in your Business Trade Vault, strictly separated from your Personal Wallet. No mutable balance column exists — every balance is derived in real time from balanced debit and credit postings.",
+    topUpBtn: "Top Up Vault",
+    sendPaymentBtn: "Send Payment",
+    exportCsvBtn: "Export CSV",
+    toastExported: "Transfers exported",
+    toastRows: (n: number) => `${n} rows`,
+    noAccounts: "No accounts found.",
+    businessWallet: "Business wallet",
+    personalWallet: "Personal wallet",
+    cardAria: (lbl: string, bal: string) => `${lbl}, ${bal}. View statement and history.`,
+    accountSub: (id: string) => `Account ${id} · Σ Ledger entries`,
+    statementLink: "Statement & camt.053 →",
+    primaryBadge: "Primary",
+    metricOutbound: "Outbound Settlements",
+    metricOutboundSub: "Sent from your vaults",
+    metricInbound: "Inbound Receipts",
+    metricInboundSub: (n: number) => `${n} total ledger transfers`,
+    registerTitle: "Double-Entry Transfer Register",
+    transfersCount: (n: number) => `${n} transfers`,
+    tableCaption: "Transfer register",
+    emptyTransfers:
+      "No transfers match the selected filter. Top up a wallet or send a payment to see ledger postings.",
+    filterByAccountAria: "Filter by account",
+    allVaults: "All Vaults & Wallets",
+    dirAll: "All",
+    dirSent: "Sent",
+    dirReceived: "Received",
+    dirInternal: "Internal",
+    colTransferId: "Transfer ID",
+    colTimestamp: "Timestamp",
+    colFlow: "Flow",
+    colInvoice: "Invoice",
+    colExtRef: "External Ref",
+    colAmount: "Amount",
+    colStatus: "Status",
+    fundTitle: "Top Up Vault (Sandbox Cash-In)",
+    fundDesc:
+      "Credits your selected vault via a balanced external cash-in ledger entry. Protected by an idempotency key so retries never double-credit.",
+    targetVaultLabel: "Target Vault / Wallet",
+    walletAria: "Wallet",
+    selectWalletPlaceholder: "Select wallet",
+    topUpAmountLabel: (cur: string) => `Top-Up Amount ${cur ? `(${cur})` : ""}`,
+    postingLedger: "Posting to Ledger…",
+    confirmTopUp: "Confirm Cash-In Top-Up",
+    toastToppedUp: "Wallet topped up",
+    toastTopUpFailed: "Top-up failed",
+    entriesTitle: (id: string) => `Ledger Transfer ${id}`,
+    postingsHeading: "Double-Entry Ledger Postings",
+    colEntryId: "Entry ID",
+    colAccount: "Account",
+    colDebit: "Debit (−)",
+    colCredit: "Credit (+)",
+    crossCurrencyNote:
+      "Cross-currency transfer: postings are balanced per currency leg through the FX settlement accounts.",
+    sumPostingsIn: (cur: string) => `Σ postings in ${cur}`,
+    zeroSumBalanced: "Zero-Sum Balanced",
+  },
+  fr: {
+    bannerPill1: "Moteur de registre à double entrée",
+    bannerPill2: "Relevés ISO 20022 camt.053",
+    title: "Portefeuilles et registre immuable",
+    description:
+      "Le capital commercial réside dans votre coffre professionnel, strictement séparé de votre portefeuille personnel. Il n'existe aucune colonne de solde modifiable : chaque solde est calculé en temps réel à partir d'écritures de débit et de crédit équilibrées.",
+    topUpBtn: "Approvisionner le coffre",
+    sendPaymentBtn: "Envoyer un paiement",
+    exportCsvBtn: "Exporter en CSV",
+    toastExported: "Transferts exportés",
+    toastRows: (n: number) => `${n} lignes`,
+    noAccounts: "Aucun compte trouvé.",
+    businessWallet: "Portefeuille professionnel",
+    personalWallet: "Portefeuille personnel",
+    cardAria: (lbl: string, bal: string) => `${lbl}, ${bal}. Voir le relevé et l'historique.`,
+    accountSub: (id: string) => `Compte ${id} · Σ Écritures du registre`,
+    statementLink: "Relevé et camt.053 →",
+    primaryBadge: "Principal",
+    metricOutbound: "Règlements sortants",
+    metricOutboundSub: "Envoyés depuis vos coffres",
+    metricInbound: "Encaissements entrants",
+    metricInboundSub: (n: number) => `${n} transferts au registre au total`,
+    registerTitle: "Registre des transferts à double entrée",
+    transfersCount: (n: number) => `${n} transferts`,
+    tableCaption: "Registre des transferts",
+    emptyTransfers:
+      "Aucun transfert ne correspond au filtre sélectionné. Approvisionnez un portefeuille ou envoyez un paiement pour voir les écritures.",
+    filterByAccountAria: "Filtrer par compte",
+    allVaults: "Tous les coffres et portefeuilles",
+    dirAll: "Tous",
+    dirSent: "Envoyés",
+    dirReceived: "Reçus",
+    dirInternal: "Internes",
+    colTransferId: "ID de transfert",
+    colTimestamp: "Horodatage",
+    colFlow: "Flux",
+    colInvoice: "Facture",
+    colExtRef: "Réf. externe",
+    colAmount: "Montant",
+    colStatus: "Statut",
+    fundTitle: "Approvisionner le coffre (Dépôt Sandbox)",
+    fundDesc:
+      "Crédite le coffre sélectionné via une écriture d'apport externe équilibrée. Protégé par une clé d'idempotence pour éviter tout double crédit.",
+    targetVaultLabel: "Coffre / Portefeuille cible",
+    walletAria: "Portefeuille",
+    selectWalletPlaceholder: "Sélectionner un portefeuille",
+    topUpAmountLabel: (cur: string) => `Montant de l'approvisionnement ${cur ? `(${cur})` : ""}`,
+    postingLedger: "Écriture au registre…",
+    confirmTopUp: "Confirmer l'approvisionnement",
+    toastToppedUp: "Portefeuille approvisionné",
+    toastTopUpFailed: "Échec de l'approvisionnement",
+    entriesTitle: (id: string) => `Transfert du registre ${id}`,
+    postingsHeading: "Écritures du registre à double entrée",
+    colEntryId: "ID d'écriture",
+    colAccount: "Compte",
+    colDebit: "Débit (−)",
+    colCredit: "Crédit (+)",
+    crossCurrencyNote:
+      "Transfert inter-devises : les écritures sont équilibrées par devise via les comptes de règlement FX.",
+    sumPostingsIn: (cur: string) => `Σ écritures en ${cur}`,
+    zeroSumBalanced: "Équilibre à somme nulle",
+  },
+  sw: {
+    bannerPill1: "Injini ya Leja ya Maingizo Mawili",
+    bannerPill2: "Taarifa za ISO 20022 camt.053",
+    title: "Pochi na Leja Isiyobadilika",
+    description:
+      "Mtaji wa biashara uko kwenye Hazina yako ya Biashara, ukitenganishwa kabisa na Pochi yako Binafsi. Hakuna safu ya salio inayohaririwa — kila salio linakokotolewa moja kwa moja kutokana na maingizo ya kutoa na kuweka yaliyosawazishwa.",
+    topUpBtn: "Jaza Hazina",
+    sendPaymentBtn: "Tuma Malipo",
+    exportCsvBtn: "Hamisha CSV",
+    toastExported: "Uhamisho umehamishwa",
+    toastRows: (n: number) => `safu ${n}`,
+    noAccounts: "Hakuna akaunti zilizopatikana.",
+    businessWallet: "Pochi ya biashara",
+    personalWallet: "Pochi binafsi",
+    cardAria: (lbl: string, bal: string) => `${lbl}, ${bal}. Tazama taarifa na historia.`,
+    accountSub: (id: string) => `Akaunti ${id} · Σ Maingizo ya leja`,
+    statementLink: "Taarifa & camt.053 →",
+    primaryBadge: "Kuu",
+    metricOutbound: "Malipo Yanayotoka",
+    metricOutboundSub: "Yaliyotumwa kutoka hazina zako",
+    metricInbound: "Mapato Yanayoingia",
+    metricInboundSub: (n: number) => `jumla ya uhamisho ${n} wa leja`,
+    registerTitle: "Rejista ya Uhamisho wa Maingizo Mawili",
+    transfersCount: (n: number) => `uhamisho ${n}`,
+    tableCaption: "Rejista ya uhamisho",
+    emptyTransfers:
+      "Hakuna uhamisho unaolingana na kichujio kilichochaguliwa. Jaza pochi au tuma malipo ili kuona maingizo ya leja.",
+    filterByAccountAria: "Chuja kwa akaunti",
+    allVaults: "Hazina na Pochi Zote",
+    dirAll: "Zote",
+    dirSent: "Zilizotumwa",
+    dirReceived: "Zilizopokelewa",
+    dirInternal: "Za Ndani",
+    colTransferId: "ID ya Uhamisho",
+    colTimestamp: "Wakati",
+    colFlow: "Mtiririko",
+    colInvoice: "Ankara",
+    colExtRef: "Kumb. ya Nje",
+    colAmount: "Kiasi",
+    colStatus: "Hali",
+    fundTitle: "Jaza Hazina (Uwekaji wa Sandbox)",
+    fundDesc:
+      "Huongeza salio kwenye hazina iliyochaguliwa kupitia ingizo la leja lililosawazishwa. Inalindwa na ufunguo wa idempotency ili kuzuia kuweka mara mbili.",
+    targetVaultLabel: "Hazina / Pochi Lengwa",
+    walletAria: "Pochi",
+    selectWalletPlaceholder: "Chagua pochi",
+    topUpAmountLabel: (cur: string) => `Kiasi cha Kujaza ${cur ? `(${cur})` : ""}`,
+    postingLedger: "Inarekodi kwenye Leja…",
+    confirmTopUp: "Thibitisha Uwekaji Pesa",
+    toastToppedUp: "Pochi imejazwa",
+    toastTopUpFailed: "Uwekaji umeshindwa",
+    entriesTitle: (id: string) => `Uhamisho wa Leja ${id}`,
+    postingsHeading: "Maingizo ya Leja ya Pande Mbili",
+    colEntryId: "ID ya Ingizo",
+    colAccount: "Akaunti",
+    colDebit: "Toa (−)",
+    colCredit: "Weka (+)",
+    crossCurrencyNote:
+      "Uhamisho wa sarafu tofauti: maingizo yanasawazishwa kwa kila sarafu kupitia akaunti za FX.",
+    sumPostingsIn: (cur: string) => `Σ maingizo katika ${cur}`,
+    zeroSumBalanced: "Imesawazishwa Sifuri",
+  },
+  pt: {
+    bannerPill1: "Motor de Razão de Partidas Dobradas",
+    bannerPill2: "Extratos ISO 20022 camt.053",
+    title: "Carteiras e Razão Imutável",
+    description:
+      "O capital comercial permanece no seu Cofre Empresarial, estritamente separado da sua Carteira Pessoal. Não existe coluna de saldo editável — cada saldo é derivado em tempo real de lançamentos equilibrados a débito e crédito.",
+    topUpBtn: "Carregar Cofre",
+    sendPaymentBtn: "Enviar Pagamento",
+    exportCsvBtn: "Exportar CSV",
+    toastExported: "Transferências exportadas",
+    toastRows: (n: number) => `${n} linhas`,
+    noAccounts: "Nenhuma conta encontrada.",
+    businessWallet: "Carteira empresarial",
+    personalWallet: "Carteira pessoal",
+    cardAria: (lbl: string, bal: string) => `${lbl}, ${bal}. Ver extrato e histórico.`,
+    accountSub: (id: string) => `Conta ${id} · Σ Lançamentos no razão`,
+    statementLink: "Extrato e camt.053 →",
+    primaryBadge: "Principal",
+    metricOutbound: "Liquidações de Saída",
+    metricOutboundSub: "Enviadas dos seus cofres",
+    metricInbound: "Recebimentos de Entrada",
+    metricInboundSub: (n: number) => `${n} transferências totais no razão`,
+    registerTitle: "Registo de Transferências de Partidas Dobradas",
+    transfersCount: (n: number) => `${n} transferências`,
+    tableCaption: "Registo de transferências",
+    emptyTransfers:
+      "Nenhuma transferência corresponde ao filtro selecionado. Carregue uma carteira ou envie um pagamento para ver lançamentos no razão.",
+    filterByAccountAria: "Filtrar por conta",
+    allVaults: "Todos os Cofres e Carteiras",
+    dirAll: "Todas",
+    dirSent: "Enviadas",
+    dirReceived: "Recebidas",
+    dirInternal: "Internas",
+    colTransferId: "ID de Transferência",
+    colTimestamp: "Data/Hora",
+    colFlow: "Fluxo",
+    colInvoice: "Fatura",
+    colExtRef: "Ref. Externa",
+    colAmount: "Montante",
+    colStatus: "Estado",
+    fundTitle: "Carregar Cofre (Depósito Sandbox)",
+    fundDesc:
+      "Credita o cofre selecionado através de um lançamento externo equilibrado no razão. Protegido por chave de idempotência para evitar duplo crédito.",
+    targetVaultLabel: "Cofre / Carteira de Destino",
+    walletAria: "Carteira",
+    selectWalletPlaceholder: "Selecionar carteira",
+    topUpAmountLabel: (cur: string) => `Montante a Carregar ${cur ? `(${cur})` : ""}`,
+    postingLedger: "A lançar no Razão…",
+    confirmTopUp: "Confirmar Carregamento",
+    toastToppedUp: "Carteira carregada",
+    toastTopUpFailed: "Falha no carregamento",
+    entriesTitle: (id: string) => `Transferência do Razão ${id}`,
+    postingsHeading: "Lançamentos de Partidas Dobradas",
+    colEntryId: "ID de Lançamento",
+    colAccount: "Conta",
+    colDebit: "Débito (−)",
+    colCredit: "Crédito (+)",
+    crossCurrencyNote:
+      "Transferência entre moedas: os lançamentos são equilibrados por moeda através das contas de liquidação FX.",
+    sumPostingsIn: (cur: string) => `Σ lançamentos em ${cur}`,
+    zeroSumBalanced: "Soma Zero Equilibrada",
+  },
+  rw: {
+    bannerPill1: "Sisitemu y'Igitabo cy'Impfuruka Ebyiri",
+    bannerPill2: "Raporo za ISO 20022 camt.053",
+    title: "Amashakoshi n'Igitabo Kidahinduka",
+    description:
+      "Igishoro cy'ubucuruzi kiba mu Ishakoshi yawe y'Ubucuruzi, gitandukanyijwe burundu n'Ishakoshi yawe Bwite. Nta mubare w'amafaranga uhindurwa ukuboko ubaho — buri mubare ubarwa ako kanya uhereye ku nyandiko zinjira n'izisohoka ziringaniye.",
+    topUpBtn: "Ongera Amafaranga",
+    sendPaymentBtn: "Ohereza Amafaranga",
+    exportCsvBtn: "Manura CSV",
+    toastExported: "Ihererekanya ryamanuwe",
+    toastRows: (n: number) => `imirongo ${n}`,
+    noAccounts: "Nta konti zabonetse.",
+    businessWallet: "Ishakoshi y'ubucuruzi",
+    personalWallet: "Ishakoshi bwite",
+    cardAria: (lbl: string, bal: string) => `${lbl}, ${bal}. Reba raporo n'amateka.`,
+    accountSub: (id: string) => `Konti ${id} · Σ Inyandiko z'igitabo`,
+    statementLink: "Raporo & camt.053 →",
+    primaryBadge: "Nyamukuru",
+    metricOutbound: "Ubwishyu Bwoherejwe",
+    metricOutboundSub: "Bwavuye mu mashakoshi yawe",
+    metricInbound: "Amafaranga Yakiriwe",
+    metricInboundSub: (n: number) => `ihererekanya ${n} ryose mu gitabo`,
+    registerTitle: "Urutonde rw'Ihererekanya mu Gitabo cy'Imari",
+    transfersCount: (n: number) => `ihererekanya ${n}`,
+    tableCaption: "Urutonde rw'ihererekanya",
+    emptyTransfers:
+      "Nta hererekanya rijyanye n'akayunguruzo wahisemo. Ongera amafaranga mu ishakoshi cyangwa wohereze ubwishyu kugira ngo urebe inyandiko z'igitabo.",
+    filterByAccountAria: "Shungura ukurikije konti",
+    allVaults: "Amashakoshi na Konti Zose",
+    dirAll: "Byose",
+    dirSent: "Byoherejwe",
+    dirReceived: "Byakiriwe",
+    dirInternal: "Imbere",
+    colTransferId: "ID y'Ihererekanya",
+    colTimestamp: "Igihe",
+    colFlow: "Icyerekezo",
+    colInvoice: "Inyemezabuguzi",
+    colExtRef: "Indango yo Hanze",
+    colAmount: "Umubare",
+    colStatus: "Imiterere",
+    fundTitle: "Ongera Amafaranga (Sandbox Cash-In)",
+    fundDesc:
+      "Yongera amafaranga kuri konti wahisemo binyuze mu nyandiko iringaniye y'igitabo. Birinzwe n'urufunguzo rw'idempotency kugira ngo atabarwa kabiri.",
+    targetVaultLabel: "Ishakoshi / Konti Ishyirwaho",
+    walletAria: "Ishakoshi",
+    selectWalletPlaceholder: "Hitamo ishakoshi",
+    topUpAmountLabel: (cur: string) => `Umubare w'Amafaranga Yongerwaho ${cur ? `(${cur})` : ""}`,
+    postingLedger: "Birimo kwandikwa mu Gitabo…",
+    confirmTopUp: "Emeza Kongeraho Amafaranga",
+    toastToppedUp: "Amafaranga yongewe mu ishakoshi",
+    toastTopUpFailed: "Kongeraho amafaranga byanze",
+    entriesTitle: (id: string) => `Ihererekanya ryo mu Gitabo ${id}`,
+    postingsHeading: "Inyandiko z'Igitabo cy'Impfuruka Ebyiri",
+    colEntryId: "ID y'Inyandiko",
+    colAccount: "Konti",
+    colDebit: "Ayasohotse (−)",
+    colCredit: "Ayinjiye (+)",
+    crossCurrencyNote:
+      "Ihererekanya hagati y'amafaranga atandukanye: inyandiko ziringanizwa kuri buri faranga binyuze kuri konti za FX.",
+    sumPostingsIn: (cur: string) => `Σ inyandiko muri ${cur}`,
+    zeroSumBalanced: "Biringaniye ku busa (Zero-Sum)",
+  },
+} as const;
+
 function statusTone(s: Transfer["status"]) {
   if (s === "SUCCESS") return "live" as const;
   if (s === "FAILED" || s === "REVERSED") return "warn" as const;
   return "invert" as const;
 }
 
+function localAccountLabel(a: Account, c: (typeof COPY)[keyof typeof COPY]) {
+  return a.type === "BUSINESS" ? c.businessWallet : c.personalWallet;
+}
+
 function Wallets() {
+  const c = useLangCopy(COPY);
   const wallet = useWallet();
   const transfers = useTransfers();
   const [fundOpen, setFundOpen] = useState(false);
@@ -129,7 +448,7 @@ function Wallets() {
         t.external_reference ?? "",
       ]),
     );
-    toast.success("Transfers exported", { description: `${rows.length} rows` });
+    toast.success(c.toastExported, { description: c.toastRows(rows.length) });
   }
 
   return (
@@ -153,20 +472,18 @@ function Wallets() {
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-[#c2f74d]/40 bg-[#c2f74d]/15 px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[#c2f74d]">
                 <span className="size-1.5 rounded-full bg-[#c2f74d]" />
-                Double-Entry Ledger Engine
+                {c.bannerPill1}
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-white/75">
-                <Lock className="size-3 text-[#c2f74d]" /> ISO 20022 camt.053 Statements
+                <Lock className="size-3 text-[#c2f74d]" /> {c.bannerPill2}
               </span>
             </div>
 
             <h1 className="mt-4 text-2xl font-bold tracking-tight text-white sm:text-4xl">
-              Wallets &amp; Immutable Ledger
+              {c.title}
             </h1>
             <p className="mt-2 text-sm leading-relaxed text-white/70">
-              Trade capital sits in your Business Trade Vault, strictly separated from your Personal
-              Wallet. No mutable balance column exists — every balance is derived in real time from
-              balanced debit and credit postings.
+              {c.description}
             </p>
           </div>
 
@@ -175,7 +492,7 @@ function Wallets() {
               onClick={() => setFundOpen(true)}
               className="h-10 rounded-xl bg-[#c2f74d] px-5 font-mono text-xs font-bold uppercase tracking-wider text-[#151515] hover:bg-[#b5eb3b]"
             >
-              <PlusCircle className="mr-1.5 size-3.5" /> Top Up Vault
+              <PlusCircle className="mr-1.5 size-3.5" /> {c.topUpBtn}
             </Button>
             <Button
               asChild
@@ -183,7 +500,7 @@ function Wallets() {
               className="h-10 rounded-xl border-white/20 bg-white/5 px-4 font-mono text-xs uppercase text-white hover:bg-white/15 hover:text-white"
             >
               <Link to="/send">
-                <Send className="mr-1.5 size-3.5" /> Send Payment
+                <Send className="mr-1.5 size-3.5" /> {c.sendPaymentBtn}
               </Link>
             </Button>
             <Button
@@ -192,7 +509,7 @@ function Wallets() {
               disabled={rows.length === 0}
               className="h-10 rounded-xl border-white/20 bg-white/5 px-4 font-mono text-xs uppercase text-white hover:bg-white/15 hover:text-white"
             >
-              <Download className="mr-1.5 size-3.5" /> Export CSV
+              <Download className="mr-1.5 size-3.5" /> {c.exportCsvBtn}
             </Button>
           </div>
         </div>
@@ -201,7 +518,7 @@ function Wallets() {
       {/* Segregated Vault Cards + Ledger Velocity Metrics */}
       <QueryBoundary
         query={wallet}
-        empty="No accounts found."
+        empty={c.noAccounts}
         isEmpty={(w) => w.accounts.length === 0}
       >
         {(w) => (
@@ -209,6 +526,7 @@ function Wallets() {
             {w.accounts.map((a, i) => {
               const isBiz = a.type === "BUSINESS";
               const bal = w.balances[a.id]?.amount ?? 0;
+              const lbl = localAccountLabel(a, c);
               return (
                 <Link
                   key={a.id}
@@ -220,7 +538,7 @@ function Wallets() {
                       ? "border-[#79b200]/55 bg-gradient-to-br from-[#f6fce8] via-white to-white text-[#151515] shadow-[0_16px_38px_-18px_rgba(121,178,0,0.25)] dark:from-[#1b2410] dark:via-card dark:to-card dark:text-foreground"
                       : "border-border bg-card text-foreground shadow-[0_12px_32px_-16px_rgba(0,0,0,0.08)] hover:border-[#79b200]/45"
                   }`}
-                  aria-label={`${accountLabel(a)}, ${money(bal, a.currency)}. View statement and history.`}
+                  aria-label={c.cardAria(lbl, money(bal, a.currency))}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="inline-flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
@@ -235,7 +553,7 @@ function Wallets() {
                           <UserRound className="size-4" />
                         )}
                       </span>
-                      {accountLabel(a)}
+                      {lbl}
                     </span>
                     <span className="rounded-md border border-border bg-background/80 px-2 py-0.5 font-mono text-[10px] font-bold">
                       {a.currency}
@@ -247,17 +565,17 @@ function Wallets() {
                       {money(bal, a.currency)}
                     </div>
                     <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                      Account {shortId(a.id, 14)} · Σ Ledger entries
+                      {c.accountSub(shortId(a.id, 14))}
                     </p>
                   </div>
 
                   <div className="mt-4 flex items-center justify-between border-t border-border/70 pt-3 font-mono text-[10px]">
                     <span className="inline-flex items-center gap-1 font-semibold uppercase tracking-wider text-foreground group-hover:underline">
-                      <FileDown className="size-3" /> Statement &amp; camt.053 →
+                      <FileDown className="size-3" /> {c.statementLink}
                     </span>
                     {isBiz ? (
                       <span className="rounded-full bg-[#c2f74d]/45 px-2 py-0.5 text-[9px] font-bold uppercase">
-                        Primary
+                        {c.primaryBadge}
                       </span>
                     ) : null}
                   </div>
@@ -268,17 +586,17 @@ function Wallets() {
             <Metric
               icon={ArrowUpRight}
               tone="primary"
-              label="Outbound Settlements"
+              label={c.metricOutbound}
               value={stats.outCount}
-              sub="Sent from your vaults"
+              sub={c.metricOutboundSub}
               delay={120}
             />
             <Metric
               icon={ArrowDownLeft}
               tone="success"
-              label="Inbound Receipts"
+              label={c.metricInbound}
               value={stats.inCount}
-              sub={`${stats.total} total ledger transfers`}
+              sub={c.metricInboundSub(stats.total)}
               delay={180}
             />
           </div>
@@ -287,11 +605,11 @@ function Wallets() {
 
       {/* Double-Entry Transfer Register */}
       <Panel
-        title="Double-Entry Transfer Register"
+        title={c.registerTitle}
         meta={
           <div className="flex flex-wrap items-center gap-2">
             <Chip tone="live">
-              <BookOpenCheck className="size-3" /> {rows.length} transfers
+              <BookOpenCheck className="size-3" /> {c.transfersCount(rows.length)}
             </Chip>
           </div>
         }
@@ -299,27 +617,27 @@ function Wallets() {
         <QueryBoundary query={transfers}>
           {() => (
             <DataTable
-              caption="Transfer register"
+              caption={c.tableCaption}
               exportName="vuka-transfers.csv"
               rows={rows}
               rowKey={(t) => t.id}
               onRowClick={setEntriesFor}
               initialSort={{ key: "time", dir: "desc" }}
-              empty="No transfers match the selected filter. Top up a wallet or send a payment to see ledger postings."
+              empty={c.emptyTransfers}
               toolbar={
                 <div className="flex flex-wrap items-center gap-2">
                   <Select value={accountFilter} onValueChange={setAccountFilter}>
                     <SelectTrigger
                       className="h-9 w-56 rounded-xl font-mono text-xs"
-                      aria-label="Filter by account"
+                      aria-label={c.filterByAccountAria}
                     >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
-                      <SelectItem value="ALL">All Vaults &amp; Wallets</SelectItem>
+                      <SelectItem value="ALL">{c.allVaults}</SelectItem>
                       {(wallet.data?.accounts ?? []).map((a) => (
                         <SelectItem key={a.id} value={a.id}>
-                          {accountLabel(a)} ({a.currency})
+                          {localAccountLabel(a, c)} ({a.currency})
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -328,10 +646,10 @@ function Wallets() {
                   <div className="inline-flex rounded-xl border border-border bg-muted/40 p-1">
                     {(
                       [
-                        { id: "ALL", label: "All" },
-                        { id: "out", label: "Sent" },
-                        { id: "in", label: "Received" },
-                        { id: "internal", label: "Internal" },
+                        { id: "ALL", label: c.dirAll },
+                        { id: "out", label: c.dirSent },
+                        { id: "in", label: c.dirReceived },
+                        { id: "internal", label: c.dirInternal },
                       ] as const
                     ).map((d) => (
                       <button
@@ -353,7 +671,7 @@ function Wallets() {
               columns={[
                 {
                   key: "id",
-                  header: "Transfer ID",
+                  header: c.colTransferId,
                   sort: (t) => t.id,
                   cell: (t) => (
                     <span className="font-mono text-xs font-semibold">{shortId(t.id, 12)}</span>
@@ -361,7 +679,7 @@ function Wallets() {
                 },
                 {
                   key: "time",
-                  header: "Timestamp",
+                  header: c.colTimestamp,
                   sort: (t) => t.created_at,
                   text: (t) => t.created_at,
                   cell: (t) => (
@@ -372,7 +690,7 @@ function Wallets() {
                 },
                 {
                   key: "dir",
-                  header: "Flow",
+                  header: c.colFlow,
                   sort: (t) => directionFor(t, ownIds),
                   text: (t) => directionFor(t, ownIds),
                   cell: (t) => {
@@ -386,14 +704,14 @@ function Wallets() {
                         ) : (
                           <ArrowRight className="size-3.5 text-muted-foreground" />
                         )}
-                        {d === "out" ? "Sent" : d === "in" ? "Received" : "Internal"}
+                        {d === "out" ? c.dirSent : d === "in" ? c.dirReceived : c.dirInternal}
                       </span>
                     );
                   },
                 },
                 {
                   key: "invoice",
-                  header: "Invoice",
+                  header: c.colInvoice,
                   text: (t) => t.invoice_number ?? "",
                   cell: (t) =>
                     t.invoice_number ? (
@@ -406,7 +724,7 @@ function Wallets() {
                 },
                 {
                   key: "ref",
-                  header: "External Ref",
+                  header: c.colExtRef,
                   text: (t) => t.external_reference ?? "",
                   cell: (t) => (
                     <span className="font-mono text-xs text-muted-foreground">
@@ -416,7 +734,7 @@ function Wallets() {
                 },
                 {
                   key: "amount",
-                  header: "Amount",
+                  header: c.colAmount,
                   align: "right",
                   sort: (t) => t.amount,
                   text: (t) => `${t.amount} ${t.currency}`,
@@ -432,7 +750,7 @@ function Wallets() {
                 },
                 {
                   key: "status",
-                  header: "Status",
+                  header: c.colStatus,
                   align: "right",
                   sort: (t) => t.status,
                   cell: (t) => <Chip tone={statusTone(t.status)}>{t.status}</Chip>,
@@ -447,8 +765,9 @@ function Wallets() {
         open={fundOpen}
         onOpenChange={setFundOpen}
         accounts={wallet.data?.accounts ?? []}
+        c={c}
       />
-      <EntriesDialog transfer={entriesFor} onClose={() => setEntriesFor(null)} />
+      <EntriesDialog transfer={entriesFor} onClose={() => setEntriesFor(null)} c={c} />
     </div>
   );
 }
@@ -457,10 +776,12 @@ function FundDialog({
   open,
   onOpenChange,
   accounts,
+  c,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   accounts: Account[];
+  c: (typeof COPY)[keyof typeof COPY];
 }) {
   const qc = useQueryClient();
   const [accountId, setAccountId] = useState("");
@@ -482,12 +803,12 @@ function FundDialog({
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["wallet"] });
       void qc.invalidateQueries({ queryKey: ["transfers"] });
-      toast.success("Wallet topped up", { description: money(value, account!.currency) });
+      toast.success(c.toastToppedUp, { description: money(value, account!.currency) });
       setAmount("");
       setKey(newIdempotencyKey());
       onOpenChange(false);
     },
-    onError: (e) => toast.error("Top-up failed", { description: describeError(e) }),
+    onError: (e) => toast.error(c.toastTopUpFailed, { description: describeError(e) }),
   });
 
   return (
@@ -495,26 +816,25 @@ function FundDialog({
       <DialogContent className="rounded-2xl sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 font-mono text-sm uppercase tracking-[0.18em]">
-            <Wallet className="size-4 text-[#79b200]" /> Top Up Vault (Sandbox Cash-In)
+            <Wallet className="size-4 text-[#79b200]" /> {c.fundTitle}
           </DialogTitle>
           <DialogDescription>
-            Credits your selected vault via a balanced external cash-in ledger entry. Protected by
-            an idempotency key so retries never double-credit.
+            {c.fundDesc}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em]">
-              Target Vault / Wallet
+              {c.targetVaultLabel}
             </Label>
             <Select value={account?.id ?? ""} onValueChange={setAccountId}>
-              <SelectTrigger aria-label="Wallet" className="h-11 rounded-xl font-mono text-xs">
-                <SelectValue placeholder="Select wallet" />
+              <SelectTrigger aria-label={c.walletAria} className="h-11 rounded-xl font-mono text-xs">
+                <SelectValue placeholder={c.selectWalletPlaceholder} />
               </SelectTrigger>
               <SelectContent className="rounded-xl">
                 {accounts.map((a) => (
                   <SelectItem key={a.id} value={a.id}>
-                    {accountLabel(a)} ({a.currency})
+                    {localAccountLabel(a, c)} ({a.currency})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -522,7 +842,7 @@ function FundDialog({
           </div>
           <div className="space-y-1.5">
             <Label className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em]">
-              Top-Up Amount {account ? `(${account.currency})` : ""}
+              {c.topUpAmountLabel(account?.currency ?? "")}
             </Label>
             <Input
               inputMode="decimal"
@@ -551,7 +871,7 @@ function FundDialog({
             disabled={!account || !(value > 0) || fund.isPending}
             onClick={() => fund.mutate()}
           >
-            {fund.isPending ? "Posting to Ledger…" : "Confirm Cash-In Top-Up"}
+            {fund.isPending ? c.postingLedger : c.confirmTopUp}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -559,7 +879,15 @@ function FundDialog({
   );
 }
 
-function EntriesDialog({ transfer, onClose }: { transfer: Transfer | null; onClose: () => void }) {
+function EntriesDialog({
+  transfer,
+  onClose,
+  c,
+}: {
+  transfer: Transfer | null;
+  onClose: () => void;
+  c: (typeof COPY)[keyof typeof COPY];
+}) {
   const entries = useQuery({
     queryKey: ["entries", transfer?.id],
     queryFn: () => ledger.entries(transfer!.id),
@@ -573,7 +901,7 @@ function EntriesDialog({ transfer, onClose }: { transfer: Transfer | null; onClo
           <>
             <DialogHeader>
               <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
-                Ledger Transfer {shortId(transfer.id, 14)}
+                {c.entriesTitle(shortId(transfer.id, 14))}
               </DialogTitle>
               <DialogDescription>
                 {money(transfer.amount, transfer.currency)}
@@ -586,7 +914,7 @@ function EntriesDialog({ transfer, onClose }: { transfer: Transfer | null; onClo
               </p>
             ) : null}
             <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              Double-Entry Ledger Postings
+              {c.postingsHeading}
             </div>
             {entries.isPending ? (
               <Loading />
@@ -598,10 +926,10 @@ function EntriesDialog({ transfer, onClose }: { transfer: Transfer | null; onClo
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border bg-muted/40 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                        <th className="px-3 py-2.5">Entry ID</th>
-                        <th className="px-3 py-2.5">Account</th>
-                        <th className="px-3 py-2.5 text-right">Debit (−)</th>
-                        <th className="px-3 py-2.5 text-right">Credit (+)</th>
+                        <th className="px-3 py-2.5">{c.colEntryId}</th>
+                        <th className="px-3 py-2.5">{c.colAccount}</th>
+                        <th className="px-3 py-2.5 text-right">{c.colDebit}</th>
+                        <th className="px-3 py-2.5 text-right">{c.colCredit}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -622,14 +950,15 @@ function EntriesDialog({ transfer, onClose }: { transfer: Transfer | null; onClo
                 </div>
                 {transfer.fx_rate ? (
                   <p className="rounded-xl border border-border bg-muted/20 p-3 font-mono text-[11px] text-muted-foreground">
-                    Cross-currency transfer: postings are balanced per currency leg through the FX
-                    settlement accounts.
+                    {c.crossCurrencyNote}
                   </p>
                 ) : (
                   <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 p-3 font-mono text-xs">
-                    <span className="text-muted-foreground">Σ postings in {transfer.currency}</span>
+                    <span className="text-muted-foreground">
+                      {c.sumPostingsIn(transfer.currency)}
+                    </span>
                     <Chip tone={Math.abs(sum) < 1e-6 ? "live" : "warn"}>
-                      {Math.abs(sum) < 1e-6 ? "Zero-Sum Balanced" : `Δ ${sum}`}
+                      {Math.abs(sum) < 1e-6 ? c.zeroSumBalanced : `Δ ${sum}`}
                     </Chip>
                   </div>
                 )}

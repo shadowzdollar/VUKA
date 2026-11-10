@@ -1,3 +1,5 @@
+import { useLangCopy } from "@/lib/i18n";
+
 /**
  * Real, CC-licensed photography, kept inside the monochrome system via a grayscale filter
  * (no hue is introduced — see frontend_color_guidelines.md). Credit is shown the way a
@@ -8,6 +10,14 @@ export type PhotoCredit = {
   credit: string;
   license: string;
   sourceUrl: string;
+};
+
+const PHOTO_COPY = {
+  en: { sourceTitle: "View original photograph and license source" },
+  fr: { sourceTitle: "Voir la photographie originale et la source de la licence" },
+  sw: { sourceTitle: "Tazama picha halisi na chanzo cha leseni" },
+  pt: { sourceTitle: "Ver fotografia original e fonte da licença" },
+  rw: { sourceTitle: "Reba ifoto y'umwimerere n'isoko ry'uruhushya" },
 };
 
 export function Photo({
@@ -27,6 +37,7 @@ export function Photo({
   className?: string;
   imgClassName?: string;
 }) {
+  const copy = useLangCopy(PHOTO_COPY);
   return (
     <figure className={className}>
       <div className="overflow-hidden border border-border bg-muted/30">
@@ -46,6 +57,8 @@ export function Photo({
           href={credit.sourceUrl}
           target="_blank"
           rel="noopener noreferrer nofollow"
+          title={copy.sourceTitle}
+          aria-label={`${credit.credit} · ${credit.license} (${copy.sourceTitle})`}
           className="shrink-0 underline-offset-2 hover:underline"
         >
           {credit.credit} · {credit.license}

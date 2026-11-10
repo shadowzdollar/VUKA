@@ -406,6 +406,8 @@ func (s *Server) handler(corsOrigins []string) http.Handler {
 	s.mux.HandleFunc("GET /api/activity/export", s.handleExportActivity)
 	s.mux.HandleFunc("GET /api/escrows", s.handleListEscrows)
 	s.mux.HandleFunc("GET /api/escrows/{id}/events", s.handleListEscrowEvents)
+	s.mux.HandleFunc("GET /api/escrows/keeper/expired", s.handleListExpiredEscrows)
+	s.mux.HandleFunc("GET /api/ledger/solvency", s.handleLedgerSolvency)
 	s.mux.HandleFunc("GET /api/reconciliation/status", s.handleReconciliationStatus)
 	s.mux.HandleFunc("GET /api/reconciliation/status/export", s.handleExportReconciliationStatus)
 	s.mux.HandleFunc("POST /api/reconciliation/alerts/ack", s.handleAcknowledgeReconciliationAlert)
@@ -557,6 +559,8 @@ func (s *Server) handler(corsOrigins []string) http.Handler {
 		protected.HandleFunc("GET /healthz", s.handleHealthz)
 		protected.Handle("/api/escrows", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleListEscrows)))
 		protected.Handle("/api/escrows/{id}/events", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleListEscrowEvents)))
+		protected.Handle("GET /api/escrows/keeper/expired", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleListExpiredEscrows)))
+		protected.Handle("GET /api/ledger/solvency", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleLedgerSolvency)))
 		protected.Handle("/api/reconciliation/status", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleReconciliationStatus)))
 		protected.Handle("GET /api/reconciliation/status/export", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleExportReconciliationStatus)))
 		protected.Handle("POST /api/reconciliation/alerts/ack", s.auth.requireRole("operator", "arbiter")(http.HandlerFunc(s.handleAcknowledgeReconciliationAlert)))
@@ -2293,6 +2297,37 @@ func decodeJSON(r *http.Request, dst any) error {
 	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<20))
 	dec.DisallowUnknownFields()
 	return dec.Decode(dst)
+}
+
+func (s *Server) handleListExpiredEscrows(w http.ResponseWriter, r *http.Request) {
+	if s.reconciliation == nil {
+		writeError(w, http.StatusServiceUnavailable, "reconciliation_disabled", "reconciliation is not enabled")
+		return
+	}
+	keeper := reconciliation.NewEscrowKeeper(s.ledger.DB(), s.log, time.Minute)
+	actions, err := keeper.ProcessExpiredEscrows(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "keeper_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"evaluated_at": time.Now().UTC(),
+		"actions":      actions,
+		"count":        len(actions),
+	})
+}
+
+func (s *Server) handleLedgerSolvency(w http.ResponseWriter, r *http.Request) {
+	if s.ledger == nil {
+		writeError(w, http.StatusServiceUnavailable, "ledger_unavailable", "ledger is not initialized")
+		return
+	}
+	attestation, err := s.ledger.VerifySolvency(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "solvency_check_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, attestation)
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

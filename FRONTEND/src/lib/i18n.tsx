@@ -179,6 +179,7 @@ const fr: Dict = {
     "VUKA transforme les réseaux de monnaie mobile en couche de règlement commerciale pour les PME africaines : chaque paiement est lié à une facture, adossé à un séquestre, tarifé par une cotation ferme et inscrit dans un registre à double entrée.",
   "landing.cta.signin": "Se connecter",
   "landing.cta.register": "Ouvrir un compte commerçant",
+  "landing.cta.hero": "Commencer à commercer",
   "landing.how.title": "Comment fonctionne un paiement",
   "landing.markets.title": "Marchés et corridors",
   "landing.security.title": "Conçu pour les régulateurs et les auditeurs",
@@ -251,8 +252,11 @@ const sw: Dict = {
   "common.next": "Inayofuata",
   "landing.eyebrow": "Malipo ya kuvuka mipaka barani",
   "landing.title": "Fanya biashara kuvuka mipaka kwa imani inayotekelezwa, si inayoonyeshwa tu.",
+  "landing.lead":
+    "VUKA inageuza mifumo ya pesa kwa simu kuwa safu ya malipo ya kibiashara kwa wafanyabiashara wa Afrika: kila malipo yanafungamanishwa na ankara, yanalindwa na escrow, kwa kiwango maalum cha ubadilishaji na kurekodiwa kwenye leja.",
   "landing.cta.signin": "Ingia",
   "landing.cta.register": "Fungua akaunti ya mfanyabiashara",
+  "landing.cta.hero": "Anza kufanya biashara",
   "landing.how.title": "Malipo yanavyofanya kazi",
   "landing.markets.title": "Masoko na njia za malipo",
   "landing.security.title": "Imejengwa kwa wadhibiti na wakaguzi",
@@ -326,8 +330,11 @@ const pt: Dict = {
   "common.next": "Seguinte",
   "landing.eyebrow": "Pagamentos transfronteiriços continentais",
   "landing.title": "Comercie além-fronteiras com uma confiança aplicada, não apenas exibida.",
+  "landing.lead":
+    "A VUKA transforma as redes de dinheiro móvel numa camada de liquidação comercial para as PME africanas: cada pagamento está associado a uma fatura, protegido por caução (escrow), cotado com taxa firme e registado num razão de partidas dobradas.",
   "landing.cta.signin": "Iniciar sessão",
   "landing.cta.register": "Abrir conta de comerciante",
+  "landing.cta.hero": "Começar a negociar",
   "landing.how.title": "Como funciona um pagamento",
   "landing.markets.title": "Mercados e corredores",
   "landing.security.title": "Concebido para reguladores e auditores",
@@ -343,7 +350,21 @@ const rw: Dict = {
   "nav.trust": "Icyizere n'inguzanyo",
   "nav.corridors": "Inzira z'ubwishyu",
   "nav.verification": "Igenzura",
+  "nav.insights": "Isesengura",
+  "nav.intelligence": "Amakuru y'urusobe",
   "nav.support": "Ubufasha",
+  "nav.cockpit": "Ibiro by'igenzura",
+  "nav.escrow": "Igitabo cya Escrow",
+  "nav.disputes": "Urukiko rw'impaka",
+  "nav.compliance": "Iyubahirizamikorere na KYC",
+  "nav.providers": "Imiyoboro n'Abatanga serivisi",
+  "nav.settlements": "Isuzuma n'Igerageza",
+  "nav.activity": "Urutonde rw'ibyakozwe",
+  "nav.group.money": "Amafaranga",
+  "nav.group.trust": "Icyizere",
+  "nav.group.network": "Urusobe",
+  "nav.group.operations": "Ibikorwa",
+  "nav.group.governance": "Imiyoborere",
   "shell.menu": "Ibikubiyemo",
   "shell.account": "Konti",
   "shell.signOut": "Sohoka",
@@ -352,7 +373,15 @@ const rw: Dict = {
   "shell.theme.dark": "Yijimye",
   "shell.theme.system": "Iya sisitemu",
   "shell.language": "Ururimi",
+  "shell.search": "Shakisha cyangwa ujye kuri…",
+  "shell.notifications": "Amamenyesha",
+  "shell.engine.online": "Sisitemu irakora",
+  "shell.engine.down": "Sisitemu ntiboneka",
+  "shell.session.title": "Uracyahari?",
+  "shell.session.body": "Ku bw'umutekano wawe urasohoka vuba kubera kudakoresha sisitemu.",
+  "shell.session.stay": "Komeza ube winjiye",
   "auth.welcome": "Ikaze nanone",
+  "auth.welcome.sub": "Injira wohereze amafaranga, ukurikirane inyemezabuguzi kandi wishyurane hagati y'ibihugu.",
   "auth.trader": "Umucuruzi",
   "auth.operator": "Umukozi / Umucamanza",
   "auth.phone": "Nimero ya telefone",
@@ -362,13 +391,30 @@ const rw: Dict = {
   "auth.signingIn": "Kwinjira…",
   "auth.newHere": "Uri mushya kuri VUKA?",
   "auth.createAccount": "Fungura konti y'umucuruzi",
+  "auth.register.title": "Fungura konti yawe y'umucuruzi",
+  "auth.register.sub":
+    "Uhabwa ishakoshi y'ubucuruzi n'ishakoshi bwite itandukanye, kugira ngo inyungu z'ubucuruzi zitavanga n'amafaranga yo mu rugo.",
   "auth.haveAccount": "Usanzwe wanditse?",
+  "auth.tooMany": "Ugerageje inshuro nyinshi bikanga. Tegereza iminota mike wongere ugerageze.",
   "common.cancel": "Hagarika",
   "common.confirm": "Emeza",
   "common.retry": "Ongera ugerageze",
   "common.loading": "Birimo gutangira",
+  "common.export": "avanamo CSV",
+  "common.search": "Shakisha",
+  "common.rows": "imirongo",
+  "common.previous": "Ibanziriza",
+  "common.next": "Ikurikira",
+  "landing.eyebrow": "Ubwishyu mpuzamahanga ku mugabane",
+  "landing.title": "Curuza ku mipaka ufite icyizere cyubahirizwa, atari icyerekanwa gusa.",
+  "landing.lead":
+    "VUKA ihindura imiyoboro ya mobile money urubuga rwizewe rw'ubucuruzi ku bigo bito n'ibiciriritse muri Afurika: buri bwishyu buhuzwa n'inyemezabuguzi, bukarinzwe na escrow, ku giciro kidahinduka kandi bukandikwa mu gitabo cy'ibaruramari.",
   "landing.cta.signin": "Injira",
   "landing.cta.register": "Fungura konti y'umucuruzi",
+  "landing.cta.hero": "Tangira ubucuruzi",
+  "landing.how.title": "Uko ubwishyu bukora",
+  "landing.markets.title": "Amasoko n'imiyoboro",
+  "landing.security.title": "Yubakiwe abagenzuzi n'abakora igenzura",
 };
 
 const DICTS: Record<Lang, Dict> = { en, fr, sw, pt, rw };
@@ -440,4 +486,17 @@ export function useI18n(): I18nValue {
 
 export function useT() {
   return useI18n().t;
+}
+
+/**
+ * Helper to pick a localized value from an inline `{ en, fr, sw, pt, rw }` map.
+ * Falls back to `en` if a language key is missing.
+ */
+export function pickLang<M extends Record<string, any>>(lang: Lang, map: M): M["en"] {
+  return (map as any)[lang] ?? (map as any).en;
+}
+
+export function useLangCopy<M extends Record<string, any>>(map: M): M["en"] {
+  const { lang } = useI18n();
+  return (map as any)[lang] ?? (map as any).en;
 }

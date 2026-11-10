@@ -11,13 +11,10 @@ import {
   Languages,
   LogOut,
   Menu,
-  Monitor,
-  Moon,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
   Sparkles,
-  Sun,
   type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -56,13 +53,150 @@ import { NavList } from "@/components/vuka/nav-list";
 import { operatorNav, traderNav } from "@/components/vuka/nav";
 import { api } from "@/lib/api/client";
 import { useIdleTimeout } from "@/lib/idle-timeout";
-import { LANGUAGES, useI18n, useT, type Lang } from "@/lib/i18n";
+import { LANGUAGES, useI18n, useLangCopy, useT, type Lang } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
-import { useTheme, type ThemePreference } from "@/lib/theme";
 import { useNotifications } from "@/lib/trader-data";
 import { cn } from "@/lib/utils";
 import { VukaPreloadCanvas } from "@/components/vuka/preloader";
 import { VukaLogo, VukaMark } from "./brand";
+
+const SHELL_COPY = {
+  en: {
+    cmdTitle: "VUKA Command & Jump Desk",
+    cmdSubtitle:
+      "Instant navigation across routes, corridors, ledgers, and workspace controls",
+    cmdEmpty: "No matching route or command found.",
+    toggleSidebar: "Toggle Sidebar Visibility",
+    navigate: "Navigate",
+    jump: "Jump",
+    sidebar: "Sidebar",
+    expandSidebar: "Expand sidebar",
+    collapseSidebar: "Collapse sidebar to icon rail",
+    hideSidebarShortcut: "Hide sidebar (⌘B)",
+    hideSidebar: "Hide sidebar",
+    showSidebarShortcut: "Show sidebar (⌘B)",
+    showSidebar: "Show sidebar",
+    settlementCoreOnline: "Settlement Core Online · 10 Markets",
+    settlementCore: "Settlement Core",
+    polygonVault: "Polygon Vault",
+    tenMarkets: "10 Markets",
+    treasuryMesh: "PAN-AFRICAN TREASURY MESH",
+    wrongAccountTitle: "Wrong account type",
+    wrongAccountBody: (role: string, status: string) =>
+      `This page is only available to ${role} accounts. You are signed in as ${status}. Sign out and sign in with the right credentials to continue.`,
+    footerNotice:
+      "VUKA settlement network · sandbox providers · settlement execution disabled",
+    primaryNav: "Primary navigation",
+  },
+  fr: {
+    cmdTitle: "Poste de commande et navigation VUKA",
+    cmdSubtitle:
+      "Navigation instantanée vers les routes, corridors, registres et contrôles de l'espace",
+    cmdEmpty: "Aucune route ou commande correspondante trouvée.",
+    toggleSidebar: "Afficher / masquer la barre latérale",
+    navigate: "Naviguer",
+    jump: "Aller",
+    sidebar: "Barre latérale",
+    expandSidebar: "Développer la barre latérale",
+    collapseSidebar: "Réduire la barre latérale en icônes",
+    hideSidebarShortcut: "Masquer la barre latérale (⌘B)",
+    hideSidebar: "Masquer la barre latérale",
+    showSidebarShortcut: "Afficher la barre latérale (⌘B)",
+    showSidebar: "Afficher la barre latérale",
+    settlementCoreOnline: "Cœur de règlement en ligne · 10 marchés",
+    settlementCore: "Cœur de règlement",
+    polygonVault: "Coffre Polygon",
+    tenMarkets: "10 marchés",
+    treasuryMesh: "RÉSEAU DE TRÉSORERIE PANAFRICAIN",
+    wrongAccountTitle: "Mauvais type de compte",
+    wrongAccountBody: (role: string, status: string) =>
+      `Cette page est réservée aux comptes ${role}. Vous êtes connecté en tant que ${status}. Déconnectez-vous et reconnectez-vous avec les bons identifiants pour continuer.`,
+    footerNotice:
+      "Réseau de règlement VUKA · prestataires bac à sable · exécution des règlements désactivée",
+    primaryNav: "Navigation principale",
+  },
+  sw: {
+    cmdTitle: "Dawati la Amri na Urambazaji la VUKA",
+    cmdSubtitle:
+      "Urambazaji wa papo hapo kwenye njia, korido, leja na vidhibiti vya mfumo",
+    cmdEmpty: "Hakuna njia au amri inayolingana iliyopatikana.",
+    toggleSidebar: "Badilisha Mwonekano wa Upau wa Pembeni",
+    navigate: " Abiri",
+    jump: "Ruka",
+    sidebar: "Upau wa Pembeni",
+    expandSidebar: "Panua upau wa pembeni",
+    collapseSidebar: "Kunja upau wa pembeni uwe aikoni",
+    hideSidebarShortcut: "Ficha upau wa pembeni (⌘B)",
+    hideSidebar: "Ficha upau wa pembeni",
+    showSidebarShortcut: "Onyesha upau wa pembeni (⌘B)",
+    showSidebar: "Onyesha upau wa pembeni",
+    settlementCoreOnline: "Msingi wa Malipo Uko Hewani · Masoko 10",
+    settlementCore: "Msingi wa Malipo",
+    polygonVault: "Hifadhi ya Polygon",
+    tenMarkets: "Masoko 10",
+    treasuryMesh: "MTANDAO WA HAZINA WA AFRIKA NZIMA",
+    wrongAccountTitle: "Aina ya akaunti isiyo sahihi",
+    wrongAccountBody: (role: string, status: string) =>
+      `Ukurasa huu unapatikana kwa akaunti za ${role} pekee. Umeingia kama ${status}. Toka na uingie tena kwa vitambulisho sahihi ili kuendelea.`,
+    footerNotice:
+      "Mtandao wa malipo wa VUKA · watoa huduma wa majaribio (sandbox) · utekelezaji wa malipo umezimwa",
+    primaryNav: "Urambazaji mkuu",
+  },
+  pt: {
+    cmdTitle: "Centro de Comando e Navegação VUKA",
+    cmdSubtitle:
+      "Navegação instantânea entre rotas, corredores, razões e controlos do espaço de trabalho",
+    cmdEmpty: "Nenhuma rota ou comando correspondente encontrado.",
+    toggleSidebar: "Alternar Visibilidade da Barra Lateral",
+    navigate: "Navegar",
+    jump: "Ir",
+    sidebar: "Barra lateral",
+    expandSidebar: "Expandir barra lateral",
+    collapseSidebar: "Recolher barra lateral para ícones",
+    hideSidebarShortcut: "Ocultar barra lateral (⌘B)",
+    hideSidebar: "Ocultar barra lateral",
+    showSidebarShortcut: "Mostrar barra lateral (⌘B)",
+    showSidebar: "Mostrar barra lateral",
+    settlementCoreOnline: "Núcleo de Liquidação Ativo · 10 Mercados",
+    settlementCore: "Núcleo de Liquidação",
+    polygonVault: "Cofre Polygon",
+    tenMarkets: "10 Mercados",
+    treasuryMesh: "MALHA DE TESOURARIA PAN-AFRICANA",
+    wrongAccountTitle: "Tipo de conta incorreto",
+    wrongAccountBody: (role: string, status: string) =>
+      `Esta página está disponível apenas para contas ${role}. Iniciou sessão como ${status}. Termine a sessão e entre com as credenciais corretas para continuar.`,
+    footerNotice:
+      "Rede de liquidação VUKA · operadores sandbox · execução de liquidação desativada",
+    primaryNav: "Navegação principal",
+  },
+  rw: {
+    cmdTitle: " Ibiro by'Amabwiriza n'inzira bya VUKA",
+    cmdSubtitle:
+      " kugera vuba ku nzira, imiyoboro y'ubwishyu, ibitabo n'igenzura ry'aho ukorera",
+    cmdEmpty: "Nta nzira cyangwa ibwiriza bihuye byabonetse.",
+    toggleSidebar: "Hindura Imigaragarire y'uruhande",
+    navigate: "Shakisha",
+    jump: "Simbuka",
+    sidebar: "Uruhande",
+    expandSidebar: "Agura uruhande rw'ibikubiyemo",
+    collapseSidebar: "Gabanya uruhande rusigare ari udushushondanga",
+    hideSidebarShortcut: "Hisha uruhande rw'ibikubiyemo (⌘B)",
+    hideSidebar: "Hisha uruhande rw'ibikubiyemo",
+    showSidebarShortcut: "Erekana uruhande rw'ibikubiyemo (⌘B)",
+    showSidebar: "Erekana uruhande rw'ibikubiyemo",
+    settlementCoreOnline: "Umutima w'Ubwishyu Urakora · Amasoko 10",
+    settlementCore: "Umutima w'Ubwishyu",
+    polygonVault: "Ububiko bwa Polygon",
+    tenMarkets: "Amasoko 10",
+    treasuryMesh: "URUSOBE RW'UBUTUNZI NYAFURIKA",
+    wrongAccountTitle: "Ubwoko bwa konti butari bwo",
+    wrongAccountBody: (role: string, status: string) =>
+      `Uru rupapuro rugenewe konti za ${role} gusa. Winjiye nka ${status}. Sohoka hanyuma winjire ukoresheje imyirondoro nyayo kugira ngo ukomeze.`,
+    footerNotice:
+      "Urusobe rw'ubwishyu rwa VUKA · abafatanyabikorwa b'igerageza (sandbox) · kurangiza ubwishyu birafunze",
+    primaryNav: " Inzira nyamukuru",
+  },
+} as const;
 
 export function Chip({
   children,
@@ -307,9 +441,7 @@ function TraderBell() {
 
 function AccountMenu({ identity, onSignOut }: { identity: string; onSignOut: () => void }) {
   const t = useT();
-  const { preference, setPreference } = useTheme();
   const { lang, setLang } = useI18n();
-  const ThemeIcon = preference === "dark" ? Moon : preference === "light" ? Sun : Monitor;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -318,7 +450,6 @@ function AccountMenu({ identity, onSignOut }: { identity: string; onSignOut: () 
           size="sm"
           className="h-9 gap-2 rounded-lg font-mono text-[11px]"
         >
-          <ThemeIcon className="size-3.5" aria-hidden="true" />
           <span className="hidden max-w-[180px] truncate md:inline">{identity}</span>
           <span className="md:hidden">{t("shell.account")}</span>
           <ChevronDown className="size-3.5" aria-hidden="true" />
@@ -328,18 +459,6 @@ function AccountMenu({ identity, onSignOut }: { identity: string; onSignOut: () 
         <DropdownMenuLabel className="truncate font-mono text-[11px] font-normal text-muted-foreground">
           {identity}
         </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em]">
-          <Sun className="size-3" aria-hidden="true" /> {t("shell.theme")}
-        </DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          value={preference}
-          onValueChange={(v) => setPreference(v as ThemePreference)}
-        >
-          <DropdownMenuRadioItem value="light">{t("shell.theme.light")}</DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="dark">{t("shell.theme.dark")}</DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="system">{t("shell.theme.system")}</DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em]">
           <Languages className="size-3" aria-hidden="true" /> {t("shell.language")}
@@ -374,8 +493,8 @@ function CommandMenu({
   onToggleSidebar: () => void;
 }) {
   const t = useT();
+  const copy = useLangCopy(SHELL_COPY);
   const navigate = useNavigate();
-  const { setPreference } = useTheme();
   const go = (to: string) => {
     onOpenChange(false);
     void navigate({ to });
@@ -391,11 +510,11 @@ function CommandMenu({
             </span>
             <div>
               <div className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[#c2f74d]">
-                <span>VUKA Command & Jump Desk</span>
+                <span>{copy.cmdTitle}</span>
                 <Sparkles className="size-3" aria-hidden="true" />
               </div>
               <p className="text-[11px] text-white/60">
-                Instant navigation across routes, corridors, ledgers, and workspace controls
+                {copy.cmdSubtitle}
               </p>
             </div>
           </div>
@@ -407,7 +526,7 @@ function CommandMenu({
         <CommandInput placeholder={t("shell.search")} />
 
         <CommandList>
-          <CommandEmpty>No matching route or command found.</CommandEmpty>
+          <CommandEmpty>{copy.cmdEmpty}</CommandEmpty>
           {groups.map((g) => (
             <CommandGroup key={g.labelKey} heading={t(g.labelKey)}>
               {g.items.map((item) => {
@@ -431,7 +550,7 @@ function CommandMenu({
           <CommandSeparator />
           <CommandGroup heading={t("shell.account")}>
             <CommandItem
-              value="Toggle sidebar visibility collapse hide"
+              value={`${copy.toggleSidebar} Toggle sidebar visibility collapse hide`}
               onSelect={() => {
                 onToggleSidebar();
                 onOpenChange(false);
@@ -440,36 +559,8 @@ function CommandMenu({
               <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-muted/40 group-data-[selected=true]:border-[#c2f74d]/40 group-data-[selected=true]:bg-white/10">
                 <PanelLeftClose className="size-3.5 group-data-[selected=true]:text-[#c2f74d]" aria-hidden="true" />
               </span>
-              <span>Toggle Sidebar Visibility</span>
+              <span>{copy.toggleSidebar}</span>
               <CommandShortcut>⌘B</CommandShortcut>
-            </CommandItem>
-            <CommandItem
-              value={t("shell.theme.light")}
-              onSelect={() => {
-                setPreference("light");
-                onOpenChange(false);
-              }}
-            >
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-muted/40 group-data-[selected=true]:border-[#c2f74d]/40 group-data-[selected=true]:bg-white/10">
-                <Sun className="size-3.5 group-data-[selected=true]:text-[#c2f74d]" aria-hidden="true" />
-              </span>
-              <span>
-                {t("shell.theme")}: {t("shell.theme.light")}
-              </span>
-            </CommandItem>
-            <CommandItem
-              value={t("shell.theme.dark")}
-              onSelect={() => {
-                setPreference("dark");
-                onOpenChange(false);
-              }}
-            >
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-muted/40 group-data-[selected=true]:border-[#c2f74d]/40 group-data-[selected=true]:bg-white/10">
-                <Moon className="size-3.5 group-data-[selected=true]:text-[#c2f74d]" aria-hidden="true" />
-              </span>
-              <span>
-                {t("shell.theme")}: {t("shell.theme.dark")}
-              </span>
             </CommandItem>
             <CommandItem
               value={t("shell.signOut")}
@@ -493,19 +584,19 @@ function CommandMenu({
               <kbd className="rounded border border-border bg-background px-1.5 py-0.5 text-[9px] text-foreground">
                 ↑↓
               </kbd>
-              Navigate
+              {copy.navigate}
             </span>
             <span className="inline-flex items-center gap-1">
               <kbd className="inline-flex items-center rounded border border-border bg-background px-1.5 py-0.5 text-[9px] text-foreground">
                 <CornerDownLeft className="size-2.5" />
               </kbd>
-              Jump
+              {copy.jump}
             </span>
             <span className="inline-flex items-center gap-1">
               <kbd className="rounded border border-border bg-background px-1.5 py-0.5 text-[9px] text-foreground">
                 ⌘B
               </kbd>
-              Sidebar
+              {copy.sidebar}
             </span>
           </div>
           <span className="text-[9px] uppercase tracking-[0.18em]">VUKA OS v2.4</span>
@@ -561,6 +652,7 @@ export function Shell({
   const { session, logout } = useSession();
   const navigate = useNavigate();
   const t = useT();
+  const copy = useLangCopy(SHELL_COPY);
   const [drawer, setDrawer] = useState(false);
   const [palette, setPalette] = useState(false);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(() => {
@@ -686,8 +778,8 @@ export function Shell({
                   size="icon"
                   className="size-7 rounded-lg text-muted-foreground hover:text-foreground"
                   onClick={() => updateSidebarMode(isMini ? "open" : "mini")}
-                  title={isMini ? "Expand sidebar" : "Collapse sidebar to icon rail"}
-                  aria-label={isMini ? "Expand sidebar" : "Collapse sidebar to icon rail"}
+                  title={isMini ? copy.expandSidebar : copy.collapseSidebar}
+                  aria-label={isMini ? copy.expandSidebar : copy.collapseSidebar}
                 >
                   {isMini ? (
                     <ChevronsRight className="size-3.5" aria-hidden="true" />
@@ -702,8 +794,8 @@ export function Shell({
                     size="icon"
                     className="size-7 rounded-lg text-muted-foreground hover:text-foreground"
                     onClick={() => updateSidebarMode("hidden")}
-                    title="Hide sidebar (⌘B)"
-                    aria-label="Hide sidebar"
+                    title={copy.hideSidebarShortcut}
+                    aria-label={copy.hideSidebar}
                   >
                     <PanelLeftClose className="size-3.5" aria-hidden="true" />
                   </Button>
@@ -722,7 +814,7 @@ export function Shell({
               <div className="flex flex-col items-center gap-2 border-t border-sidebar-border/70 p-2.5">
                 <span
                   className="size-2.5 rounded-full bg-[#79b200] shadow-[0_0_8px_#c2f74d]"
-                  title="Settlement Core Online · 10 Markets"
+                  title={copy.settlementCoreOnline}
                 />
                 <Button
                   type="button"
@@ -730,8 +822,8 @@ export function Shell({
                   size="icon"
                   className="size-7 rounded-lg text-muted-foreground hover:text-foreground"
                   onClick={() => updateSidebarMode("hidden")}
-                  title="Hide sidebar (⌘B)"
-                  aria-label="Hide sidebar"
+                  title={copy.hideSidebarShortcut}
+                  aria-label={copy.hideSidebar}
                 >
                   <PanelLeftClose className="size-3.5" aria-hidden="true" />
                 </Button>
@@ -746,13 +838,13 @@ export function Shell({
                   />
                   <div className="relative flex items-center justify-between">
                     <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-white/60">
-                      Settlement Core
+                      {copy.settlementCore}
                     </span>
                     <EngineChip />
                   </div>
                   <div className="relative mt-2 flex items-center justify-between border-t border-white/10 pt-2 font-mono text-[9px] text-white/80">
-                    <span>Polygon Vault</span>
-                    <span className="text-[#c2f74d]">10 Markets</span>
+                    <span>{copy.polygonVault}</span>
+                    <span className="text-[#c2f74d]">{copy.tenMarkets}</span>
                   </div>
                 </div>
               </div>
@@ -783,13 +875,13 @@ export function Shell({
               size="sm"
               onClick={toggleSidebarHidden}
               className="hidden h-9 gap-1.5 rounded-xl border-border/90 px-2.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:border-[#79b200]/50 hover:text-foreground lg:inline-flex"
-              title={isHidden ? "Show sidebar (⌘B)" : "Hide sidebar (⌘B)"}
-              aria-label={isHidden ? "Show sidebar" : "Hide sidebar"}
+              title={isHidden ? copy.showSidebarShortcut : copy.hideSidebarShortcut}
+              aria-label={isHidden ? copy.showSidebar : copy.hideSidebar}
             >
               {isHidden ? (
                 <>
                   <PanelLeftOpen className="size-3.5 text-[#79b200]" aria-hidden="true" />
-                  <span>Menu</span>
+                  <span>{t("shell.menu")}</span>
                 </>
               ) : (
                 <PanelLeftClose className="size-3.5" aria-hidden="true" />
@@ -802,7 +894,7 @@ export function Shell({
             {/* Enterprise Network Telemetry Pill (desktop) */}
             <div className="hidden items-center gap-2 rounded-full border border-border bg-muted/40 px-3 py-1 font-mono text-[10px] text-muted-foreground xl:inline-flex">
               <span className="size-1.5 rounded-full bg-[#79b200]" aria-hidden="true" />
-              <span>PAN-AFRICAN TREASURY MESH</span>
+              <span>{copy.treasuryMesh}</span>
               <span className="text-border">|</span>
               <span className="text-foreground">EAC · ECOWAS · SADC · HORN</span>
             </div>
@@ -821,7 +913,7 @@ export function Shell({
                 {t("shell.search")}
               </span>
               <span className="hidden rounded-md border border-[#79b200]/30 bg-[#c2f74d]/20 px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-foreground md:inline">
-                Jump
+                {copy.jump}
               </span>
               <kbd className="hidden rounded-md border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-foreground sm:inline">
                 ⌘K
@@ -850,11 +942,10 @@ export function Shell({
             {wrongRole ? (
               <div role="alert" className="border-2 border-foreground p-6">
                 <div className="font-mono text-[10px] uppercase tracking-[0.2em]">
-                  Wrong account type
+                  {copy.wrongAccountTitle}
                 </div>
                 <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-                  This page is only available to {role} accounts. You are signed in as{" "}
-                  {session.status}. Sign out and sign in with the right credentials to continue.
+                  {copy.wrongAccountBody(role, session.status)}
                 </p>
               </div>
             ) : (
@@ -864,7 +955,7 @@ export function Shell({
 
           <footer data-app-chrome className="border-t border-border px-4 py-5 sm:px-6">
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-              VUKA settlement network · sandbox providers · settlement execution disabled
+              {copy.footerNotice}
             </p>
           </footer>
         </div>
@@ -873,7 +964,7 @@ export function Shell({
       <Sheet open={drawer} onOpenChange={setDrawer}>
         <SheetContent side="left" className="w-64 rounded-l-2xl bg-sidebar p-0">
           <SheetTitle className="sr-only">{t("shell.menu")}</SheetTitle>
-          <SheetDescription className="sr-only">Primary navigation</SheetDescription>
+          <SheetDescription className="sr-only">{copy.primaryNav}</SheetDescription>
           <div className="px-4 py-4">
             <Link to="/" aria-label="VUKA — home">
               <VukaLogo tile size="md" />

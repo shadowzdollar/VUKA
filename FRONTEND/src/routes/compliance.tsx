@@ -31,6 +31,498 @@ import { describeError } from "@/lib/api/client";
 import { compliance } from "@/lib/api/endpoints";
 import type { Organization } from "@/lib/api/types";
 import { shortId, when } from "@/lib/format";
+import { useLangCopy, type Lang } from "@/lib/i18n";
+
+const COPY: Record<
+  Lang,
+  {
+    eyebrow: string;
+    title: string;
+    description: string;
+    submitEvidenceBtn: string;
+    newOrgBtn: string;
+    bannerBadge: string;
+    bannerTitle: string;
+    bannerDesc: string;
+    orgsMetric: string;
+    approvedSub: (n: number) => string;
+    pendingVerifMetric: string;
+    pendingVerifSub: string;
+    openReviewsMetric: string;
+    openReviewsSub: string;
+    verifChartTitle: string;
+    verifChartSubtitle: string;
+    itemsLabel: string;
+    orgChartTitle: string;
+    orgChartSubtitle: string;
+    orgsLabel: string;
+    registerTitle: string;
+    registerSubtitle: string;
+    tabOrgs: string;
+    tabVerifications: string;
+    tabReviews: string;
+    emptyOrgs: string;
+    colOrg: string;
+    colCountry: string;
+    colType: string;
+    colReg: string;
+    colStatus: string;
+    emptyVerifs: string;
+    colSubject: string;
+    colReference: string;
+    colSubmitted: string;
+    traderPrefix: (id: string) => string;
+    decideBtn: string;
+    emptyReviews: string;
+    colReason: string;
+    colOpened: string;
+    chooseOptionAria: string;
+    orgCreatedToast: (name: string) => string;
+    newOrgTitle: string;
+    newOrgDesc: string;
+    legalNameLabel: string;
+    tradingNameLabel: string;
+    countryIsoLabel: string;
+    typeLabel: string;
+    regNumLabel: string;
+    createBtn: string;
+    flagRaisedToast: string;
+    openComplianceReviewBtn: string;
+    riskFlagsHeading: string;
+    noRiskFlags: string;
+    resolveBtn: string;
+    flagCodePlaceholder: string;
+    describeConcernPlaceholder: string;
+    raiseFlagBtn: string;
+    decisionRecordedToast: string;
+    decisionRefusedToast: string;
+    recordDecisionTitle: string;
+    recordDecisionDesc: string;
+    outcomeLabel: string;
+    rationaleLabel: string;
+    recordBtn: string;
+    evidenceRecordedToast: string;
+    submitEvidenceTitle: string;
+    submitEvidenceDesc: string;
+    createOrgFirst: string;
+    certRefPlaceholder: string;
+    labelOptional: string;
+    submitBtn: string;
+    reviewOpenedToast: string;
+    openReviewDesc: string;
+    openReviewBtn: string;
+  }
+> = {
+  en: {
+    eyebrow: "Regulatory gateway",
+    title: "Compliance & KYC",
+    description:
+      "Verification is proportionate to exposure. Every decision records who made it, from which state to which, and why — the log is append-only.",
+    submitEvidenceBtn: "Submit evidence",
+    newOrgBtn: "New organization",
+    bannerBadge: "Proportionate KYB & Cryptographic Evidence Desk",
+    bannerTitle: "Explainable Compliance & Risk Flag Registry",
+    bannerDesc:
+      "Review SHA-256 document fingerprints, national business registry references, and entity risk flags. Every verification decision requires a permanent written rationale.",
+    orgsMetric: "Organizations",
+    approvedSub: (n) => `${n} approved`,
+    pendingVerifMetric: "Pending verifications",
+    pendingVerifSub: "Evidence awaiting a decision",
+    openReviewsMetric: "Open reviews",
+    openReviewsSub: "Compliance cases in flight",
+    verifChartTitle: "Verification evidence · by status",
+    verifChartSubtitle: "Breakdown of submitted cryptographic fingerprints and registry references",
+    itemsLabel: "items",
+    orgChartTitle: "Organizations · by verification status",
+    orgChartSubtitle: "KYB standing across registered legal entities",
+    orgsLabel: "organizations",
+    registerTitle: "Register",
+    registerSubtitle:
+      "Inspect organizations, adjudicate verification evidence, or manage compliance reviews",
+    tabOrgs: "organizations",
+    tabVerifications: "verifications",
+    tabReviews: "reviews",
+    emptyOrgs: "No organizations yet. Create one to start a review.",
+    colOrg: "Organization",
+    colCountry: "Country",
+    colType: "Type",
+    colReg: "Registration",
+    colStatus: "Status",
+    emptyVerifs: "No verification evidence submitted.",
+    colSubject: "Subject",
+    colReference: "Reference",
+    colSubmitted: "Submitted",
+    traderPrefix: (id) => `trader ${id}`,
+    decideBtn: "Decide",
+    emptyReviews: "No compliance reviews opened.",
+    colReason: "Reason",
+    colOpened: "Opened",
+    chooseOptionAria: "Choose an option",
+    orgCreatedToast: (name) => `${name} created`,
+    newOrgTitle: "New organization",
+    newOrgDesc: "Legal entity subject to verification.",
+    legalNameLabel: "Legal name",
+    tradingNameLabel: "Trading name (optional)",
+    countryIsoLabel: "Country (ISO-2)",
+    typeLabel: "Type",
+    regNumLabel: "Registration number (optional)",
+    createBtn: "Create",
+    flagRaisedToast: "Risk flag raised",
+    openComplianceReviewBtn: "Open compliance review",
+    riskFlagsHeading: "Risk flags",
+    noRiskFlags: "No risk flags.",
+    resolveBtn: "Resolve",
+    flagCodePlaceholder: "Flag code e.g. VOLUME_SPIKE",
+    describeConcernPlaceholder: "Describe the concern…",
+    raiseFlagBtn: "Raise flag",
+    decisionRecordedToast: "Decision recorded",
+    decisionRefusedToast: "Decision refused",
+    recordDecisionTitle: "Record decision",
+    recordDecisionDesc: "The rationale is stored with the state change and cannot be edited.",
+    outcomeLabel: "Outcome",
+    rationaleLabel: "Rationale",
+    recordBtn: "Record",
+    evidenceRecordedToast: "Evidence recorded",
+    submitEvidenceTitle: "Submit evidence",
+    submitEvidenceDesc:
+      "Record a reference to evidence held elsewhere. Document contents are never uploaded here.",
+    createOrgFirst: "Create an organization first.",
+    certRefPlaceholder: "Certificate / document reference",
+    labelOptional: "Label (optional)",
+    submitBtn: "Submit",
+    reviewOpenedToast: "Review opened",
+    openReviewDesc: "Describe why this organization needs review.",
+    openReviewBtn: "Open review",
+  },
+  fr: {
+    eyebrow: "Passerelle réglementaire",
+    title: "Conformité et KYC",
+    description:
+      "La vérification est proportionnée à l'exposition. Chaque décision consigne qui l'a prise, de quel état vers quel état, et pourquoi — le journal est en ajout seul.",
+    submitEvidenceBtn: "Soumettre une preuve",
+    newOrgBtn: "Nouvelle organisation",
+    bannerBadge: "Bureau KYB proportionné et preuves cryptographiques",
+    bannerTitle: "Registre explicable de conformité et d'alertes de risque",
+    bannerDesc:
+      "Examinez les empreintes SHA-256 de documents, les références des registres nationaux du commerce et les indicateurs de risque. Chaque décision de vérification exige un motif écrit permanent.",
+    orgsMetric: "Organisations",
+    approvedSub: (n) => `${n} approuvées`,
+    pendingVerifMetric: "Vérifications en attente",
+    pendingVerifSub: "Preuves en attente de décision",
+    openReviewsMetric: "Examens ouverts",
+    openReviewsSub: "Dossiers de conformité en cours",
+    verifChartTitle: "Preuves de vérification · par statut",
+    verifChartSubtitle: "Répartition des empreintes cryptographiques et références soumises",
+    itemsLabel: "éléments",
+    orgChartTitle: "Organisations · par statut de vérification",
+    orgChartSubtitle: "Statut KYB des entités juridiques enregistrées",
+    orgsLabel: "organisations",
+    registerTitle: "Registre",
+    registerSubtitle:
+      "Inspectez les organisations, statuez sur les preuves de vérification ou gérez les examens de conformité",
+    tabOrgs: "organisations",
+    tabVerifications: "vérifications",
+    tabReviews: "examens",
+    emptyOrgs: "Aucune organisation pour l'instant. Créez-en une pour démarrer un examen.",
+    colOrg: "Organisation",
+    colCountry: "Pays",
+    colType: "Type",
+    colReg: "Immatriculation",
+    colStatus: "Statut",
+    emptyVerifs: "Aucune preuve de vérification soumise.",
+    colSubject: "Sujet",
+    colReference: "Référence",
+    colSubmitted: "Soumis le",
+    traderPrefix: (id) => `commerçant ${id}`,
+    decideBtn: "Statuer",
+    emptyReviews: "Aucun examen de conformité ouvert.",
+    colReason: "Motif",
+    colOpened: "Ouvert le",
+    chooseOptionAria: "Choisir une option",
+    orgCreatedToast: (name) => `${name} créée`,
+    newOrgTitle: "Nouvelle organisation",
+    newOrgDesc: "Entité juridique soumise à vérification.",
+    legalNameLabel: "Raison sociale",
+    tradingNameLabel: "Nom commercial (facultatif)",
+    countryIsoLabel: "Pays (ISO-2)",
+    typeLabel: "Type",
+    regNumLabel: "Numéro d'immatriculation (facultatif)",
+    createBtn: "Créer",
+    flagRaisedToast: "Alerte de risque levée",
+    openComplianceReviewBtn: "Ouvrir un examen de conformité",
+    riskFlagsHeading: "Indicateurs de risque",
+    noRiskFlags: "Aucun indicateur de risque.",
+    resolveBtn: "Résoudre",
+    flagCodePlaceholder: "Code d'alerte ex. VOLUME_SPIKE",
+    describeConcernPlaceholder: "Décrivez le problème…",
+    raiseFlagBtn: "Lever l'alerte",
+    decisionRecordedToast: "Décision enregistrée",
+    decisionRefusedToast: "Décision refusée",
+    recordDecisionTitle: "Enregistrer la décision",
+    recordDecisionDesc:
+      "Le motif est stocké avec le changement d'état et ne peut pas être modifié.",
+    outcomeLabel: "Résultat",
+    rationaleLabel: "Motif",
+    recordBtn: "Enregistrer",
+    evidenceRecordedToast: "Preuve enregistrée",
+    submitEvidenceTitle: "Soumettre une preuve",
+    submitEvidenceDesc:
+      "Enregistrez une référence vers une preuve conservée ailleurs. Le contenu des documents n'est jamais téléversé ici.",
+    createOrgFirst: "Créez d'abord une organisation.",
+    certRefPlaceholder: "Référence du certificat / document",
+    labelOptional: "Libellé (facultatif)",
+    submitBtn: "Soumettre",
+    reviewOpenedToast: "Examen ouvert",
+    openReviewDesc: "Décrivez pourquoi cette organisation nécessite un examen.",
+    openReviewBtn: "Ouvrir l'examen",
+  },
+  sw: {
+    eyebrow: "Lango la udhibiti",
+    title: "Utii na KYC",
+    description:
+      "Uthibitisho unalingana na kiwango cha hatari. Kila uamuzi unarekodi nani aliufanya, kutoka hali gani hadi ipi, na kwa nini — kumbukumbu haifutiki.",
+    submitEvidenceBtn: "Wasilisha ushahidi",
+    newOrgBtn: "Shirika jipya",
+    bannerBadge: "Dawati la KYB Inayowiana na Ushahidi wa Kriptografia",
+    bannerTitle: "Rejista Inayoelezeka ya Utii na Viashiria vya Hatari",
+    bannerDesc:
+      "Kagua alama za SHA-256 za hati, marejeleo ya sajili za kitaifa za biashara, na viashiria vya hatari vya mashirika. Kila uamuzi wa uthibitisho unahitaji sababu ya kudumu ya maandishi.",
+    orgsMetric: "Mashirika",
+    approvedSub: (n) => `${n} yameidhinishwa`,
+    pendingVerifMetric: "Uthibitisho unaosubiri",
+    pendingVerifSub: "Ushahidi unaosubiri uamuzi",
+    openReviewsMetric: "Mapitio yaliyo wazi",
+    openReviewsSub: "Kesi za utii zinazoendelea",
+    verifChartTitle: "Ushahidi wa uthibitisho · kwa hali",
+    verifChartSubtitle: "Mgawanyo wa alama za kriptografia na marejeleo ya sajili yaliyowasilishwa",
+    itemsLabel: "vipengele",
+    orgChartTitle: "Mashirika · kwa hali ya uthibitisho",
+    orgChartSubtitle: "Hali ya KYB katika mashirika ya kisheria yaliyosajiliwa",
+    orgsLabel: "mashirika",
+    registerTitle: "Rejista",
+    registerSubtitle:
+      "Kagua mashirika, amua kuhusu ushahidi wa uthibitisho, au simamia mapitio ya utii",
+    tabOrgs: "mashirika",
+    tabVerifications: "uthibitisho",
+    tabReviews: "mapitio",
+    emptyOrgs: "Bado hakuna mashirika. Unda moja ili kuanza mapitio.",
+    colOrg: "Shirika",
+    colCountry: "Nchi",
+    colType: "Aina",
+    colReg: "Usajili",
+    colStatus: "Hali",
+    emptyVerifs: "Hakuna ushahidi wa uthibitisho uliowasilishwa.",
+    colSubject: "Mhusika",
+    colReference: "Kumbukumbu",
+    colSubmitted: " Iliwasilishwa",
+    traderPrefix: (id) => `mfanyabiashara ${id}`,
+    decideBtn: "Amua",
+    emptyReviews: "Hakuna mapitio ya utii yaliyofunguliwa.",
+    colReason: "Sababu",
+    colOpened: "Ilifunguliwa",
+    chooseOptionAria: "Chagua chaguo",
+    orgCreatedToast: (name) => `${name} imeundwa`,
+    newOrgTitle: "Shirika jipya",
+    newOrgDesc: "Chombo cha kisheria kinachopaswa kuthibitishwa.",
+    legalNameLabel: "Jina la kisheria",
+    tradingNameLabel: "Jina la biashara (si lazima)",
+    countryIsoLabel: "Nchi (ISO-2)",
+    typeLabel: "Aina",
+    regNumLabel: "Namba ya usajili (si lazima)",
+    createBtn: "Unda",
+    flagRaisedToast: "Kiashiria cha hatari kimewekwa",
+    openComplianceReviewBtn: "Fungua mapitio ya utii",
+    riskFlagsHeading: "Viashiria vya hatari",
+    noRiskFlags: "Hakuna viashiria vya hatari.",
+    resolveBtn: "Tatua",
+    flagCodePlaceholder: "Msimbo wa kiashiria mf. VOLUME_SPIKE",
+    describeConcernPlaceholder: "Eleza wasiwasi…",
+    raiseFlagBtn: "Weka kiashiria",
+    decisionRecordedToast: "Uamuzi umerekodiwa",
+    decisionRefusedToast: "Uamuzi umekataliwa",
+    recordDecisionTitle: "Rekodi uamuzi",
+    recordDecisionDesc:
+      "Sababu inahifadhiwa pamoja na mabadiliko ya hali na haiwezi kuhaririwa.",
+    outcomeLabel: "Matokeo",
+    rationaleLabel: "Sababu",
+    recordBtn: "Rekodi",
+    evidenceRecordedToast: "Ushahidi umerekodiwa",
+    submitEvidenceTitle: "Wasilisha ushahidi",
+    submitEvidenceDesc:
+      "Rekodi kumbukumbu ya ushahidi unaohifadhiwa kwingineko. Maudhui ya hati hayapakiwi hapa kamwe.",
+    createOrgFirst: "Unda shirika kwanza.",
+    certRefPlaceholder: "Kumbukumbu ya cheti / hati",
+    labelOptional: "Lebo (si lazima)",
+    submitBtn: "Wasilisha",
+    reviewOpenedToast: "Mapitio yamefunguliwa",
+    openReviewDesc: "Eleza kwa nini shirika hili linahitaji mapitio.",
+    openReviewBtn: "Fungua mapitio",
+  },
+  pt: {
+    eyebrow: "Portal regulatório",
+    title: "Conformidade e KYC",
+    description:
+      "A verificação é proporcional à exposição. Cada decisão regista quem a tomou, de que estado para qual, e porquê — o registo é apenas de adição.",
+    submitEvidenceBtn: "Submeter comprovativo",
+    newOrgBtn: "Nova organização",
+    bannerBadge: "Mesa de KYB Proporcional e Provas Criptográficas",
+    bannerTitle: "Registo Explicável de Conformidade e Alertas de Risco",
+    bannerDesc:
+      "Reveja impressões digitais SHA-256 de documentos, referências de registos comerciais nacionais e alertas de risco de entidades. Cada decisão de verificação requer fundamentação escrita permanente.",
+    orgsMetric: "Organizações",
+    approvedSub: (n) => `${n} aprovadas`,
+    pendingVerifMetric: "Verificações pendentes",
+    pendingVerifSub: "Comprovativos a aguardar decisão",
+    openReviewsMetric: "Revisões abertas",
+    openReviewsSub: "Processos de conformidade em curso",
+    verifChartTitle: "Comprovativos de verificação · por estado",
+    verifChartSubtitle: "Distribuição de impressões criptográficas e referências submetidas",
+    itemsLabel: "itens",
+    orgChartTitle: "Organizações · por estado de verificação",
+    orgChartSubtitle: "Situação KYB entre entidades jurídicas registadas",
+    orgsLabel: "organizações",
+    registerTitle: "Registo",
+    registerSubtitle:
+      "Inspecione organizações, decida sobre comprovativos de verificação ou gira revisões de conformidade",
+    tabOrgs: "organizações",
+    tabVerifications: "verificações",
+    tabReviews: "revisões",
+    emptyOrgs: "Ainda sem organizações. Crie uma para iniciar uma revisão.",
+    colOrg: "Organização",
+    colCountry: "País",
+    colType: "Tipo",
+    colReg: "Registo",
+    colStatus: "Estado",
+    emptyVerifs: "Nenhum comprovativo de verificação submetido.",
+    colSubject: "Sujeito",
+    colReference: "Referência",
+    colSubmitted: "Submetido",
+    traderPrefix: (id) => `comerciante ${id}`,
+    decideBtn: "Decidir",
+    emptyReviews: "Nenhuma revisão de conformidade aberta.",
+    colReason: "Motivo",
+    colOpened: "Aberta em",
+    chooseOptionAria: "Escolher uma opção",
+    orgCreatedToast: (name) => `${name} criada`,
+    newOrgTitle: "Nova organização",
+    newOrgDesc: "Entidade jurídica sujeita a verificação.",
+    legalNameLabel: "Denominação social",
+    tradingNameLabel: "Nome comercial (opcional)",
+    countryIsoLabel: "País (ISO-2)",
+    typeLabel: "Tipo",
+    regNumLabel: "Número de registo (opcional)",
+    createBtn: "Criar",
+    flagRaisedToast: "Alerta de risco emitido",
+    openComplianceReviewBtn: "Abrir revisão de conformidade",
+    riskFlagsHeading: "Alertas de risco",
+    noRiskFlags: "Sem alertas de risco.",
+    resolveBtn: "Resolver",
+    flagCodePlaceholder: "Código do alerta ex. VOLUME_SPIKE",
+    describeConcernPlaceholder: "Descreva a preocupação…",
+    raiseFlagBtn: "Emitir alerta",
+    decisionRecordedToast: "Decisão registada",
+    decisionRefusedToast: "Decisão recusada",
+    recordDecisionTitle: "Registar decisão",
+    recordDecisionDesc:
+      "A fundamentação é guardada com a mudança de estado e não pode ser editada.",
+    outcomeLabel: "Resultado",
+    rationaleLabel: "Fundamentação",
+    recordBtn: "Registar",
+    evidenceRecordedToast: "Comprovativo registado",
+    submitEvidenceTitle: "Submeter comprovativo",
+    submitEvidenceDesc:
+      "Registe uma referência a um comprovativo guardado noutro local. O conteúdo dos documentos nunca é carregado aqui.",
+    createOrgFirst: "Crie primeiro uma organização.",
+    certRefPlaceholder: "Referência do certificado / documento",
+    labelOptional: "Etiqueta (opcional)",
+    submitBtn: "Submeter",
+    reviewOpenedToast: "Revisão aberta",
+    openReviewDesc: "Descreva porque é que esta organização precisa de revisão.",
+    openReviewBtn: "Abrir revisão",
+  },
+  rw: {
+    eyebrow: "Irembo ry'amategeko",
+    title: "Kubahiriza Amategeko & KYC",
+    description:
+      "Igenzura rikorwa hakurikijwe ingano y'ibikorwa. Buri mwanzuro wandika uwawufashe, imiterere ivuyeho n'igiyeho, n'impamvu — igitabo ntigisibwa.",
+    submitEvidenceBtn: "Tanga ibimenyetso",
+    newOrgBtn: "Ikigo gishya",
+    bannerBadge: "Biro ya KYB n'Ibimenyetso bya Cryptographie",
+    bannerTitle: "Igitabo cy'Iyubahirizamategeko n'Ibimenyetso by'Ingaruka",
+    bannerDesc:
+      "Suzuma ibimenyetso bya SHA-256 by'inyandiko, nimero z'iyandikwa ry'ubucuruzi, n'ibimenyetso by'ingaruka ku bigo. Buri mwanzuro w'igenzura usaba impamvu yanditse ihame.",
+    orgsMetric: "Ibigo",
+    approvedSub: (n) => `${n} byemejwe`,
+    pendingVerifMetric: "Amagenzura ategereje",
+    pendingVerifSub: "Ibimenyetso bitegereje umwanzuro",
+    openReviewsMetric: "Amasuzuma afunguye",
+    openReviewsSub: "Imanza z'iyubahirizamategeko zirimo gukorwa",
+    verifChartTitle: "Ibimenyetso by'igenzura · ukurikije imiterere",
+    verifChartSubtitle: "Ikigero cy'ibimenyetso na nimero z'iyandikwa byatanzwe",
+    itemsLabel: "ibintu",
+    orgChartTitle: "Ibigo · ukurikije uko byagenzuwe",
+    orgChartSubtitle: "Imiterere ya KYB mu bigo byemewe n'amategeko",
+    orgsLabel: "ibigo",
+    registerTitle: "Igitabo",
+    registerSubtitle:
+      "Suzuma ibigo, fata imyanzuro ku bimenyetso by'igenzura, cyangwa ucunge amasuzuma y'iyubahirizamategeko",
+    tabOrgs: "ibigo",
+    tabVerifications: "amagenzura",
+    tabReviews: "amasuzuma",
+    emptyOrgs: "Nta bigo biraboneka. Tangiza kimwe kugira ngo utangire isuzuma.",
+    colOrg: "Ikigo",
+    colCountry: "Igihugu",
+    colType: "Ubwoko",
+    colReg: "Iyandikwa",
+    colStatus: "Imiterere",
+    emptyVerifs: "Nta bimenyetso by'igenzura byatanzwe.",
+    colSubject: "Uwagenzuwe",
+    colReference: " Inyito",
+    colSubmitted: "Byatanzwe",
+    traderPrefix: (id) => `umucuruzi ${id}`,
+    decideBtn: "Fata umwanzuro",
+    emptyReviews: "Nta masuzuma y'iyubahirizamategeko afunguye.",
+    colReason: "Impamvu",
+    colOpened: "Ryafunguwe",
+    chooseOptionAria: "Hitamo",
+    orgCreatedToast: (name) => `${name} cyaremwe`,
+    newOrgTitle: "Ikigo gishya",
+    newOrgDesc: "Ikigo cyemewe n'amategeko kigomba kugenzurwa.",
+    legalNameLabel: "Izina ryemewe n'amategeko",
+    tradingNameLabel: "Izina ry'ubucuruzi (si ngombwa)",
+    countryIsoLabel: "Igihugu (ISO-2)",
+    typeLabel: "Ubwoko",
+    regNumLabel: "Nimero y'iyandikwa (si ngombwa)",
+    createBtn: "Rema",
+    flagRaisedToast: "Ikimenyetso cy'ingaruka cyashyizweho",
+    openComplianceReviewBtn: "Fungura isuzuma ry'iyubahirizamategeko",
+    riskFlagsHeading: "Ibimenyetso by'ingaruka",
+    noRiskFlags: "Nta bimenyetso by'ingaruka.",
+    resolveBtn: "Kemura",
+    flagCodePlaceholder: "Kode y'ikimenyetso urugero VOLUME_SPIKE",
+    describeConcernPlaceholder: "Sobanura ikibazo…",
+    raiseFlagBtn: "Shyiraho ikimenyetso",
+    decisionRecordedToast: "Umwanzuro wanditswe",
+    decisionRefusedToast: "Umwanzuro wanze",
+    recordDecisionTitle: "Andika umwanzuro",
+    recordDecisionDesc:
+      "Impamvu ibikwa hamwe n'impinduka y'imiterere kandi ntishobora guhindurwa.",
+    outcomeLabel: "Umwanzuro",
+    rationaleLabel: "Impamvu",
+    recordBtn: "Andika",
+    evidenceRecordedToast: "Ikimenyetso cyanditswe",
+    submitEvidenceTitle: "Tanga ibimenyetso",
+    submitEvidenceDesc:
+      "Andika inomero y'ikimenyetso kibitswe ahandi. Ibirimo mu nyandiko ntibyoherezwa hano.",
+    createOrgFirst: "Banza ureme ikigo.",
+    certRefPlaceholder: "Inomero y'icyemezo / inyandiko",
+    labelOptional: "Inyito (si ngombwa)",
+    submitBtn: "Tanga",
+    reviewOpenedToast: "Isuzuma ryafunguwe",
+    openReviewDesc: "Sobanura impamvu iki kigo gikeneye isuzuma.",
+    openReviewBtn: "Fungura isuzuma",
+  },
+};
 
 export const Route = createFileRoute("/compliance")({
   head: () => ({
@@ -73,6 +565,7 @@ const statusTone = (s: string) =>
 
 function Compliance() {
   const qc = useQueryClient();
+  const c = useLangCopy(COPY);
   const [tab, setTab] = useState<Tab>("organizations");
   const orgs = useQuery({ queryKey: ["orgs"], queryFn: compliance.organizations });
   const verifications = useQuery({
@@ -97,12 +590,18 @@ function Compliance() {
 
   const orgName = (id?: string) => orgs.data?.find((o) => o.id === id)?.legal_name ?? shortId(id);
 
+  const tabLabels: Record<Tab, string> = {
+    organizations: c.tabOrgs,
+    verifications: c.tabVerifications,
+    reviews: c.tabReviews,
+  };
+
   return (
     <>
       <PageHeader
-        eyebrow="Regulatory gateway"
-        title="Compliance & KYC"
-        description="Verification is proportionate to exposure. Every decision records who made it, from which state to which, and why — the log is append-only."
+        eyebrow={c.eyebrow}
+        title={c.title}
+        description={c.description}
         actions={
           <>
             <Button
@@ -111,14 +610,14 @@ function Compliance() {
               className="gap-1.5 rounded-lg font-mono text-xs uppercase"
             >
               <FileCheck2 className="size-3.5 text-[#79b200]" aria-hidden="true" />
-              Submit evidence
+              {c.submitEvidenceBtn}
             </Button>
             <Button
               onClick={() => setOrgOpen(true)}
               className="gap-1.5 rounded-lg bg-[#151515] font-mono text-xs uppercase text-white hover:bg-[#151515]/90"
             >
               <Building2 className="size-3.5 text-[#c2f74d]" aria-hidden="true" />
-              New organization
+              {c.newOrgBtn}
             </Button>
           </>
         }
@@ -137,15 +636,14 @@ function Compliance() {
             <div className="inline-flex items-center gap-2 rounded-full border border-[#c2f74d]/30 bg-[#c2f74d]/10 px-3 py-1">
               <ShieldCheck className="size-3.5 text-[#c2f74d]" aria-hidden="true" />
               <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[#c2f74d]">
-                Proportionate KYB & Cryptographic Evidence Desk
+                {c.bannerBadge}
               </span>
             </div>
             <h2 className="mt-3 text-2xl font-bold tracking-tight text-white sm:text-3xl">
-              Explainable Compliance & Risk Flag Registry
+              {c.bannerTitle}
             </h2>
             <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-white/65">
-              Review SHA-256 document fingerprints, national business registry references, and
-              entity risk flags. Every verification decision requires a permanent written rationale.
+              {c.bannerDesc}
             </p>
           </div>
         </div>
@@ -153,56 +651,52 @@ function Compliance() {
 
       <div className="grid gap-3.5 sm:grid-cols-3">
         <Metric
-          label="Organizations"
+          label={c.orgsMetric}
           value={orgs.data?.length ?? "—"}
-          sub={`${orgs.data?.filter((o) => o.verification_status === "approved").length ?? 0} approved`}
+          sub={c.approvedSub(
+            orgs.data?.filter((o) => o.verification_status === "approved").length ?? 0,
+          )}
           accent="lime"
         />
         <Metric
-          label="Pending verifications"
+          label={c.pendingVerifMetric}
           value={verifications.data?.filter((v) => v.status === "pending").length ?? "—"}
-          sub="Evidence awaiting a decision"
+          sub={c.pendingVerifSub}
         />
         <Metric
-          label="Open reviews"
+          label={c.openReviewsMetric}
           value={reviews.data?.filter((r) => r.status === "pending").length ?? "—"}
-          sub="Compliance cases in flight"
+          sub={c.openReviewsSub}
         />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel
-          title="Verification evidence · by status"
-          subtitle="Breakdown of submitted cryptographic fingerprints and registry references"
-        >
+        <Panel title={c.verifChartTitle} subtitle={c.verifChartSubtitle}>
           <LazyDonutChart
             data={tally((verifications.data ?? []).map((v) => v.status))}
-            ariaLabel="Verification evidence by status"
-            center={{ value: String(verifications.data?.length ?? 0), label: "items" }}
+            ariaLabel={c.verifChartTitle}
+            center={{ value: String(verifications.data?.length ?? 0), label: c.itemsLabel }}
             format={(v) => String(v)}
           />
         </Panel>
-        <Panel
-          title="Organizations · by verification status"
-          subtitle="KYB standing across registered legal entities"
-        >
+        <Panel title={c.orgChartTitle} subtitle={c.orgChartSubtitle}>
           <LazyDonutChart
             data={tally((orgs.data ?? []).map((o) => o.verification_status))}
-            ariaLabel="Organizations by verification status"
-            center={{ value: String(orgs.data?.length ?? 0), label: "organizations" }}
+            ariaLabel={c.orgChartTitle}
+            center={{ value: String(orgs.data?.length ?? 0), label: c.orgsLabel }}
             format={(v) => String(v)}
           />
         </Panel>
       </div>
 
       <Panel
-        title="Register"
-        subtitle="Inspect organizations, adjudicate verification evidence, or manage compliance reviews"
+        title={c.registerTitle}
+        subtitle={c.registerSubtitle}
         meta={
           <div className="flex gap-1.5">
             {(["organizations", "verifications", "reviews"] as const).map((t) => (
               <button key={t} onClick={() => setTab(t)} className="cursor-pointer">
-                <Chip tone={tab === t ? "invert" : "neutral"}>{t}</Chip>
+                <Chip tone={tab === t ? "invert" : "neutral"}>{tabLabels[t]}</Chip>
               </button>
             ))}
           </div>
@@ -212,10 +706,10 @@ function Compliance() {
           <QueryBoundary
             query={orgs}
             isEmpty={(d) => d.length === 0}
-            empty="No organizations yet. Create one to start a review."
+            empty={c.emptyOrgs}
           >
             {(rows) => (
-              <Table head={["Organization", "Country", "Type", "Registration", "Status"]}>
+              <Table head={[c.colOrg, c.colCountry, c.colType, c.colReg, c.colStatus]}>
                 {rows.map((o) => (
                   <tr
                     key={o.id}
@@ -245,10 +739,12 @@ function Compliance() {
           <QueryBoundary
             query={verifications}
             isEmpty={(d) => d.length === 0}
-            empty="No verification evidence submitted."
+            empty={c.emptyVerifs}
           >
             {(rows) => (
-              <Table head={["Subject", "Type", "Reference", "Submitted", "Status", ""]}>
+              <Table
+                head={[c.colSubject, c.colType, c.colReference, c.colSubmitted, c.colStatus, ""]}
+              >
                 {rows.map((v) => (
                   <tr
                     key={v.id}
@@ -257,7 +753,7 @@ function Compliance() {
                     <td className="px-2.5 py-3 text-xs font-medium">
                       {v.organization_id
                         ? orgName(v.organization_id)
-                        : `trader ${shortId(v.user_id)}`}
+                        : c.traderPrefix(shortId(v.user_id))}
                     </td>
                     <td className="px-2.5 py-3 font-mono text-xs">{v.verification_type}</td>
                     <td className="px-2.5 py-3 font-mono text-xs text-muted-foreground">
@@ -277,7 +773,7 @@ function Compliance() {
                           className="h-7 rounded-lg font-mono text-[10px] uppercase"
                           onClick={() => setDecide({ kind: "verification", id: v.id })}
                         >
-                          Decide
+                          {c.decideBtn}
                         </Button>
                       ) : null}
                     </td>
@@ -290,10 +786,10 @@ function Compliance() {
           <QueryBoundary
             query={reviews}
             isEmpty={(d) => d.length === 0}
-            empty="No compliance reviews opened."
+            empty={c.emptyReviews}
           >
             {(rows) => (
-              <Table head={["Organization", "Reason", "Opened", "Status", ""]}>
+              <Table head={[c.colOrg, c.colReason, c.colOpened, c.colStatus, ""]}>
                 {rows.map((r) => (
                   <tr
                     key={r.id}
@@ -316,7 +812,7 @@ function Compliance() {
                         className="h-7 rounded-lg font-mono text-[10px] uppercase"
                         onClick={() => setDecide({ kind: "review", id: r.id })}
                       >
-                        Decide
+                        {c.decideBtn}
                       </Button>
                     </td>
                   </tr>
@@ -385,9 +881,10 @@ function Pick({
   onChange: (v: string) => void;
   options: string[];
 }) {
+  const c = useLangCopy(COPY);
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger aria-label="Choose an option" className="rounded-lg font-mono text-xs">
+      <SelectTrigger aria-label={c.chooseOptionAria} className="rounded-lg font-mono text-xs">
         <SelectValue />
       </SelectTrigger>
       <SelectContent className="rounded-lg">
@@ -410,6 +907,7 @@ function OrgDialog({
   onOpenChange: (o: boolean) => void;
   onDone: () => void;
 }) {
+  const c = useLangCopy(COPY);
   const [f, setF] = useState({
     legal_name: "",
     trading_name: "",
@@ -429,7 +927,7 @@ function OrgDialog({
           : {}),
       }),
     onSuccess: (o) => {
-      toast.success(`${o.legal_name} created`);
+      toast.success(c.orgCreatedToast(o.legal_name));
       onDone();
       onOpenChange(false);
     },
@@ -440,19 +938,19 @@ function OrgDialog({
       <DialogContent className="rounded-2xl sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
-            New organization
+            {c.newOrgTitle}
           </DialogTitle>
-          <DialogDescription>Legal entity subject to verification.</DialogDescription>
+          <DialogDescription>{c.newOrgDesc}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          <Field label="Legal name">
+          <Field label={c.legalNameLabel}>
             <Input
               className="rounded-lg"
               value={f.legal_name}
               onChange={(e) => setF({ ...f, legal_name: e.target.value })}
             />
           </Field>
-          <Field label="Trading name (optional)">
+          <Field label={c.tradingNameLabel}>
             <Input
               className="rounded-lg"
               value={f.trading_name}
@@ -460,7 +958,7 @@ function OrgDialog({
             />
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Country (ISO-2)">
+            <Field label={c.countryIsoLabel}>
               <Input
                 maxLength={2}
                 className="rounded-lg font-mono"
@@ -468,7 +966,7 @@ function OrgDialog({
                 onChange={(e) => setF({ ...f, country_code: e.target.value })}
               />
             </Field>
-            <Field label="Type">
+            <Field label={c.typeLabel}>
               <Pick
                 value={f.organization_type}
                 onChange={(v) => setF({ ...f, organization_type: v })}
@@ -476,7 +974,7 @@ function OrgDialog({
               />
             </Field>
           </div>
-          <Field label="Registration number (optional)">
+          <Field label={c.regNumLabel}>
             <Input
               className="rounded-lg font-mono"
               value={f.registration_number}
@@ -490,7 +988,7 @@ function OrgDialog({
             disabled={!f.legal_name.trim() || f.country_code.length !== 2 || create.isPending}
             onClick={() => create.mutate()}
           >
-            Create
+            {c.createBtn}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -507,6 +1005,7 @@ function OrgDetail({
   onClose: () => void;
   onOpenReview: (id: string) => void;
 }) {
+  const c = useLangCopy(COPY);
   const qc = useQueryClient();
   const flags = useQuery({
     queryKey: ["flags", org?.id],
@@ -524,7 +1023,7 @@ function OrgDetail({
         description: desc.trim(),
       }),
     onSuccess: () => {
-      toast.success("Risk flag raised");
+      toast.success(c.flagRaisedToast);
       setCode("");
       setDesc("");
       void qc.invalidateQueries({ queryKey: ["flags", org?.id] });
@@ -557,13 +1056,13 @@ function OrgDetail({
                 className="rounded-lg font-mono text-[10px] uppercase"
                 onClick={() => onOpenReview(org.id)}
               >
-                Open compliance review
+                {c.openComplianceReviewBtn}
               </Button>
             </div>
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-              Risk flags
+              {c.riskFlagsHeading}
             </div>
-            <QueryBoundary query={flags} isEmpty={(d) => d.length === 0} empty="No risk flags.">
+            <QueryBoundary query={flags} isEmpty={(d) => d.length === 0} empty={c.noRiskFlags}>
               {(rows) => (
                 <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
                   {rows.map((fl) => (
@@ -587,7 +1086,7 @@ function OrgDetail({
                           disabled={resolve.isPending}
                           onClick={() => resolve.mutate(fl.id)}
                         >
-                          Resolve
+                          {c.resolveBtn}
                         </Button>
                       ) : null}
                     </li>
@@ -598,7 +1097,7 @@ function OrgDetail({
             <div className="grid gap-2 sm:grid-cols-[1fr_140px]">
               <Input
                 className="rounded-lg font-mono"
-                placeholder="Flag code e.g. VOLUME_SPIKE"
+                placeholder={c.flagCodePlaceholder}
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
               />
@@ -606,7 +1105,7 @@ function OrgDetail({
             </div>
             <Textarea
               className="min-h-16 rounded-lg"
-              placeholder="Describe the concern…"
+              placeholder={c.describeConcernPlaceholder}
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
             />
@@ -615,7 +1114,7 @@ function OrgDetail({
               disabled={!code.trim() || !desc.trim() || add.isPending}
               onClick={() => add.mutate()}
             >
-              Raise flag
+              {c.raiseFlagBtn}
             </Button>
           </>
         ) : null}
@@ -633,6 +1132,7 @@ function DecisionDialog({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const c = useLangCopy(COPY);
   const options = target?.kind === "verification" ? VERIFICATION_DECISIONS : REVIEW_STATUSES;
   const [status, setStatus] = useState("");
   const [rationale, setRationale] = useState("");
@@ -644,30 +1144,28 @@ function DecisionDialog({
       else await compliance.decideReview(target!.id, chosen, rationale.trim());
     },
     onSuccess: () => {
-      toast.success("Decision recorded");
+      toast.success(c.decisionRecordedToast);
       setRationale("");
       setStatus("");
       onDone();
       onClose();
     },
-    onError: (e) => toast.error("Decision refused", { description: describeError(e) }),
+    onError: (e) => toast.error(c.decisionRefusedToast, { description: describeError(e) }),
   });
   return (
     <Dialog open={target !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="rounded-2xl sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
-            Record decision
+            {c.recordDecisionTitle}
           </DialogTitle>
-          <DialogDescription>
-            The rationale is stored with the state change and cannot be edited.
-          </DialogDescription>
+          <DialogDescription>{c.recordDecisionDesc}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          <Field label="Outcome">
+          <Field label={c.outcomeLabel}>
             <Pick value={chosen} onChange={setStatus} options={options} />
           </Field>
-          <Field label="Rationale">
+          <Field label={c.rationaleLabel}>
             <Textarea
               className="min-h-24 rounded-lg"
               value={rationale}
@@ -681,7 +1179,7 @@ function DecisionDialog({
             disabled={!rationale.trim() || decide.isPending}
             onClick={() => decide.mutate()}
           >
-            Record
+            {c.recordBtn}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -700,6 +1198,7 @@ function VerificationDialog({
   orgs: Organization[];
   onDone: () => void;
 }) {
+  const c = useLangCopy(COPY);
   const [orgId, setOrgId] = useState("");
   const [type, setType] = useState("identity");
   const [reference, setReference] = useState("");
@@ -713,7 +1212,7 @@ function VerificationDialog({
         ...(label.trim() ? { evidence_label: label.trim() } : {}),
       }),
     onSuccess: () => {
-      toast.success("Evidence recorded");
+      toast.success(c.evidenceRecordedToast);
       setReference("");
       setLabel("");
       onDone();
@@ -726,20 +1225,17 @@ function VerificationDialog({
       <DialogContent className="rounded-2xl sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
-            Submit evidence
+            {c.submitEvidenceTitle}
           </DialogTitle>
-          <DialogDescription>
-            Record a reference to evidence held elsewhere. Document contents are never uploaded
-            here.
-          </DialogDescription>
+          <DialogDescription>{c.submitEvidenceDesc}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          <Field label="Organization">
+          <Field label={c.colOrg}>
             {orgs.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Create an organization first.</p>
+              <p className="text-xs text-muted-foreground">{c.createOrgFirst}</p>
             ) : (
               <Select value={orgId || orgs[0]!.id} onValueChange={setOrgId}>
-                <SelectTrigger aria-label="Organization" className="rounded-lg text-xs">
+                <SelectTrigger aria-label={c.colOrg} className="rounded-lg text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="rounded-lg">
@@ -752,18 +1248,18 @@ function VerificationDialog({
               </Select>
             )}
           </Field>
-          <Field label="Type">
+          <Field label={c.typeLabel}>
             <Pick value={type} onChange={setType} options={VERIFICATION_TYPES} />
           </Field>
-          <Field label="Reference">
+          <Field label={c.colReference}>
             <Input
               className="rounded-lg font-mono"
               value={reference}
               onChange={(e) => setReference(e.target.value)}
-              placeholder="Certificate / document reference"
+              placeholder={c.certRefPlaceholder}
             />
           </Field>
-          <Field label="Label (optional)">
+          <Field label={c.labelOptional}>
             <Input
               className="rounded-lg"
               value={label}
@@ -777,7 +1273,7 @@ function VerificationDialog({
             disabled={orgs.length === 0 || !reference.trim() || create.isPending}
             onClick={() => create.mutate()}
           >
-            Submit
+            {c.submitBtn}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -794,11 +1290,12 @@ function ReviewDialog({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const c = useLangCopy(COPY);
   const [reason, setReason] = useState("");
   const create = useMutation({
     mutationFn: () => compliance.createReview(orgId!, reason.trim()),
     onSuccess: () => {
-      toast.success("Review opened");
+      toast.success(c.reviewOpenedToast);
       setReason("");
       onDone();
       onClose();
@@ -810,9 +1307,9 @@ function ReviewDialog({
       <DialogContent className="rounded-2xl sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-mono text-sm uppercase tracking-[0.18em]">
-            Open compliance review
+            {c.openComplianceReviewBtn}
           </DialogTitle>
-          <DialogDescription>Describe why this organization needs review.</DialogDescription>
+          <DialogDescription>{c.openReviewDesc}</DialogDescription>
         </DialogHeader>
         <Textarea
           className="min-h-24 rounded-lg"
@@ -825,7 +1322,7 @@ function ReviewDialog({
             disabled={!reason.trim() || create.isPending}
             onClick={() => create.mutate()}
           >
-            Open review
+            {c.openReviewBtn}
           </Button>
         </DialogFooter>
       </DialogContent>
