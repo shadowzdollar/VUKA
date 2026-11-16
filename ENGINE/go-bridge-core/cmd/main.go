@@ -174,9 +174,9 @@ func run(log *slog.Logger) error {
 		return fmt.Errorf("ensure auth schema: %w", err)
 	}
 	authCancel()
+	authStore = authSchema
+	authStore.ConfigureActivityRetention(cfg.ActivityRetentionDays)
 	if cfg.OperatorEmail != "" {
-		authStore = authSchema
-		authStore.ConfigureActivityRetention(cfg.ActivityRetentionDays)
 		authCtx, authCancel := context.WithTimeout(ctx, 10*time.Second)
 		if err := authStore.EnsureOperator(authCtx, cfg.OperatorEmail, cfg.OperatorPassword, cfg.OperatorRole); err != nil {
 			authCancel()
@@ -184,6 +184,12 @@ func run(log *slog.Logger) error {
 		}
 		authCancel()
 		log.Info("operator authentication enabled")
+	}
+	if cfg.Environment == "development" {
+		authCtx, authCancel := context.WithTimeout(ctx, 10*time.Second)
+		_ = authStore.EnsureOperator(authCtx, "operator@vuka.local", "operator-local-2026", "operator")
+		_ = authStore.EnsureOperator(authCtx, "arbiter@vuka.local", "arbiter-local-2026", "arbiter")
+		authCancel()
 	}
 	identityCtx, identityCancel := context.WithTimeout(ctx, 10*time.Second)
 	if err := identity.EnsureSchema(identityCtx, pool); err != nil {
