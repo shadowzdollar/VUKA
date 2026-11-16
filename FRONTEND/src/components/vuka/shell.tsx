@@ -57,7 +57,6 @@ import { LANGUAGES, useI18n, useLangCopy, useT, type Lang } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 import { useNotifications } from "@/lib/trader-data";
 import { cn } from "@/lib/utils";
-import { VukaPreloadCanvas } from "@/components/vuka/preloader";
 import { VukaLogo, VukaMark } from "./brand";
 
 const SHELL_COPY = {
@@ -626,8 +625,17 @@ function RouteAnnouncer() {
 
 function Splash({ children }: { children: ReactNode }) {
   return (
-    <div role="status" aria-live="polite">
-      <VukaPreloadCanvas progress={84}>{children}</VukaPreloadCanvas>
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex min-h-screen w-full items-center justify-center bg-white text-zinc-600"
+    >
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
+        <span className="text-xs font-mono tracking-widest text-zinc-500 uppercase">
+          {children}
+        </span>
+      </div>
     </div>
   );
 }
