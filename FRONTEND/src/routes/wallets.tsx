@@ -1,14 +1,13 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
-import { Shell } from "@/components/vuka/shell";
+import { DashboardLayout } from "@/components/dashboard-layout";
 
 /**
- * Layout for /wallets and /wallets/$id: shared trader Shell chrome, with the list
- * (wallets.index.tsx) or a single account's detail (wallets.$id.tsx) rendered through the outlet.
+ * Layout for /wallets: shared cloned DashboardLayout with sidebar & header.
  */
 export const Route = createFileRoute("/wallets")({
   component: () => (
-    <Shell role="trader">
+    <DashboardLayout>
       <Outlet />
-    </Shell>
+    </DashboardLayout>
   ),
 });

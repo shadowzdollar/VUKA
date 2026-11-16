@@ -422,8 +422,25 @@ SidebarGroup.displayName = "SidebarGroup";
 
 const SidebarGroupLabel = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<"div"> & { asChild?: boolean }
->(({ className, asChild = false, ...props }, ref) => {
+  React.ComponentProps<"div"> & { asChild?: boolean; render?: React.ReactElement }
+>(({ className, asChild = false, render, ...props }, ref) => {
+  if (render) {
+    return React.cloneElement(
+      render,
+      {
+        ref,
+        "data-sidebar": "group-label",
+        className: cn(
+          "flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-[margin,opacity] duration-200 ease-linear focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
+          "group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0",
+          className,
+          (render as any).props?.className,
+        ),
+        ...props,
+      } as any,
+      (render as any).props?.children ?? props.children,
+    );
+  }
   const Comp = asChild ? Slot : "div";
 
   return (
@@ -526,6 +543,7 @@ const SidebarMenuButton = React.forwardRef<
   HTMLButtonElement,
   React.ComponentProps<"button"> & {
     asChild?: boolean;
+    render?: React.ReactElement;
     isActive?: boolean;
     tooltip?: string | React.ComponentProps<typeof TooltipContent>;
   } & VariantProps<typeof sidebarMenuButtonVariants>
@@ -533,6 +551,7 @@ const SidebarMenuButton = React.forwardRef<
   (
     {
       asChild = false,
+      render,
       isActive = false,
       variant = "default",
       size = "default",
@@ -545,7 +564,20 @@ const SidebarMenuButton = React.forwardRef<
     const Comp = asChild ? Slot : "button";
     const { isMobile, state } = useSidebar();
 
-    const button = (
+    const button = render ? (
+      React.cloneElement(
+        render,
+        {
+          ref,
+          "data-sidebar": "menu-button",
+          "data-size": size,
+          "data-active": isActive,
+          className: cn(sidebarMenuButtonVariants({ variant, size }), className, (render as any).props?.className),
+          ...props,
+        } as any,
+        (render as any).props?.children ?? props.children,
+      )
+    ) : (
       <Comp
         ref={ref}
         data-sidebar="menu-button"
@@ -690,10 +722,33 @@ const SidebarMenuSubButton = React.forwardRef<
   HTMLAnchorElement,
   React.ComponentProps<"a"> & {
     asChild?: boolean;
+    render?: React.ReactElement;
     size?: "sm" | "md";
     isActive?: boolean;
   }
->(({ asChild = false, size = "md", isActive, className, ...props }, ref) => {
+>(({ asChild = false, render, size = "md", isActive, className, ...props }, ref) => {
+  if (render) {
+    return React.cloneElement(
+      render,
+      {
+        ref,
+        "data-sidebar": "menu-sub-button",
+        "data-size": size,
+        "data-active": isActive,
+        className: cn(
+          "flex h-7 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-md px-2 text-sidebar-foreground outline-none ring-sidebar-ring cursor-pointer hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground",
+          "data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground",
+          size === "sm" && "text-xs",
+          size === "md" && "text-sm",
+          "group-data-[collapsible=icon]:hidden",
+          className,
+          (render as any).props?.className,
+        ),
+        ...props,
+      } as any,
+      (render as any).props?.children ?? props.children,
+    );
+  }
   const Comp = asChild ? Slot : "a";
 
   return (

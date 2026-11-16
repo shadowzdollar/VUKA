@@ -37,8 +37,20 @@ const BreadcrumbLink = React.forwardRef<
   HTMLAnchorElement,
   React.ComponentPropsWithoutRef<"a"> & {
     asChild?: boolean;
+    render?: React.ReactElement;
   }
->(({ asChild, className, ...props }, ref) => {
+>(({ asChild, render, className, ...props }, ref) => {
+  if (render) {
+    return React.cloneElement(
+      render,
+      {
+        ref,
+        className: cn("transition-colors hover:text-foreground", className, (render as any).props?.className),
+        ...props,
+      } as any,
+      (render as any).props?.children ?? props.children,
+    );
+  }
   const Comp = asChild ? Slot : "a";
 
   return (

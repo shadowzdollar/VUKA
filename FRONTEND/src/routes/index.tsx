@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { DashboardLayout } from "@/components/dashboard-layout";
 import { Landing } from "@/components/vuka/landing";
 import { OperatorCockpit } from "@/components/vuka/operator-cockpit";
-import { Shell } from "@/components/vuka/shell";
 import { TraderHome } from "@/components/vuka/trader-home";
 import { useSession } from "@/lib/session";
 
@@ -24,9 +24,9 @@ function Home() {
   const { session } = useSession();
   if (session.status === "anon") return <Landing />;
   return (
-    <Shell>
+    <DashboardLayout>
       <ByRole />
-    </Shell>
+    </DashboardLayout>
   );
 }
 

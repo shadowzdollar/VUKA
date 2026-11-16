@@ -13,7 +13,13 @@ const engine = process.env["VUKA_API_PROXY_TARGET"] ?? "http://localhost:8080";
 
 export default defineConfig(({ command }) => ({
   resolve: {
-    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "next/link": fileURLToPath(new URL("./src/lib/next-compat/link.tsx", import.meta.url)),
+      "next/image": fileURLToPath(new URL("./src/lib/next-compat/image.tsx", import.meta.url)),
+      "next/navigation": fileURLToPath(new URL("./src/lib/next-compat/navigation.ts", import.meta.url)),
+      "next/dynamic": fileURLToPath(new URL("./src/lib/next-compat/dynamic.tsx", import.meta.url)),
+    },
     dedupe: ["react", "react-dom", "@tanstack/react-query", "@tanstack/query-core"],
   },
   plugins: [

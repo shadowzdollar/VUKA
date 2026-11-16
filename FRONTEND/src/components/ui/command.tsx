@@ -23,13 +23,18 @@ const Command = React.forwardRef<
 ));
 Command.displayName = CommandPrimitive.displayName;
 
-const CommandDialog = ({ children, ...props }: DialogProps) => {
+interface CommandDialogProps extends DialogProps {
+  title?: string;
+  description?: string;
+}
+
+const CommandDialog = ({ children, title, description, ...props }: CommandDialogProps) => {
   return (
     <Dialog {...props}>
       <DialogContent className="overflow-hidden rounded-2xl border border-border/90 p-0 shadow-[0_32px_80px_-20px_rgba(0,0,0,0.45)] sm:max-w-[620px]">
-        <DialogTitle className="sr-only">Command & Jump Palette</DialogTitle>
+        <DialogTitle className="sr-only">{title ?? "Command & Jump Palette"}</DialogTitle>
         <DialogDescription className="sr-only">
-          Search or jump to any route, corridor, or workspace action.
+          {description ?? "Search or jump to any route, corridor, or workspace action."}
         </DialogDescription>
         <Command className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.2em] [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-1 [&_[cmdk-group]]:px-2 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-3 [&_[cmdk-item]]:py-2.5">
           {children}

@@ -8,7 +8,26 @@ import { cn } from "@/lib/utils";
 
 const DropdownMenu = DropdownMenuPrimitive.Root;
 
-const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
+const DropdownMenuTrigger = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger> & {
+    render?: React.ReactElement;
+  }
+>(({ render, children, asChild, ...props }, ref) => {
+  if (render) {
+    return (
+      <DropdownMenuPrimitive.Trigger ref={ref} asChild {...(props as any)}>
+        {React.cloneElement(render, {}, children)}
+      </DropdownMenuPrimitive.Trigger>
+    );
+  }
+  return (
+    <DropdownMenuPrimitive.Trigger ref={ref} asChild={Boolean(asChild)} {...(props as any)}>
+      {children}
+    </DropdownMenuPrimitive.Trigger>
+  );
+});
+DropdownMenuTrigger.displayName = DropdownMenuPrimitive.Trigger.displayName;
 
 const DropdownMenuGroup = DropdownMenuPrimitive.Group;
 
@@ -77,18 +96,40 @@ const DropdownMenuItem = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & {
     inset?: boolean;
+    render?: React.ReactElement;
   }
->(({ className, inset, ...props }, ref) => (
-  <DropdownMenuPrimitive.Item
-    ref={ref}
-    className={cn(
-      "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0",
-      inset && "pl-8",
-      className,
-    )}
-    {...props}
-  />
-));
+>(({ className, inset, render, children, asChild, ...props }, ref) => {
+  if (render) {
+    return (
+      <DropdownMenuPrimitive.Item
+        ref={ref}
+        asChild
+        className={cn(
+          "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0",
+          inset && "pl-8",
+          className,
+        )}
+        {...(props as any)}
+      >
+        {React.cloneElement(render, {}, children)}
+      </DropdownMenuPrimitive.Item>
+    );
+  }
+  return (
+    <DropdownMenuPrimitive.Item
+      ref={ref}
+      asChild={Boolean(asChild)}
+      className={cn(
+        "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0",
+        inset && "pl-8",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </DropdownMenuPrimitive.Item>
+  );
+});
 DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName;
 
 const DropdownMenuCheckboxItem = React.forwardRef<

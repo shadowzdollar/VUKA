@@ -5,7 +5,26 @@ import { cn } from "@/lib/utils";
 
 const Popover = PopoverPrimitive.Root;
 
-const PopoverTrigger = PopoverPrimitive.Trigger;
+const PopoverTrigger = React.forwardRef<
+  React.ElementRef<typeof PopoverPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Trigger> & {
+    render?: React.ReactElement;
+  }
+>(({ render, children, asChild, ...props }, ref) => {
+  if (render) {
+    return (
+      <PopoverPrimitive.Trigger ref={ref} asChild {...(props as any)}>
+        {React.cloneElement(render, {}, children)}
+      </PopoverPrimitive.Trigger>
+    );
+  }
+  return (
+    <PopoverPrimitive.Trigger ref={ref} asChild={Boolean(asChild)} {...(props as any)}>
+      {children}
+    </PopoverPrimitive.Trigger>
+  );
+});
+PopoverTrigger.displayName = PopoverPrimitive.Trigger.displayName;
 
 const PopoverAnchor = PopoverPrimitive.Anchor;
 

@@ -11,22 +11,31 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
+import { Route as AccountsRouteImport } from './routes/accounts'
 import { Route as ActivityRouteImport } from './routes/activity'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
+import { Route as BudgetsRouteImport } from './routes/budgets'
+import { Route as CardsRouteImport } from './routes/cards'
 import { Route as ComplianceRouteImport } from './routes/compliance'
 import { Route as CorridorsRouteImport } from './routes/corridors'
+import { Route as CryptoRouteImport } from './routes/crypto'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as DisputesRouteImport } from './routes/disputes'
 import { Route as EscrowRouteImport } from './routes/escrow'
+import { Route as InvestmentsRouteImport } from './routes/investments'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as SecurityRouteImport } from './routes/security'
 import { Route as SendRouteImport } from './routes/send'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SettlementsRouteImport } from './routes/settlements'
 import { Route as StatusRouteImport } from './routes/status'
 import { Route as SupportRouteImport } from './routes/support'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as TransactionsRouteImport } from './routes/transactions'
+import { Route as TransfersRouteImport } from './routes/transfers'
 import { Route as TrustScoreRouteImport } from './routes/trust-score'
 import { Route as VerificationRouteImport } from './routes/verification'
 import { Route as WalletsRouteImport } from './routes/wallets'
@@ -45,6 +54,11 @@ const AboutRoute = AboutRouteImport.update({
   path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AccountsRoute = AccountsRouteImport.update({
+  id: '/accounts',
+  path: '/accounts',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ActivityRoute = ActivityRouteImport.update({
   id: '/activity',
   path: '/activity',
@@ -53,6 +67,16 @@ const ActivityRoute = ActivityRouteImport.update({
 const AnalyticsRoute = AnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BudgetsRoute = BudgetsRouteImport.update({
+  id: '/budgets',
+  path: '/budgets',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CardsRoute = CardsRouteImport.update({
+  id: '/cards',
+  path: '/cards',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ComplianceRoute = ComplianceRouteImport.update({
@@ -65,6 +89,16 @@ const CorridorsRoute = CorridorsRouteImport.update({
   path: '/corridors',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CryptoRoute = CryptoRouteImport.update({
+  id: '/crypto',
+  path: '/crypto',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DisputesRoute = DisputesRouteImport.update({
   id: '/disputes',
   path: '/disputes',
@@ -73,6 +107,11 @@ const DisputesRoute = DisputesRouteImport.update({
 const EscrowRoute = EscrowRouteImport.update({
   id: '/escrow',
   path: '/escrow',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InvestmentsRoute = InvestmentsRouteImport.update({
+  id: '/investments',
+  path: '/investments',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -105,6 +144,11 @@ const SendRoute = SendRouteImport.update({
   path: '/send',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettlementsRoute = SettlementsRouteImport.update({
   id: '/settlements',
   path: '/settlements',
@@ -123,6 +167,16 @@ const SupportRoute = SupportRouteImport.update({
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TransactionsRoute = TransactionsRouteImport.update({
+  id: '/transactions',
+  path: '/transactions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TransfersRoute = TransfersRouteImport.update({
+  id: '/transfers',
+  path: '/transfers',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TrustScoreRoute = TrustScoreRouteImport.update({
@@ -164,22 +218,31 @@ const WalletsIdRoute = WalletsIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/accounts': typeof AccountsRoute
   '/activity': typeof ActivityRoute
   '/analytics': typeof AnalyticsRoute
+  '/budgets': typeof BudgetsRoute
+  '/cards': typeof CardsRoute
   '/compliance': typeof ComplianceRoute
   '/corridors': typeof CorridorsRoute
+  '/crypto': typeof CryptoRoute
+  '/dashboard': typeof DashboardRoute
   '/disputes': typeof DisputesRoute
   '/escrow': typeof EscrowRouteWithChildren
+  '/investments': typeof InvestmentsRoute
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
   '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
   '/security': typeof SecurityRoute
   '/send': typeof SendRoute
+  '/settings': typeof SettingsRoute
   '/settlements': typeof SettlementsRoute
   '/status': typeof StatusRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/transactions': typeof TransactionsRoute
+  '/transfers': typeof TransfersRoute
   '/trust-score': typeof TrustScoreRoute
   '/verification': typeof VerificationRoute
   '/wallets': typeof WalletsRouteWithChildren
@@ -191,21 +254,30 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/accounts': typeof AccountsRoute
   '/activity': typeof ActivityRoute
   '/analytics': typeof AnalyticsRoute
+  '/budgets': typeof BudgetsRoute
+  '/cards': typeof CardsRoute
   '/compliance': typeof ComplianceRoute
   '/corridors': typeof CorridorsRoute
+  '/crypto': typeof CryptoRoute
+  '/dashboard': typeof DashboardRoute
   '/disputes': typeof DisputesRoute
+  '/investments': typeof InvestmentsRoute
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
   '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
   '/security': typeof SecurityRoute
   '/send': typeof SendRoute
+  '/settings': typeof SettingsRoute
   '/settlements': typeof SettlementsRoute
   '/status': typeof StatusRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/transactions': typeof TransactionsRoute
+  '/transfers': typeof TransfersRoute
   '/trust-score': typeof TrustScoreRoute
   '/verification': typeof VerificationRoute
   '/escrow/$id': typeof EscrowIdRoute
@@ -217,22 +289,31 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/accounts': typeof AccountsRoute
   '/activity': typeof ActivityRoute
   '/analytics': typeof AnalyticsRoute
+  '/budgets': typeof BudgetsRoute
+  '/cards': typeof CardsRoute
   '/compliance': typeof ComplianceRoute
   '/corridors': typeof CorridorsRoute
+  '/crypto': typeof CryptoRoute
+  '/dashboard': typeof DashboardRoute
   '/disputes': typeof DisputesRoute
   '/escrow': typeof EscrowRouteWithChildren
+  '/investments': typeof InvestmentsRoute
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
   '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
   '/security': typeof SecurityRoute
   '/send': typeof SendRoute
+  '/settings': typeof SettingsRoute
   '/settlements': typeof SettlementsRoute
   '/status': typeof StatusRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/transactions': typeof TransactionsRoute
+  '/transfers': typeof TransfersRoute
   '/trust-score': typeof TrustScoreRoute
   '/verification': typeof VerificationRoute
   '/wallets': typeof WalletsRouteWithChildren
@@ -246,22 +327,31 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/about'
+    | '/accounts'
     | '/activity'
     | '/analytics'
+    | '/budgets'
+    | '/cards'
     | '/compliance'
     | '/corridors'
+    | '/crypto'
+    | '/dashboard'
     | '/disputes'
     | '/escrow'
+    | '/investments'
     | '/login'
     | '/notifications'
     | '/privacy'
     | '/register'
     | '/security'
     | '/send'
+    | '/settings'
     | '/settlements'
     | '/status'
     | '/support'
     | '/terms'
+    | '/transactions'
+    | '/transfers'
     | '/trust-score'
     | '/verification'
     | '/wallets'
@@ -273,21 +363,30 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/about'
+    | '/accounts'
     | '/activity'
     | '/analytics'
+    | '/budgets'
+    | '/cards'
     | '/compliance'
     | '/corridors'
+    | '/crypto'
+    | '/dashboard'
     | '/disputes'
+    | '/investments'
     | '/login'
     | '/notifications'
     | '/privacy'
     | '/register'
     | '/security'
     | '/send'
+    | '/settings'
     | '/settlements'
     | '/status'
     | '/support'
     | '/terms'
+    | '/transactions'
+    | '/transfers'
     | '/trust-score'
     | '/verification'
     | '/escrow/$id'
@@ -298,22 +397,31 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/about'
+    | '/accounts'
     | '/activity'
     | '/analytics'
+    | '/budgets'
+    | '/cards'
     | '/compliance'
     | '/corridors'
+    | '/crypto'
+    | '/dashboard'
     | '/disputes'
     | '/escrow'
+    | '/investments'
     | '/login'
     | '/notifications'
     | '/privacy'
     | '/register'
     | '/security'
     | '/send'
+    | '/settings'
     | '/settlements'
     | '/status'
     | '/support'
     | '/terms'
+    | '/transactions'
+    | '/transfers'
     | '/trust-score'
     | '/verification'
     | '/wallets'
@@ -326,22 +434,31 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
+  AccountsRoute: typeof AccountsRoute
   ActivityRoute: typeof ActivityRoute
   AnalyticsRoute: typeof AnalyticsRoute
+  BudgetsRoute: typeof BudgetsRoute
+  CardsRoute: typeof CardsRoute
   ComplianceRoute: typeof ComplianceRoute
   CorridorsRoute: typeof CorridorsRoute
+  CryptoRoute: typeof CryptoRoute
+  DashboardRoute: typeof DashboardRoute
   DisputesRoute: typeof DisputesRoute
   EscrowRoute: typeof EscrowRouteWithChildren
+  InvestmentsRoute: typeof InvestmentsRoute
   LoginRoute: typeof LoginRoute
   NotificationsRoute: typeof NotificationsRoute
   PrivacyRoute: typeof PrivacyRoute
   RegisterRoute: typeof RegisterRoute
   SecurityRoute: typeof SecurityRoute
   SendRoute: typeof SendRoute
+  SettingsRoute: typeof SettingsRoute
   SettlementsRoute: typeof SettlementsRoute
   StatusRoute: typeof StatusRoute
   SupportRoute: typeof SupportRoute
   TermsRoute: typeof TermsRoute
+  TransactionsRoute: typeof TransactionsRoute
+  TransfersRoute: typeof TransfersRoute
   TrustScoreRoute: typeof TrustScoreRoute
   VerificationRoute: typeof VerificationRoute
   WalletsRoute: typeof WalletsRouteWithChildren
@@ -363,6 +480,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/accounts': {
+      id: '/accounts'
+      path: '/accounts'
+      fullPath: '/accounts'
+      preLoaderRoute: typeof AccountsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/activity': {
       id: '/activity'
       path: '/activity'
@@ -375,6 +499,20 @@ declare module '@tanstack/react-router' {
       path: '/analytics'
       fullPath: '/analytics'
       preLoaderRoute: typeof AnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/budgets': {
+      id: '/budgets'
+      path: '/budgets'
+      fullPath: '/budgets'
+      preLoaderRoute: typeof BudgetsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cards': {
+      id: '/cards'
+      path: '/cards'
+      fullPath: '/cards'
+      preLoaderRoute: typeof CardsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/compliance': {
@@ -391,6 +529,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CorridorsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/crypto': {
+      id: '/crypto'
+      path: '/crypto'
+      fullPath: '/crypto'
+      preLoaderRoute: typeof CryptoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/disputes': {
       id: '/disputes'
       path: '/disputes'
@@ -403,6 +555,13 @@ declare module '@tanstack/react-router' {
       path: '/escrow'
       fullPath: '/escrow'
       preLoaderRoute: typeof EscrowRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/investments': {
+      id: '/investments'
+      path: '/investments'
+      fullPath: '/investments'
+      preLoaderRoute: typeof InvestmentsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -447,6 +606,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SendRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settlements': {
       id: '/settlements'
       path: '/settlements'
@@ -473,6 +639,20 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/transactions': {
+      id: '/transactions'
+      path: '/transactions'
+      fullPath: '/transactions'
+      preLoaderRoute: typeof TransactionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/transfers': {
+      id: '/transfers'
+      path: '/transfers'
+      fullPath: '/transfers'
+      preLoaderRoute: typeof TransfersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/trust-score': {
@@ -556,22 +736,31 @@ const WalletsRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
+  AccountsRoute: AccountsRoute,
   ActivityRoute: ActivityRoute,
   AnalyticsRoute: AnalyticsRoute,
+  BudgetsRoute: BudgetsRoute,
+  CardsRoute: CardsRoute,
   ComplianceRoute: ComplianceRoute,
   CorridorsRoute: CorridorsRoute,
+  CryptoRoute: CryptoRoute,
+  DashboardRoute: DashboardRoute,
   DisputesRoute: DisputesRoute,
   EscrowRoute: EscrowRouteWithChildren,
+  InvestmentsRoute: InvestmentsRoute,
   LoginRoute: LoginRoute,
   NotificationsRoute: NotificationsRoute,
   PrivacyRoute: PrivacyRoute,
   RegisterRoute: RegisterRoute,
   SecurityRoute: SecurityRoute,
   SendRoute: SendRoute,
+  SettingsRoute: SettingsRoute,
   SettlementsRoute: SettlementsRoute,
   StatusRoute: StatusRoute,
   SupportRoute: SupportRoute,
   TermsRoute: TermsRoute,
+  TransactionsRoute: TransactionsRoute,
+  TransfersRoute: TransfersRoute,
   TrustScoreRoute: TrustScoreRoute,
   VerificationRoute: VerificationRoute,
   WalletsRoute: WalletsRouteWithChildren,
