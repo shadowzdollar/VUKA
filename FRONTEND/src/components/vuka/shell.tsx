@@ -628,11 +628,11 @@ function Splash({ children }: { children: ReactNode }) {
     <div
       role="status"
       aria-live="polite"
-      className="flex min-h-screen w-full items-center justify-center bg-white text-zinc-600"
+      className="flex min-h-screen w-full items-center justify-center bg-background text-foreground"
     >
       <div className="flex flex-col items-center gap-3">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
-        <span className="text-xs font-mono tracking-widest text-zinc-500 uppercase">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <span className="text-xs font-mono tracking-widest text-muted-foreground uppercase">
           {children}
         </span>
       </div>

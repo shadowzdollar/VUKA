@@ -7,16 +7,16 @@ import {
   type ReactNode,
 } from "react";
 
-export type ThemePreference = "light";
+export type ThemePreference = "dark" | "light";
 
 /**
- * Ensures the document is always in light mode before first paint, clearing any legacy dark state.
+ * Ensures the document is always in dark mode before first paint, matching the shadcn-fintech black & white palette.
  */
-export const themeInitScript = `(function(){try{document.documentElement.classList.remove("dark");localStorage.removeItem("vuka.theme")}catch(e){}})();`;
+export const themeInitScript = `(function(){try{document.documentElement.classList.add("dark");}catch(e){}})();`;
 
 interface ThemeContextValue {
   preference: ThemePreference;
-  resolved: "light";
+  resolved: "dark";
   setPreference: (p: ThemePreference) => void;
 }
 
@@ -24,20 +24,15 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
-    document.documentElement.classList.remove("dark");
-    try {
-      window.localStorage.removeItem("vuka.theme");
-    } catch {
-      /* storage unavailable */
-    }
+    document.documentElement.classList.add("dark");
   }, []);
 
   const setPreference = useCallback(() => {
-    document.documentElement.classList.remove("dark");
+    document.documentElement.classList.add("dark");
   }, []);
 
   const value = useMemo(
-    () => ({ preference: "light" as const, resolved: "light" as const, setPreference }),
+    () => ({ preference: "dark" as const, resolved: "dark" as const, setPreference }),
     [setPreference],
   );
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
