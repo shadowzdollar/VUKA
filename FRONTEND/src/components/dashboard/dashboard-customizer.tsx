@@ -26,7 +26,6 @@ import { SpendingLimit } from "@/components/dashboard/spending-limit"
 import { MoneyMovement } from "@/components/dashboard/money-movement"
 import { RecentTransactions } from "@/components/dashboard/recent-transactions"
 import { HealthScore } from "@/components/dashboard/health-score"
-import { TraderInvoices } from "@/components/vuka/trader-invoices"
 
 type WidgetSize = "sm" | "lg" | "full"
 
@@ -43,7 +42,6 @@ const defaultBlocks: Block[] = [
   { id: "transfer-spending", label: "Transfer & Spending", size: "sm", component: <div className="flex flex-col gap-4 [&>*]:flex-1"><QuickTransfer /><SpendingLimit /></div> },
   { id: "money-movement", label: "Money Movement", size: "sm", component: <MoneyMovement /> },
   { id: "health-score", label: "Financial Health", size: "sm", component: <HealthScore /> },
-  { id: "trade-invoices", label: "Cross-Border Trade Desk & Offline Invoices", size: "full", component: <TraderInvoices /> },
   { id: "recent-transactions", label: "Recent Transactions", size: "full", component: <RecentTransactions /> },
 ]
 

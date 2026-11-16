@@ -282,13 +282,13 @@ function Journey() {
   ];
 
   return (
-    <section id="journey" className="relative scroll-mt-24 overflow-hidden bg-white text-[#151515]">
+    <section id="journey" className="relative scroll-mt-24 overflow-hidden border-y border-border bg-background text-foreground">
       {/* Scattered background dots */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
         {dots.map(([left, top], idx) => (
           <span
             key={idx}
-            className="vuka-dot-pulse absolute size-[4px] rounded-full bg-[#79b200]"
+            className="vuka-dot-pulse absolute size-[4px] rounded-full bg-primary/60"
             style={{ left, top, animationDelay: `${(idx % 6) * 420}ms` }}
           />
         ))}
@@ -297,20 +297,20 @@ function Journey() {
       <div className="relative mx-auto grid w-full max-w-[1560px] items-center gap-10 px-4 py-16 sm:px-6 lg:min-h-[680px] lg:grid-cols-[1fr_1.15fr] lg:gap-12 lg:px-10 2xl:px-14">
         {/* Left column: Heading and 4 bullet points */}
         <div className="vuka-reveal relative z-10 max-w-xl">
-          <h2 className="text-[40px] leading-[1.18] font-bold tracking-[-0.02em] text-[#151515] sm:text-[44px]">
+          <h2 className="text-[40px] leading-[1.18] font-bold tracking-[-0.02em] text-foreground sm:text-[44px]">
             {c.titleLine1}
             <br />
             {c.titleLine2}
           </h2>
-          <ul className="mt-9 space-y-6 text-[16px] leading-[1.6] text-[#222222]">
+          <ul className="mt-9 space-y-6 text-[16px] leading-[1.6] text-muted-foreground">
             {c.bullets.map((b, i) => (
               <li
                 key={i}
                 className="vuka-reveal flex items-start gap-3 transition-transform duration-300 hover:translate-x-1"
                 style={{ "--reveal-delay": `${(i + 1) * 90}ms` } as CSSProperties}
               >
-                <span className="mt-[10px] size-[5px] shrink-0 rounded-full bg-[#151515]" aria-hidden="true" />
-                <span>{b}</span>
+                <span className="mt-[10px] size-[5px] shrink-0 rounded-full bg-primary" aria-hidden="true" />
+                <span className="text-foreground/90">{b}</span>
               </li>
             ))}
           </ul>
@@ -454,72 +454,72 @@ function Estimator() {
   const c = useLangCopy(ESTIMATOR_COPY);
 
   return (
-    <section id="estimate" className="relative scroll-mt-24 overflow-hidden bg-[#f6f6f6] pt-36 pb-3 text-[#151515]">
+    <section id="estimate" className="relative scroll-mt-24 overflow-hidden bg-background pt-36 pb-3 text-foreground">
       {/* Background curved lime arches and dark bottom band */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
         <svg
           viewBox="0 0 1642 738"
           preserveAspectRatio="none"
-          className="size-full"
+          className="size-full opacity-30"
         >
-          {/* Outer pale-lime arch band */}
+          {/* Outer dark arch band */}
           <path
             d="M -40 280 Q 821 -10 1682 280 L 1682 738 L -40 738 Z"
-            fill="#eef6dd"
-            stroke="#9fc84b"
+            fill="oklch(0.22 0 0)"
+            stroke="oklch(1 0 0 / 10%)"
             strokeWidth="1.2"
           />
-          {/* Inner bright-lime arch */}
+          {/* Inner dark arch */}
           <path
             d="M -40 448 Q 821 155 1682 448 L 1682 738 L -40 738 Z"
-            fill="#c2f74d"
+            fill="oklch(0.18 0 0)"
           />
-          {/* Green dot on the right between the two curves */}
-          <circle cx="1474" cy="364" r="8" fill="#79b200" />
+          {/* Accent dot on the right between the two curves */}
+          <circle cx="1474" cy="364" r="8" fill="var(--color-primary)" />
         </svg>
         {/* Bottom dark bar */}
-        <div className="absolute inset-x-0 bottom-0 h-[81px] bg-[#151515]" />
+        <div className="absolute inset-x-0 bottom-0 h-[81px] bg-background border-t border-border" />
       </div>
 
-      {/* Main translucent/frosted center container */}
+      {/* Main center container */}
       <div className="relative z-10 mx-auto w-full max-w-[1560px] px-4 sm:px-6 lg:px-10 2xl:px-14">
         <div
-          className="relative overflow-hidden rounded-t-[8px] border border-b-0 border-[#dcdcdc] px-6 pt-14 pb-0 text-center shadow-[0_18px_50px_rgba(0,0,0,0.06)]"
+          className="relative overflow-hidden rounded-t-[8px] border border-b-0 border-border px-6 pt-14 pb-0 text-center shadow-2xl"
           style={{
             background:
-              "radial-gradient(62% 72% at 50% 68%, rgba(194, 247, 77, 0.72) 0%, rgba(235, 252, 197, 0.78) 48%, rgba(249, 252, 245, 0.96) 82%)",
+              "radial-gradient(62% 72% at 50% 68%, oklch(0.23 0 0) 0%, oklch(0.18 0 0) 52%, oklch(0.145 0 0) 100%)",
           }}
         >
-          <h2 className="mx-auto max-w-3xl text-[36px] leading-[1.18] font-bold tracking-[-0.02em] text-[#151515] sm:text-[44px]">
+          <h2 className="mx-auto max-w-3xl text-[36px] leading-[1.18] font-bold tracking-[-0.02em] text-foreground sm:text-[44px]">
             {c.title}
           </h2>
-          <p className="mx-auto mt-5 max-w-[560px] text-[16px] leading-[1.6] text-[#222222]">
+          <p className="mx-auto mt-5 max-w-[560px] text-[16px] leading-[1.6] text-muted-foreground">
             {c.leadLine1}
             <br className="hidden sm:inline" /> {c.leadLine2}
           </p>
           <div className="mt-8">
             <Link
               to="/send"
-              className="inline-flex h-[54px] w-full max-w-[448px] items-center justify-center rounded-full bg-[#151515] px-8 text-[16px] font-normal text-white transition-opacity hover:opacity-90"
+              className="inline-flex h-[54px] w-full max-w-[448px] items-center justify-center rounded-full bg-primary px-8 text-[16px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
             >
               {c.primaryCta}
             </Link>
           </div>
 
-          {/* 3 bottom white action cards */}
+          {/* 3 bottom action cards */}
           <div className="mt-14 -mx-6 grid gap-6 sm:mx-0 md:grid-cols-3 md:gap-[33px]">
             {c.cards.map((card, idx) => (
               <div
                 key={idx}
                 style={{ "--reveal-delay": `${idx * 90}ms` } as CSSProperties}
-                className="vuka-reveal vuka-card-lift flex flex-col items-center justify-between rounded-[6px] border border-[#e6e6e6] bg-[#fcfdf9] px-7 pt-9 pb-6 text-center shadow-[0_10px_28px_rgba(0,0,0,0.08)]"
+                className="vuka-reveal vuka-card-lift flex flex-col items-center justify-between rounded-[6px] border border-border bg-card px-7 pt-9 pb-6 text-center shadow-xl"
               >
-                <p className="max-w-[250px] text-[16px] leading-[1.55] font-normal text-[#151515]">
+                <p className="max-w-[250px] text-[16px] leading-[1.55] font-normal text-foreground">
                   {card.body}
                 </p>
                 <Link
                   to={card.to}
-                  className="mt-6 inline-flex h-[47px] w-full max-w-[255px] items-center justify-center rounded-full border border-[#79b200] bg-white px-6 text-[16px] font-semibold text-[#79b200] transition-colors hover:bg-[#79b200]/5"
+                  className="mt-6 inline-flex h-[47px] w-full max-w-[255px] items-center justify-center rounded-full border border-border bg-muted/40 px-6 text-[16px] font-semibold text-foreground transition-colors hover:bg-accent"
                 >
                   {card.cta}
                 </Link>
@@ -664,20 +664,20 @@ function EscrowExplained() {
   const c = useLangCopy(ESCROW_COPY);
 
   return (
-    <section id="escrow" className="scroll-mt-24 bg-[#f6f6f6] pt-20 pb-28 text-[#151515]">
+    <section id="escrow" className="scroll-mt-24 border-t border-border bg-background pt-20 pb-28 text-foreground">
       <div className="mx-auto w-full max-w-[1560px] px-4 text-center sm:px-6 lg:px-10 2xl:px-14">
         <div className="vuka-reveal">
-          <h2 className="text-[36px] leading-[1.18] font-bold tracking-[-0.02em] text-[#151515] sm:text-[44px]">
+          <h2 className="text-[36px] leading-[1.18] font-bold tracking-[-0.02em] text-foreground sm:text-[44px]">
             {c.title}
           </h2>
-          <p className="mx-auto mt-5 max-w-[580px] text-[16px] leading-[1.6] text-[#222222]">
+          <p className="mx-auto mt-5 max-w-[580px] text-[16px] leading-[1.6] text-muted-foreground">
             {c.leadLine1}
             <br className="hidden sm:inline" /> {c.leadLine2}
           </p>
           <div className="mt-9">
             <Link
               to="/escrow"
-              className="inline-flex h-[55px] w-full max-w-[448px] items-center justify-center rounded-full bg-[#151515] px-8 text-[16px] font-normal text-white transition-all duration-300 hover:-translate-y-0.5 hover:opacity-90 hover:shadow-lg"
+              className="inline-flex h-[55px] w-full max-w-[448px] items-center justify-center rounded-full bg-primary px-8 text-[16px] font-semibold text-primary-foreground transition-all duration-300 hover:-translate-y-0.5 hover:opacity-90 hover:shadow-lg"
             >
               {c.primaryCta}
             </Link>
@@ -689,15 +689,15 @@ function EscrowExplained() {
             <div
               key={idx}
               style={{ "--reveal-delay": `${idx * 90}ms` } as CSSProperties}
-              className="vuka-reveal vuka-card-lift flex min-h-[250px] flex-col items-center justify-between rounded-[6px] border border-[#ebebeb] bg-white px-5 pt-9 pb-6 text-center shadow-[0_12px_32px_rgba(0,0,0,0.05)]"
+              className="vuka-reveal vuka-card-lift flex min-h-[250px] flex-col items-center justify-between rounded-[6px] border border-border bg-card px-5 pt-9 pb-6 text-center shadow-xl"
             >
               <div>
-                <h3 className="text-[22px] leading-snug font-bold text-[#79b200]">{d.name}</h3>
-                <p className="mt-3.5 text-[15px] leading-[1.55] text-[#151515]">{d.body}</p>
+                <h3 className="text-[22px] leading-snug font-bold text-foreground">{d.name}</h3>
+                <p className="mt-3.5 text-[15px] leading-[1.55] text-muted-foreground">{d.body}</p>
               </div>
               <Link
                 to="/escrow"
-                className="mt-6 inline-flex h-[47px] w-full max-w-[204px] items-center justify-center rounded-full border border-[#79b200] bg-white px-5 text-[15px] font-semibold text-[#79b200] transition-colors hover:bg-[#79b200]/5"
+                className="mt-6 inline-flex h-[47px] w-full max-w-[204px] items-center justify-center rounded-full border border-border bg-muted/40 px-5 text-[15px] font-semibold text-foreground transition-colors hover:bg-accent"
               >
                 {c.learnMore}
               </Link>
@@ -1675,10 +1675,10 @@ function TrustLab() {
     set: (val: number[]) => void,
     max: number,
   ) => (
-    <div key={id} className="rounded-xl border border-[#ebebeb] bg-[#fafafa] p-4 transition-colors hover:border-[#79b200]/50">
+    <div key={id} className="rounded-xl border border-border bg-background/50 p-4 transition-colors hover:border-primary/50">
       <div className="flex items-center justify-between text-sm">
-        <span className="font-medium text-[#151515]">{label}</span>
-        <span className="rounded-md bg-[#151515] px-2 py-0.5 font-mono text-xs font-semibold text-[#c2f74d] tabular-nums">
+        <span className="font-medium text-foreground">{label}</span>
+        <span className="rounded-md bg-muted px-2 py-0.5 font-mono text-xs font-semibold text-primary tabular-nums">
           {v[0]} {unit}
         </span>
       </div>
@@ -1697,33 +1697,33 @@ function TrustLab() {
   );
 
   return (
-    <section id="trust" className="relative scroll-mt-24 overflow-hidden border-y border-[#e5e5e5] bg-white py-24 text-[#151515]">
-      {/* Subtle radial lime glow in the top-right corner */}
+    <section id="trust" className="relative scroll-mt-24 overflow-hidden border-y border-border bg-background py-24 text-foreground">
+      {/* Subtle radial glow in the top-right corner */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -top-40 right-0 h-[520px] w-[520px] rounded-full opacity-35 blur-3xl"
-        style={{ background: "radial-gradient(circle, #c2f74d 0%, transparent 70%)" }}
+        className="pointer-events-none absolute -top-40 right-0 h-[520px] w-[520px] rounded-full opacity-20 blur-3xl"
+        style={{ background: "radial-gradient(circle, var(--color-primary) 0%, transparent 70%)" }}
       />
 
       <div className="relative mx-auto w-full max-w-[1560px] px-4 sm:px-6 lg:px-10 2xl:px-14">
         {/* Top header + formula pill */}
         <div className="vuka-reveal flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
           <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#79b200]/30 bg-[#eef6dd] px-3.5 py-1 font-mono text-[11px] font-semibold tracking-[0.18em] text-[#557d00] uppercase">
-              <span className="vuka-dot-pulse size-2 rounded-full bg-[#79b200]" />
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3.5 py-1 font-mono text-[11px] font-semibold tracking-[0.18em] text-primary uppercase">
+              <span className="vuka-dot-pulse size-2 rounded-full bg-primary" />
               {c.eyebrowPill}
             </div>
-            <h2 className="mt-4 text-[36px] leading-[1.15] font-bold tracking-[-0.02em] text-[#151515] sm:text-[44px]">
+            <h2 className="mt-4 text-[36px] leading-[1.15] font-bold tracking-[-0.02em] text-foreground sm:text-[44px]">
               {c.title}
             </h2>
-            <p className="mt-4 text-[16px] leading-[1.6] text-[#444444]">
+            <p className="mt-4 text-[16px] leading-[1.6] text-muted-foreground">
               {c.intro}
             </p>
           </div>
 
           {/* Transparent published formula badge */}
-          <div className="vuka-card-lift shrink-0 rounded-xl border border-[#e2e8d5] bg-[#f8fbf2] px-4 py-3 font-mono text-xs text-[#222222]">
-            <div className="text-[10px] tracking-[0.16em] text-[#79b200] uppercase">{c.formulaHeading}</div>
+          <div className="vuka-card-lift shrink-0 rounded-xl border border-border bg-card px-4 py-3 font-mono text-xs text-foreground">
+            <div className="text-[10px] tracking-[0.16em] text-primary uppercase">{c.formulaHeading}</div>
             <div className="mt-1 font-semibold">
               {c.formulaText}
             </div>
@@ -1732,7 +1732,7 @@ function TrustLab() {
 
         {/* Interactive Trader Persona Switcher */}
         <div className="vuka-reveal mt-10 flex flex-wrap items-center gap-2.5" style={{ "--reveal-delay": "90ms" } as CSSProperties}>
-          <span className="mr-1 font-mono text-[11px] tracking-[0.15em] text-[#666666] uppercase">
+          <span className="mr-1 font-mono text-[11px] tracking-[0.15em] text-muted-foreground uppercase">
             {c.simulateProfile}
           </span>
           {c.presets.map((p) => {
@@ -1744,15 +1744,15 @@ function TrustLab() {
                 onClick={() => applyPreset(p)}
                 className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-medium transition-all duration-300 hover:-translate-y-0.5 ${
                   isSelected
-                    ? "border-[#151515] bg-[#151515] text-white shadow-sm"
-                    : "border-[#dcdcdc] bg-white text-[#222222] hover:border-[#79b200] hover:bg-[#f9fcf2]"
+                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                    : "border-border bg-card text-muted-foreground hover:border-primary/50 hover:bg-accent hover:text-foreground"
                 }`}
               >
                 <span
-                  className={`size-2 rounded-full ${isSelected ? "bg-[#c2f74d]" : "bg-[#79b200]"}`}
+                  className={`size-2 rounded-full ${isSelected ? "bg-primary-foreground" : "bg-primary"}`}
                 />
                 <span>{p.tag}</span>
-                <span className={`font-mono text-[11px] ${isSelected ? "text-white/70" : "text-[#777777]"}`}>
+                <span className={`font-mono text-[11px] ${isSelected ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
                   ({p.corridor})
                 </span>
               </button>
@@ -1763,14 +1763,14 @@ function TrustLab() {
         {/* Main Lab Workbench: Left Controls + Right Dark Telemetry Certificate */}
         <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_1.15fr] lg:items-stretch">
           {/* Left column: Interactive Sliders + Guardrail Pill */}
-          <div className="vuka-reveal vuka-card-lift flex flex-col justify-between rounded-2xl border border-[#e2e2e2] bg-white p-6 shadow-[0_14px_40px_rgba(0,0,0,0.05)] sm:p-7" style={{ "--reveal-delay": "140ms" } as CSSProperties}>
+          <div className="vuka-reveal vuka-card-lift flex flex-col justify-between rounded-2xl border border-border bg-card p-6 shadow-xl sm:p-7" style={{ "--reveal-delay": "140ms" } as CSSProperties}>
             <div>
-              <div className="flex items-center justify-between border-b border-[#efefef] pb-4">
+              <div className="flex items-center justify-between border-b border-border pb-4">
                 <div>
-                  <h3 className="text-lg font-bold text-[#151515]">{c.inputsTitle}</h3>
-                  <p className="text-xs text-[#666666]">{c.inputsSub}</p>
+                  <h3 className="text-lg font-bold text-foreground">{c.inputsTitle}</h3>
+                  <p className="text-xs text-muted-foreground">{c.inputsSub}</p>
                 </div>
-                <span className="rounded-full border border-[#dcdcdc] bg-[#fafafa] px-3 py-1 font-mono text-[11px] text-[#444444]">
+                <span className="rounded-full border border-border bg-muted/40 px-3 py-1 font-mono text-[11px] text-muted-foreground">
                   {c.totalCycles((onTime[0] ?? 0) + (disputes[0] ?? 0))}
                 </span>
               </div>
@@ -1785,17 +1785,17 @@ function TrustLab() {
             </div>
 
             {/* Next score unlock insight box */}
-            <div className="mt-6 flex items-start justify-between gap-4 rounded-xl border border-[#cfe899] bg-[#f4fbe4] p-4">
+            <div className="mt-6 flex items-start justify-between gap-4 rounded-xl border border-primary/30 bg-primary/10 p-4">
               <div>
-                <div className="font-mono text-[10px] font-semibold tracking-[0.18em] text-[#557d00] uppercase">
+                <div className="font-mono text-[10px] font-semibold tracking-[0.18em] text-primary uppercase">
                   {c.leverHeading}
                 </div>
-                <p className="mt-1 text-sm font-semibold text-[#151515]">
+                <p className="mt-1 text-sm font-semibold text-foreground">
                   {nextUnlock.label}
                 </p>
-                <p className="mt-0.5 text-xs text-[#444444]">
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   {c.leverPrefix}{" "}
-                  <strong className="font-mono text-[#151515]">
+                  <strong className="font-mono text-foreground">
                     {c.leverPts(Math.max(0, nextUnlock.maxPoints - nextUnlock.points))}
                   </strong>{" "}
                   {c.leverSuffix}
@@ -1803,7 +1803,7 @@ function TrustLab() {
               </div>
               <Link
                 to="/trust-score"
-                className="shrink-0 rounded-full bg-[#151515] px-3.5 py-2 font-mono text-[11px] font-medium text-[#c2f74d] transition-opacity hover:opacity-90"
+                className="shrink-0 rounded-full bg-primary px-3.5 py-2 font-mono text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
               >
                 {c.inspectFormula}
               </Link>
@@ -1811,23 +1811,23 @@ function TrustLab() {
           </div>
 
           {/* Right column: Dark Ink Live Trade-Credit Certificate & Telemetry Card */}
-          <div className="flex flex-col justify-between rounded-2xl border border-[#151515] bg-[#151515] p-6 text-white shadow-[0_24px_60px_rgba(21,21,21,0.18)] sm:p-8">
+          <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-6 text-foreground shadow-2xl sm:p-8">
             {/* Certificate Header */}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-4">
               <div className="flex items-center gap-2.5">
-                <span className="flex size-8 items-center justify-center rounded-lg bg-[#c2f74d] text-[#151515]">
+                <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                   <ShieldCheck className="size-4.5" aria-hidden="true" />
                 </span>
                 <div>
-                  <div className="font-mono text-[10px] tracking-[0.2em] text-[#c2f74d] uppercase">
+                  <div className="font-mono text-[10px] tracking-[0.2em] text-primary uppercase">
                     {c.certTitle}
                   </div>
-                  <div className="text-xs text-white/65">
+                  <div className="text-xs text-muted-foreground">
                     {c.certSub}
                   </div>
                 </div>
               </div>
-              <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1 font-mono text-[10px] tracking-[0.15em] text-white/80 uppercase">
+              <span className="rounded-full border border-border bg-muted/40 px-3 py-1 font-mono text-[10px] tracking-[0.15em] text-muted-foreground uppercase">
                 {c.zeroProxies}
               </span>
             </div>
@@ -1838,8 +1838,8 @@ function TrustLab() {
             </div>
 
             {/* 5-Factor Attribution Bars */}
-            <div className="space-y-3 border-t border-white/10 pt-5">
-              <div className="flex items-center justify-between font-mono text-[10px] tracking-[0.18em] text-white/50 uppercase">
+            <div className="space-y-3 border-t border-border pt-5">
+              <div className="flex items-center justify-between font-mono text-[10px] tracking-[0.18em] text-muted-foreground uppercase">
                 <span>{c.breakdownHeading}</span>
                 <span>{c.earnedMaxPts}</span>
               </div>
@@ -1848,17 +1848,17 @@ function TrustLab() {
                 return (
                   <div key={f.key} className="space-y-1">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-white/90">
+                      <span className="text-foreground">
                         {f.label}{" "}
-                        <span className="font-mono text-[10px] text-white/45">({f.weight}% {c.weightUnit})</span>
+                        <span className="font-mono text-[10px] text-muted-foreground">({f.weight}% {c.weightUnit})</span>
                       </span>
-                      <span className="font-mono text-xs text-[#c2f74d] tabular-nums">
-                        +{f.points} <span className="text-white/40">/ {f.maxPoints} {c.ptsUnit}</span>
+                      <span className="font-mono text-xs text-primary tabular-nums">
+                        +{f.points} <span className="text-muted-foreground">/ {f.maxPoints} {c.ptsUnit}</span>
                       </span>
                     </div>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                       <div
-                        className="h-full rounded-full bg-[#c2f74d] transition-[width] duration-300 ease-out"
+                        className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
                         style={{ width: `${fillPct}%` }}
                       />
                     </div>
@@ -1868,26 +1868,26 @@ function TrustLab() {
             </div>
 
             {/* Unlocked Trade Terms Footer Strip */}
-            <div className="mt-6 rounded-xl border border-white/12 bg-white/[0.04] p-4">
+            <div className="mt-6 rounded-xl border border-border bg-muted/20 p-4">
               <div className="flex items-center justify-between">
-                <span className="font-mono text-[10px] tracking-[0.18em] text-[#c2f74d] uppercase">
+                <span className="font-mono text-[10px] tracking-[0.18em] text-primary uppercase">
                   {c.termsUnlocked(band.label)}
                 </span>
-                <span className="font-mono text-[11px] text-white/60">{c.bandShort(band.band)}</span>
+                <span className="font-mono text-[11px] text-muted-foreground">{c.bandShort(band.band)}</span>
               </div>
-              <p className="mt-1 text-xs text-white/70">{band.desc}</p>
-              <div className="mt-3.5 grid grid-cols-3 gap-2 border-t border-white/10 pt-3">
+              <p className="mt-1 text-xs text-muted-foreground">{band.desc}</p>
+              <div className="mt-3.5 grid grid-cols-3 gap-2 border-t border-border pt-3">
                 <div>
-                  <div className="font-mono text-[10px] text-white/45 uppercase">{c.upfrontAsk}</div>
-                  <div className="mt-0.5 font-mono text-xs font-semibold text-white">{band.deposit}</div>
+                  <div className="font-mono text-[10px] text-muted-foreground uppercase">{c.upfrontAsk}</div>
+                  <div className="mt-0.5 font-mono text-xs font-semibold text-foreground">{band.deposit}</div>
                 </div>
                 <div>
-                  <div className="font-mono text-[10px] text-white/45 uppercase">{c.autoRelease}</div>
-                  <div className="mt-0.5 font-mono text-xs font-semibold text-[#c2f74d]">{band.window}</div>
+                  <div className="font-mono text-[10px] text-muted-foreground uppercase">{c.autoRelease}</div>
+                  <div className="mt-0.5 font-mono text-xs font-semibold text-primary">{band.window}</div>
                 </div>
                 <div>
-                  <div className="font-mono text-[10px] text-white/45 uppercase">{c.corridorTier}</div>
-                  <div className="mt-0.5 font-mono text-xs font-semibold text-white">{band.limit}</div>
+                  <div className="font-mono text-[10px] text-muted-foreground uppercase">{c.corridorTier}</div>
+                  <div className="mt-0.5 font-mono text-xs font-semibold text-foreground">{band.limit}</div>
                 </div>
               </div>
             </div>
@@ -2494,15 +2494,15 @@ function Markets() {
   return (
     <section
       id="markets"
-      className="relative scroll-mt-24 overflow-hidden border-t border-border bg-[#f6f6f4] text-[#141414]"
+      className="relative scroll-mt-24 overflow-hidden border-t border-border bg-background text-foreground"
     >
       {/* Subtle architectural grid background */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 opacity-45"
+        className="pointer-events-none absolute inset-0 opacity-20"
         style={{
           backgroundImage:
-            "radial-gradient(circle at 14% 18%, rgba(194, 247, 77, 0.24), transparent 36%), radial-gradient(circle at 86% 78%, rgba(194, 247, 77, 0.16), transparent 40%), linear-gradient(to right, rgba(20, 20, 20, 0.03) 1px, transparent 1px), linear-gradient(to bottom, rgba(20, 20, 20, 0.03) 1px, transparent 1px)",
+            "radial-gradient(circle at 14% 18%, rgba(255, 255, 255, 0.08), transparent 36%), radial-gradient(circle at 86% 78%, rgba(255, 255, 255, 0.05), transparent 40%), linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px)",
           backgroundSize: "100% 100%, 100% 100%, 40px 40px, 40px 40px",
         }}
       />
@@ -2511,64 +2511,64 @@ function Markets() {
         {/* Header & Live Engine Network Telemetry Strip */}
         <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end vuka-reveal">
           <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#141414]/10 bg-white px-3.5 py-1.5 shadow-2xs">
-              <span className="size-2 rounded-full bg-[#79b200]" />
-              <span className="font-mono text-[11px] font-medium uppercase tracking-[0.22em] text-[#141414]/80">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-1.5 shadow-sm">
+              <span className="size-2 rounded-full bg-primary" />
+              <span className="font-mono text-[11px] font-medium uppercase tracking-[0.22em] text-foreground">
                 {c.eyebrowPill}
               </span>
             </div>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[#141414] sm:text-[42px] sm:leading-[1.1]">
+            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-[42px] sm:leading-[1.1]">
               {c.title}
             </h2>
-            <p className="mt-4 text-base leading-relaxed text-[#5a5d55]">
+            <p className="mt-4 text-base leading-relaxed text-muted-foreground">
               {c.intro(corridorCount)}
             </p>
           </div>
 
           {/* 4 Live Network KPI Badges */}
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 lg:shrink-0">
-            <div className="rounded-2xl border border-[#e3e4de] bg-white px-4 py-3 shadow-2xs vuka-card-lift">
-              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#767a70]">
+            <div className="rounded-2xl border border-border bg-card px-4 py-3 shadow-sm vuka-card-lift">
+              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                 {c.kpiMarkets}
               </p>
-              <p className="mt-1 font-mono text-2xl font-bold tracking-tight text-[#141414]">
+              <p className="mt-1 font-mono text-2xl font-bold tracking-tight text-foreground">
                 {markets.length}
               </p>
-              <p className="text-[11px] text-[#686b62]">{c.kpiMarketsSub}</p>
+              <p className="text-[11px] text-muted-foreground">{c.kpiMarketsSub}</p>
             </div>
-            <div className="rounded-2xl border border-[#e3e4de] bg-white px-4 py-3 shadow-2xs vuka-card-lift">
-              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#767a70]">
+            <div className="rounded-2xl border border-border bg-card px-4 py-3 shadow-sm vuka-card-lift">
+              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                 {c.kpiCorridors}
               </p>
-              <p className="mt-1 font-mono text-2xl font-bold tracking-tight text-[#141414]">
+              <p className="mt-1 font-mono text-2xl font-bold tracking-tight text-foreground">
                 {corridorCount}
               </p>
-              <p className="text-[11px] text-[#686b62]">{c.kpiCorridorsSub}</p>
+              <p className="text-[11px] text-muted-foreground">{c.kpiCorridorsSub}</p>
             </div>
-            <div className="rounded-2xl border border-[#e3e4de] bg-white px-4 py-3 shadow-2xs vuka-card-lift">
-              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#767a70]">
+            <div className="rounded-2xl border border-border bg-card px-4 py-3 shadow-sm vuka-card-lift">
+              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                 {c.kpiIntraFee}
               </p>
-              <p className="mt-1 font-mono text-2xl font-bold tracking-tight text-[#4d7500]">
+              <p className="mt-1 font-mono text-2xl font-bold tracking-tight text-primary">
                 0.80%
               </p>
-              <p className="text-[11px] text-[#686b62]">{c.kpiIntraFeeSub}</p>
+              <p className="text-[11px] text-muted-foreground">{c.kpiIntraFeeSub}</p>
             </div>
-            <div className="rounded-2xl border border-[#e3e4de] bg-white px-4 py-3 shadow-2xs vuka-card-lift">
-              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#767a70]">
+            <div className="rounded-2xl border border-border bg-card px-4 py-3 shadow-sm vuka-card-lift">
+              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                 {c.kpiCrossFee}
               </p>
-              <p className="mt-1 font-mono text-2xl font-bold tracking-tight text-[#141414]">
+              <p className="mt-1 font-mono text-2xl font-bold tracking-tight text-foreground">
                 1.20%
               </p>
-              <p className="text-[11px] text-[#686b62]">{c.kpiCrossFeeSub}</p>
+              <p className="text-[11px] text-muted-foreground">{c.kpiCrossFeeSub}</p>
             </div>
           </div>
         </div>
 
         {/* Featured Corridor Quick-Preset Bar */}
         <div className="mt-9 flex flex-wrap items-center gap-2">
-          <span className="mr-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6d7067]">
+          <span className="mr-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             {c.featuredCorridors}
           </span>
           {FEATURED_CORRIDORS.map((preset) => {
@@ -2583,8 +2583,8 @@ function Markets() {
                 onClick={() => handleSelectPair(preset.from, preset.to)}
                 className={`group inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all ${
                   active
-                    ? "border-[#141414] bg-[#141414] text-white shadow-sm"
-                    : "border-[#dfdfd9] bg-white text-[#2c2e29] hover:border-[#141414]/40 hover:bg-[#fafaf8]"
+                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                    : "border-border bg-card text-muted-foreground hover:border-primary/50 hover:bg-accent hover:text-foreground"
                 }`}
               >
                 <Flag code={preset.from} className="w-4 rounded-[2px]" />
@@ -2593,10 +2593,10 @@ function Markets() {
                 <span
                   className={`rounded-full px-1.5 py-0.5 font-mono text-[10px] ${
                     active
-                      ? "bg-[#c2f74d] font-semibold text-[#141414]"
+                      ? "bg-primary-foreground font-semibold text-primary"
                       : sameBloc
-                        ? "bg-[#eef8d6] text-[#456b00]"
-                        : "bg-[#f1f2ee] text-[#686b62]"
+                        ? "bg-primary/20 text-primary"
+                        : "bg-muted text-muted-foreground"
                   }`}
                 >
                   {sameBloc ? "0.80%" : "1.20%"}
@@ -2609,25 +2609,25 @@ function Markets() {
         {/* Main 2-Column Interactive Workbench: 3D Orthographic Globe + Dark Ink Corridor Inspector */}
         <div className="mt-6 grid gap-7 lg:grid-cols-[1.05fr_1fr] lg:items-stretch">
           {/* Left Column: Interactive 3D Orthographic Globe Card */}
-          <div className="flex flex-col justify-between rounded-[28px] border border-[#e2e3dd] bg-white p-6 shadow-[0_24px_60px_-28px_rgba(0,0,0,0.08)] sm:p-7">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#eeeeea] pb-4">
+          <div className="flex flex-col justify-between rounded-[28px] border border-border bg-card p-6 shadow-xl sm:p-7">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#75796e]">
+                  <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                     {c.projectionTitle}
                   </span>
-                  <span className="rounded-full bg-[#eef8d6] px-2 py-0.5 font-mono text-[10px] font-semibold text-[#476d00]">
+                  <span className="rounded-full bg-primary/15 px-2 py-0.5 font-mono text-[10px] font-semibold text-primary">
                     {c.routesDrawn(arcs.length)}
                   </span>
                 </div>
-                <p className="mt-1 text-sm font-semibold text-[#141414]">
+                <p className="mt-1 text-sm font-semibold text-foreground">
                   {MARKET_HUB_CITIES[origin.code] ?? origin.name} ({origin.code}) →{" "}
                   {MARKET_HUB_CITIES[dest.code] ?? dest.name} ({dest.code})
                 </p>
               </div>
 
               {/* Arc topology switcher */}
-              <div className="inline-flex rounded-xl border border-[#e3e4de] bg-[#f7f7f5] p-1">
+              <div className="inline-flex rounded-xl border border-border bg-background p-1">
                 {(
                   [
                     { id: "corridor", label: c.modeActivePair },
@@ -2641,8 +2641,8 @@ function Markets() {
                     onClick={() => setArcMode(mode.id)}
                     className={`rounded-lg px-2.5 py-1 font-mono text-[11px] font-medium transition-all ${
                       arcMode === mode.id
-                        ? "bg-[#141414] text-[#c2f74d] shadow-2xs"
-                        : "text-[#63665d] hover:text-[#141414]"
+                        ? "bg-primary text-primary-foreground shadow-2xs"
+                        : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     {mode.label}
@@ -2655,7 +2655,7 @@ function Markets() {
             <div className="relative my-2 h-[380px] w-full sm:h-[420px]">
               <Suspense
                 fallback={
-                  <div className="flex h-full w-full items-center justify-center rounded-2xl bg-[#f9f9f7] font-mono text-xs text-[#75796e]">
+                  <div className="flex h-full w-full items-center justify-center rounded-2xl bg-background font-mono text-xs text-muted-foreground">
                     {c.globeFallback}
                   </div>
                 }
@@ -2670,24 +2670,24 @@ function Markets() {
               </Suspense>
 
               {/* Floating Origin / Destination quick pill in top-left of globe */}
-              <div className="pointer-events-none absolute top-3 left-3 flex flex-col gap-1.5 rounded-2xl border border-[#e3e4de]/90 bg-white/90 px-3.5 py-2.5 shadow-sm backdrop-blur-md">
+              <div className="pointer-events-none absolute top-3 left-3 flex flex-col gap-1.5 rounded-2xl border border-border bg-card/90 px-3.5 py-2.5 shadow-lg backdrop-blur-md">
                 <div className="flex items-center gap-2 text-xs">
-                  <span className="size-2 rounded-full bg-[#141414]" />
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-[#75796e]">
+                  <span className="size-2 rounded-full bg-muted-foreground" />
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                     {c.originHub}
                   </span>
                   <Flag code={origin.code} className="w-4 rounded-[2px]" />
-                  <span className="font-semibold text-[#141414]">
+                  <span className="font-semibold text-foreground">
                     {origin.name} ({origin.currency})
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
-                  <span className="size-2 rounded-full bg-[#79b200]" />
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-[#75796e]">
+                  <span className="size-2 rounded-full bg-primary" />
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                     {c.targetHub}
                   </span>
                   <Flag code={dest.code} className="w-4 rounded-[2px]" />
-                  <span className="font-semibold text-[#141414]">
+                  <span className="font-semibold text-foreground">
                     {dest.name} ({dest.currency})
                   </span>
                 </div>
@@ -2695,29 +2695,29 @@ function Markets() {
             </div>
 
             {/* Legend & interaction hint */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#eeeeea] pt-4 text-xs text-[#666960]">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4 text-xs text-muted-foreground">
               <div className="flex flex-wrap items-center gap-4">
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="size-2.5 rounded-xs bg-[#c2f74d] ring-1 ring-[#141414]/30" />
+                  <span className="size-2.5 rounded-xs bg-primary ring-1 ring-border" />
                   {c.legendLaunch}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="size-2.5 rounded-xs bg-[#141414]" />
+                  <span className="size-2.5 rounded-xs bg-muted" />
                   {c.legendOrigin}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="h-0.5 w-4 bg-[#141414]" />
+                  <span className="h-0.5 w-4 bg-muted-foreground" />
                   {c.legendArc}
                 </span>
               </div>
-              <span className="font-mono text-[11px] text-[#7a7d74]">
+              <span className="font-mono text-[11px] text-muted-foreground">
                 {c.globeHint}
               </span>
             </div>
           </div>
 
           {/* Right Column: Dark Ink Live Corridor Route Inspector */}
-          <div className="relative flex flex-col justify-between overflow-hidden rounded-[28px] border border-[#141414] bg-[#151515] p-6 text-white shadow-[0_28px_70px_-24px_rgba(0,0,0,0.45)] sm:p-8">
+          <div className="relative flex flex-col justify-between overflow-hidden rounded-[28px] border border-border bg-card p-6 text-foreground shadow-2xl sm:p-8">
             <div
               aria-hidden="true"
               className="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full opacity-20 blur-3xl"
@@ -2951,10 +2951,10 @@ function Markets() {
         <div className="mt-14">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
             <div>
-              <h3 className="text-lg font-semibold text-[#141414]">
+              <h3 className="text-lg font-semibold text-foreground">
                 {c.dirTitle}
               </h3>
-              <p className="text-xs text-[#666960]">
+              <p className="text-xs text-muted-foreground">
                 {c.dirSub}
               </p>
             </div>
@@ -2971,8 +2971,8 @@ function Markets() {
                     onClick={() => setRegionFilter(bloc)}
                     className={`rounded-full border px-3 py-1 font-mono text-xs font-medium transition ${
                       active
-                        ? "border-[#141414] bg-[#141414] text-[#c2f74d]"
-                        : "border-[#dfdfd9] bg-white text-[#555850] hover:border-[#141414]/40"
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-card text-muted-foreground hover:border-primary/50 hover:text-foreground"
                     }`}
                   >
                     {bloc === "ALL" ? c.allBlocs : bloc} ({count})
@@ -2991,10 +2991,10 @@ function Markets() {
                   key={m.code}
                   className={`group relative flex flex-col justify-between rounded-2xl border p-5 transition-all ${
                     isOrigin
-                      ? "border-[#141414] bg-[#141414] text-white shadow-lg"
+                      ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary shadow-lg"
                       : isDest
-                        ? "border-[#79b200] bg-white ring-2 ring-[#c2f74d]/70"
-                        : "border-[#e2e3dd] bg-white hover:border-[#141414]/40 hover:shadow-md"
+                        ? "border-primary bg-card text-foreground ring-2 ring-primary/70"
+                        : "border-border bg-card text-foreground hover:border-border hover:shadow-md"
                   }`}
                 >
                   <div>
@@ -3002,18 +3002,10 @@ function Markets() {
                       <div className="flex items-center gap-2.5">
                         <Flag code={m.code} className="w-8 rounded-xs shadow-2xs" />
                         <div>
-                          <span
-                            className={`font-mono text-xs font-bold ${
-                              isOrigin ? "text-white" : "text-[#141414]"
-                            }`}
-                          >
+                          <span className="font-mono text-xs font-bold text-foreground">
                             {m.code}
                           </span>
-                          <span
-                            className={`ml-1.5 font-mono text-[11px] ${
-                              isOrigin ? "text-white/60" : "text-[#767a70]"
-                            }`}
-                          >
+                          <span className="ml-1.5 font-mono text-[11px] text-muted-foreground">
                             +{DIAL[m.code] ?? ""}
                           </span>
                         </div>
@@ -3022,10 +3014,10 @@ function Markets() {
                       <span
                         className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold ${
                           isOrigin
-                            ? "bg-[#c2f74d] text-[#141414]"
+                            ? "bg-primary text-primary-foreground"
                             : isDest
-                              ? "bg-[#141414] text-[#c2f74d]"
-                              : "bg-[#f2f3ef] text-[#5c5f57]"
+                              ? "bg-muted text-foreground"
+                              : "bg-muted/50 text-muted-foreground"
                         }`}
                       >
                         {isOrigin ? c.badgeOrigin : isDest ? c.badgeTarget : m.region}
@@ -3033,41 +3025,19 @@ function Markets() {
                     </div>
 
                     <div className="mt-5 flex items-baseline justify-between">
-                      <p
-                        className={`text-base font-semibold ${
-                          isOrigin ? "text-white" : "text-[#141414]"
-                        }`}
-                      >
+                      <p className="text-base font-semibold text-foreground">
                         {m.name}
                       </p>
-                      <span
-                        className={`font-mono text-xs font-semibold ${
-                          isOrigin ? "text-[#c2f74d]" : "text-[#4d7500]"
-                        }`}
-                      >
+                      <span className="font-mono text-xs font-bold text-primary">
                         {m.currency}
                       </span>
                     </div>
 
-                    <div
-                      className={`mt-3 rounded-xl border px-3 py-2 ${
-                        isOrigin
-                          ? "border-white/12 bg-white/[0.05]"
-                          : "border-[#ebece6] bg-[#f9f9f7]"
-                      }`}
-                    >
-                      <p
-                        className={`font-mono text-[10px] uppercase tracking-wider ${
-                          isOrigin ? "text-white/50" : "text-[#7a7d74]"
-                        }`}
-                      >
+                    <div className="mt-3 rounded-xl border border-border bg-muted/30 px-3 py-2">
+                      <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                         {c.primaryRail}
                       </p>
-                      <p
-                        className={`mt-0.5 truncate text-xs font-medium ${
-                          isOrigin ? "text-white/90" : "text-[#22241f]"
-                        }`}
-                      >
+                      <p className="mt-0.5 truncate text-xs font-medium text-foreground">
                         {m.provider_name}
                       </p>
                     </div>
@@ -3086,8 +3056,8 @@ function Markets() {
                       }}
                       className={`rounded-lg border px-2 py-1 font-mono text-[10px] font-semibold transition ${
                         isOrigin
-                          ? "border-[#c2f74d] bg-[#c2f74d] text-[#141414]"
-                          : "border-[#dfdfd9] bg-white text-[#353731] hover:border-[#141414]"
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-background text-foreground hover:bg-muted"
                       }`}
                     >
                       {isOrigin ? c.originSelected : c.setOrigin}
@@ -3103,10 +3073,10 @@ function Markets() {
                       }}
                       className={`rounded-lg border px-2 py-1 font-mono text-[10px] font-semibold transition ${
                         isDest
-                          ? "border-[#141414] bg-[#141414] text-[#c2f74d]"
+                          ? "border-primary bg-primary text-primary-foreground"
                           : isOrigin
-                            ? "border-white/20 bg-white/10 text-white hover:bg-white/20"
-                            : "border-[#dfdfd9] bg-white text-[#353731] hover:border-[#141414]"
+                            ? "border-border bg-background/50 text-muted-foreground"
+                            : "border-border bg-background text-foreground hover:bg-muted"
                       }`}
                     >
                       {isDest ? c.targetSelected : c.setTarget}
