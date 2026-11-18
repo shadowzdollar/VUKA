@@ -324,7 +324,7 @@ function Journey() {
           <img
             src={escrowGlobe}
             alt={c.globeAlt}
-            className="vuka-float-slow block h-auto w-[620px] max-w-full select-none"
+            className="vuka-float-slow block h-auto w-[620px] max-w-full select-none [filter:invert(1)_hue-rotate(180deg)_contrast(0.92)]"
           />
         </div>
       </div>
