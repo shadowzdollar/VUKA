@@ -2,12 +2,13 @@
 
 import { useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { dailySpending } from "@/data/seed"
+import { useDashboardData } from "@/lib/dashboard-data"
 import { cn } from "@/lib/utils"
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 export function SpendingCalendar() {
+  const { dailySpending } = useDashboardData()
   const { weeks, maxAmount } = useMemo(() => {
     const map = new Map(dailySpending.map((d) => [d.date, d.amount]))
     // Build April 2026 calendar
@@ -34,7 +35,7 @@ export function SpendingCalendar() {
     while (last.length < 7) last.push({ day: null, amount: 0, date: "" })
 
     return { weeks, maxAmount: max }
-  }, [])
+  }, [dailySpending])
 
   return (
     <Card>

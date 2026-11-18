@@ -1,8 +1,9 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
-import { transferRecords, type TransferRecord } from "@/data/seed"
+import { useDashboardData } from "@/lib/dashboard-data"
+import type { TransferRecord } from "@/data/seed"
 import { cn } from "@/lib/utils"
 import { TransferStats } from "@/components/transfers/transfer-stats"
 import { TransferList } from "@/components/transfers/transfer-list"
@@ -19,7 +20,9 @@ const tabs: { key: TabKey; label: string }[] = [
 
 export function TransfersPageClient() {
   const [activeTab, setActiveTab] = useState<TabKey>("all")
+  const { transferRecords } = useDashboardData()
   const [transfers, setTransfers] = useState<TransferRecord[]>(transferRecords)
+  useEffect(() => setTransfers(transferRecords), [transferRecords])
 
   const filtered = useMemo(() => {
     if (activeTab === "all") return transfers

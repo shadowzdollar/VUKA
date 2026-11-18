@@ -7,6 +7,7 @@ import { motion } from "motion/react"
 
 import { cn } from "@/lib/utils"
 import type { BankAccount } from "@/data/seed"
+import { formatMoney } from "@/lib/dashboard-data"
 
 interface AccountCardProps {
   account: BankAccount
@@ -14,11 +15,7 @@ interface AccountCardProps {
   onSelect?: (account: BankAccount) => void
 }
 
-const fmt = (n: number, currency = "$") =>
-  `${currency}${new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Math.abs(n))}`
+const fmt = (n: number, currency = "USD") => formatMoney(Math.abs(n), currency)
 
 export function AccountCard({ account, index, onSelect }: AccountCardProps) {
   const [imgError, setImgError] = useState(false)

@@ -17,7 +17,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
-import { categoryBreakdowns } from "@/data/seed"
+import { useDashboardData } from "@/lib/dashboard-data"
 
 const SUBCATEGORY_COLORS = [
   "var(--color-chart-1)",
@@ -28,16 +28,17 @@ const SUBCATEGORY_COLORS = [
 ]
 
 export function CategoryDonut() {
+  const { categoryBreakdowns } = useDashboardData()
   const [selected, setSelected] = useState<string | null>(null)
 
   const total = useMemo(
     () => categoryBreakdowns.reduce((s, c) => s + c.amount, 0),
-    []
+    [categoryBreakdowns]
   )
 
   const selectedCategory = useMemo(
     () => categoryBreakdowns.find((c) => c.category === selected) ?? null,
-    [selected]
+    [selected, categoryBreakdowns]
   )
 
   const chartConfig = useMemo<ChartConfig>(() => {
@@ -59,7 +60,7 @@ export function CategoryDonut() {
       }
     })
     return config
-  }, [selectedCategory])
+  }, [selectedCategory, categoryBreakdowns])
 
   const pieData = useMemo(() => {
     if (selectedCategory) {
@@ -74,7 +75,7 @@ export function CategoryDonut() {
       value: c.amount,
       fill: c.color,
     }))
-  }, [selectedCategory])
+  }, [selectedCategory, categoryBreakdowns])
 
   const centerAmount = selectedCategory ? selectedCategory.amount : total
 
@@ -85,7 +86,7 @@ export function CategoryDonut() {
           <CardTitle>
             {selectedCategory
               ? selectedCategory.category
-              : "Spending by Category"}
+              : "Volume by Corridor"}
           </CardTitle>
           {selectedCategory && (
             <Button
@@ -162,7 +163,7 @@ export function CategoryDonut() {
                   dominantBaseline="middle"
                   className="fill-muted-foreground text-xs"
                 >
-                  {selectedCategory ? "category total" : "total spent"}
+                  {selectedCategory ? "corridor total" : "total volume"}
                 </text>
               </PieChart>
             </ChartContainer>

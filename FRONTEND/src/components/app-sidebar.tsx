@@ -5,6 +5,8 @@ import Link from "next/link"
 import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
+import { VukaMark } from "@/components/vuka/brand"
+import { useDashboardData } from "@/lib/dashboard-data"
 import {
   Sidebar,
   SidebarContent,
@@ -23,7 +25,6 @@ import {
   TargetIcon,
   SettingsIcon,
   LifeBuoyIcon,
-  LandmarkIcon,
   SendIcon,
   TrendingUpIcon,
   BitcoinIcon,
@@ -33,11 +34,6 @@ import {
 } from "lucide-react"
 
 const data = {
-  user: {
-    name: "Abderrahim G.",
-    email: "abderrahim@fintech.com",
-    avatar: "/avatars/user.jpg",
-  },
   navDaily: [
     { title: "Overview", url: "/dashboard", icon: <LayoutDashboardIcon /> },
     { title: "Accounts", url: "/accounts", icon: <WalletIcon /> },
@@ -54,8 +50,8 @@ const data = {
     { title: "Budgets", url: "/budgets", icon: <TargetIcon /> },
   ],
   navAuth: [
-    { title: "Sign In", url: "/sign-in", icon: <LogInIcon /> },
-    { title: "Sign Up", url: "/sign-up", icon: <UserPlusIcon /> },
+    { title: "Sign In", url: "/login", icon: <LogInIcon /> },
+    { title: "Sign Up", url: "/register", icon: <UserPlusIcon /> },
   ],
   navSecondary: [
     { title: "Notifications", url: "/notifications", icon: <BellIcon /> },
@@ -65,19 +61,18 @@ const data = {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const { user } = useDashboardData()
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" render={<Link href="/dashboard" />}>
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                <LandmarkIcon className="size-4" />
-              </div>
+              <VukaMark className="size-8 shrink-0" />
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">Shadcn Fintech</span>
+                <span className="truncate font-semibold tracking-[0.18em]">VUKA</span>
                 <span className="truncate text-xs text-muted-foreground">
-                  Finance Dashboard
+                  Rise &amp; cross over
                 </span>
               </div>
             </SidebarMenuButton>
@@ -92,7 +87,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser user={user} />
       </SidebarFooter>
     </Sidebar>
   )

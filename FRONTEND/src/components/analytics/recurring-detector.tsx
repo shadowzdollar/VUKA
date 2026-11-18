@@ -73,7 +73,7 @@ export function RecurringDetector() {
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>Recurring Charges</CardTitle>
+            <CardTitle>Repeat Payments</CardTitle>
             <CardDescription>
               <span className="tabular-nums font-medium text-foreground">
                 ${monthlyTotal.toFixed(2)}

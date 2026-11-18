@@ -1,6 +1,8 @@
 "use client"
 
 import Link from "next/link"
+import { useNavigate } from "@tanstack/react-router"
+import { useSession } from "@/lib/session"
 import {
   Avatar,
   AvatarFallback,
@@ -30,9 +32,15 @@ export function NavUser({
     name: string
     email: string
     avatar: string
+    initials?: string
   }
 }) {
   const { isMobile } = useSidebar()
+  const { logout } = useSession()
+  const navigate = useNavigate()
+  const signOut = () => {
+    void logout().then(() => navigate({ to: "/login" }))
+  }
 
   return (
     <SidebarMenu>
@@ -45,7 +53,7 @@ export function NavUser({
           >
             <Avatar>
               <AvatarImage src={user.avatar} alt={user.name} />
-              <AvatarFallback>AG</AvatarFallback>
+              <AvatarFallback>{user.initials ?? "VK"}</AvatarFallback>
             </Avatar>
             <div className="grid flex-1 text-left text-sm leading-tight">
               <span className="truncate font-medium">{user.name}</span>
@@ -64,7 +72,7 @@ export function NavUser({
                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                   <Avatar>
                     <AvatarImage src={user.avatar} alt={user.name} />
-                    <AvatarFallback>AG</AvatarFallback>
+                    <AvatarFallback>{user.initials ?? "VK"}</AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-medium">{user.name}</span>
@@ -75,10 +83,10 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem render={<Link href="/verification" />}>
                 <SparklesIcon
                 />
-                Upgrade to Pro
+                Raise my limits
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
@@ -91,11 +99,11 @@ export function NavUser({
               <DropdownMenuItem render={<Link href="/settings?tab=billing" />}>
                 <CreditCardIcon
                 />
-                Billing
+                Limits & fees
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem render={<Link href="/sign-in" />}>
+            <DropdownMenuItem onClick={signOut}>
               <LogOutIcon
               />
               Log out

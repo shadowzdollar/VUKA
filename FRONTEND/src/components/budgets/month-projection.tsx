@@ -9,7 +9,8 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 import { Area, AreaChart, ReferenceLine, XAxis, YAxis } from "recharts"
-import { budgetCategories, dailySpending } from "@/data/seed"
+import { compactUsd, useDashboardData } from "@/lib/dashboard-data"
+import { budgetCategories } from "@/data/seed"
 import { AlertTriangleIcon, CheckCircle2Icon } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -21,6 +22,7 @@ const chartConfig = {
 } satisfies ChartConfig
 
 export function MonthProjection() {
+  const { dailySpending } = useDashboardData()
   const stats = useMemo(() => {
     const totalBudget = budgetCategories.reduce((s, b) => s + b.budget, 0)
     const spentDays = dailySpending.filter((d) => d.amount > 0)
@@ -38,7 +40,7 @@ export function MonthProjection() {
     }, [])
 
     return { totalBudget, totalSpent, avgDaily, daysLeft, projected, overBudget, chartData }
-  }, [])
+  }, [dailySpending])
 
   return (
     <Card>
@@ -132,7 +134,7 @@ export function MonthProjection() {
               fontSize={10}
               tickMargin={4}
               stroke="var(--color-muted-foreground)"
-              tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+              tickFormatter={(v) => compactUsd(Number(v))}
             />
             <ChartTooltip
               content={

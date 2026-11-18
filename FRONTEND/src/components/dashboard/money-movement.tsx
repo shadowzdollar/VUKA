@@ -21,7 +21,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
-import { moneyMovementByPeriod } from "@/data/seed"
+import { compactUsd, formatMoney, useDashboardData } from "@/lib/dashboard-data"
 import { ArrowDownLeftIcon, ArrowUpRightIcon } from "lucide-react"
 
 const chartConfig = {
@@ -35,9 +35,10 @@ const chartConfig = {
   },
 } satisfies ChartConfig
 
-type Period = keyof typeof moneyMovementByPeriod
+type Period = "7d" | "30d" | "90d"
 
 export function MoneyMovement() {
+  const { moneyMovementByPeriod } = useDashboardData()
   const [period, setPeriod] = useState<Period>("7d")
   const data = moneyMovementByPeriod[period]
 
@@ -74,7 +75,7 @@ export function MoneyMovement() {
             <div>
               <p className="text-[10px] font-medium text-emerald-600/70 dark:text-emerald-400/70">Money In</p>
               <p className="text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
-                ${totals.in.toLocaleString()}
+                {formatMoney(totals.in)}
               </p>
             </div>
           </div>
@@ -85,7 +86,7 @@ export function MoneyMovement() {
             <div>
               <p className="text-[10px] font-medium text-rose-600/70 dark:text-rose-400/70">Money Out</p>
               <p className="text-sm font-bold tabular-nums text-rose-700 dark:text-rose-300">
-                ${totals.out.toLocaleString()}
+                {formatMoney(totals.out)}
               </p>
             </div>
           </div>
@@ -94,8 +95,8 @@ export function MoneyMovement() {
         {/* Net flow */}
         <div className="flex items-center justify-between rounded-lg border px-3 py-2">
           <span className="text-xs text-muted-foreground">Net Flow</span>
-          <span className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-            +${totals.net.toLocaleString()}
+          <span className={`text-sm font-bold tabular-nums ${totals.net < 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+            {formatMoney(totals.net, "USD", { signed: true })}
           </span>
         </div>
 
@@ -126,7 +127,7 @@ export function MoneyMovement() {
               fontSize={11}
               tickMargin={4}
               stroke="var(--color-muted-foreground)"
-              tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+              tickFormatter={(v) => compactUsd(Number(v))}
             />
             <ChartTooltip
               content={

@@ -14,7 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { notifications } from "@/data/seed"
+import { useDashboardData } from "@/lib/dashboard-data"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -37,8 +37,6 @@ import {
   LoaderIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-const unreadCount = notifications.filter((n) => !n.read).length
 
 const iconMap: Record<string, React.ReactNode> = {
   "arrow-down-left": <ArrowDownLeftIcon className="size-3.5" />,
@@ -66,11 +64,13 @@ const typeColor: Record<string, string> = {
 }
 
 function NotificationDropdown({ icon, badge }: { icon: React.ReactNode; badge: number }) {
+  const { notifications, markNotificationRead } = useDashboardData()
   const latest = notifications.slice(0, 6)
   const [actionStates, setActionStates] = React.useState<Record<string, "idle" | "loading" | "accepted" | "declined">>({})
 
   const handleAction = (id: string, action: "accepted" | "declined") => {
     setActionStates((prev) => ({ ...prev, [id]: "loading" }))
+    markNotificationRead(id)
     setTimeout(() => {
       setActionStates((prev) => ({ ...prev, [id]: action }))
     }, 800)
@@ -212,6 +212,8 @@ export function NavSecondary({
     icon: React.ReactNode
   }[]
 } & React.ComponentPropsWithoutRef<typeof SidebarGroup>) {
+  const { notifications } = useDashboardData()
+  const unreadCount = notifications.filter((n) => !n.read).length
   return (
     <SidebarGroup {...props}>
       <SidebarGroupContent>

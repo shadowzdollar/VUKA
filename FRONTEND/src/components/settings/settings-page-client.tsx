@@ -4,6 +4,12 @@ import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import { useTheme } from "next-themes"
 import { cn } from "@/lib/utils"
+import { useQuery } from "@tanstack/react-query"
+import Link from "next/link"
+import { formatMoney, useDashboardData } from "@/lib/dashboard-data"
+import { invoices as invoiceApi, platform } from "@/lib/api/endpoints"
+import { useSession } from "@/lib/session"
+import { invoiceTotal } from "@/components/vuka/trader-invoices"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
@@ -52,7 +58,7 @@ const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "profile", label: "Profile", icon: <UserIcon className="size-4" /> },
   { id: "security", label: "Security", icon: <ShieldIcon className="size-4" /> },
   { id: "notifications", label: "Notifications", icon: <BellIcon className="size-4" /> },
-  { id: "billing", label: "Billing", icon: <CreditCardIcon className="size-4" /> },
+  { id: "billing", label: "Limits & fees", icon: <CreditCardIcon className="size-4" /> },
   { id: "appearance", label: "Appearance", icon: <PaletteIcon className="size-4" /> },
 ]
 
@@ -60,8 +66,13 @@ const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
 
 function ProfileTab() {
   const [saving, setSaving] = React.useState(false)
-  const [name, setName] = React.useState("Abderrahim G.")
-  const [email, setEmail] = React.useState("abderrahim@fintech.com")
+  const { user } = useDashboardData()
+  const [name, setName] = React.useState(user.name)
+  const [email, setEmail] = React.useState(user.email)
+  React.useEffect(() => {
+    setName(user.name)
+    setEmail(user.email)
+  }, [user.name, user.email])
 
   function handleSave() {
     setSaving(true)
@@ -77,8 +88,8 @@ function ProfileTab() {
       <CardContent className="space-y-6">
         <div className="flex items-center gap-4">
           <Avatar className="size-16">
-            <AvatarImage src="/avatars/user.jpg" alt="User avatar" />
-            <AvatarFallback className="text-lg">AG</AvatarFallback>
+            <AvatarImage src={user.avatar} alt="User avatar" />
+            <AvatarFallback className="text-lg">{user.initials}</AvatarFallback>
           </Avatar>
           <div>
             <p className="font-medium">{name}</p>
@@ -283,44 +294,62 @@ function NotificationsTab() {
 
 // ── Billing Tab ──────────────────────────────────────────────────────────────
 
-const invoices = [
-  { date: "Mar 01, 2026", amount: "$0.00", status: "Free Plan", id: "INV-001" },
-  { date: "Feb 01, 2026", amount: "$0.00", status: "Free Plan", id: "INV-002" },
-  { date: "Jan 01, 2026", amount: "$0.00", status: "Free Plan", id: "INV-003" },
-]
-
-const freeFeatures = [
-  "1 bank account connection",
-  "Basic transaction tracking",
-  "Monthly budget tracking",
-  "Standard support",
-]
-
-const proFeatures = [
-  "Unlimited bank connections",
-  "Advanced analytics & insights",
-  "Unlimited virtual cards",
-  "Priority support",
-  "Custom budget categories",
-  "Export to CSV & PDF",
-]
+const TIER_ORDER = ["PENDING", "VERIFIED", "BUSINESS_VERIFIED"] as const
 
 function BillingTab() {
+  const { spendingLimit, mode, user } = useDashboardData()
+  const { session } = useSession()
+  const traderId = session.status === "trader" ? session.trader.id : null
+  // Tier limits come from the engine (never hard-coded in the UI).
+  const config = useQuery({ queryKey: ["public-config"], queryFn: platform.config, staleTime: 300_000 })
+  const invoiceList = useQuery({
+    queryKey: ["invoices", traderId, "all"],
+    queryFn: () => invoiceApi.list(traderId ?? ""),
+    enabled: Boolean(traderId),
+  })
+  const tier = spendingLimit.tier
+  const limits = config.data?.kyc_limits ?? null
+  const current = limits?.[tier]
+  const nextTier = TIER_ORDER[TIER_ORDER.indexOf(tier as (typeof TIER_ORDER)[number]) + 1]
+  const next = nextTier ? limits?.[nextTier] : undefined
+  const freeFeatures = current
+    ? [
+        `${formatMoney(current.per_txn_usd)} per payment`,
+        `${formatMoney(current.daily_usd)} per day`,
+        `${formatMoney(current.monthly_usd)} per month`,
+        `${formatMoney(spendingLimit.spent)} used this month`,
+      ]
+    : ["Limits load from the VUKA engine"]
+  const proFeatures = next
+    ? [
+        `${formatMoney(next.per_txn_usd)} per payment`,
+        `${formatMoney(next.daily_usd)} per day`,
+        `${formatMoney(next.monthly_usd)} per month`,
+        "Submit verification evidence references to qualify",
+      ]
+    : ["You are on the highest tier"]
+  const invoices = (invoiceList.data ?? []).slice(0, 8).map((inv) => ({
+    id: inv.id,
+    date: inv.issue_date.slice(0, 10),
+    amount: formatMoney(invoiceTotal(inv), inv.currency),
+    status: inv.status,
+    number: inv.number,
+  }))
   return (
     <div className="space-y-6">
       {/* Current Plan */}
       <Card>
         <CardHeader>
-          <CardTitle>Current Plan</CardTitle>
+          <CardTitle>KYC Tier &amp; Limits</CardTitle>
           <CardDescription>
-            You are currently on the free plan
+            VUKA charges no subscription. Corridor fees are quoted per payment; limits follow your verification tier.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-start justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-semibold">Vault Free</h3>
+                <h3 className="text-lg font-semibold">{tier.replace("_", " ")}</h3>
                 <Badge variant="secondary">Current</Badge>
               </div>
               <ul className="mt-3 space-y-1.5">
@@ -333,8 +362,8 @@ function BillingTab() {
               </ul>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-bold tabular-nums">$0</p>
-              <p className="text-sm text-muted-foreground">/month</p>
+              <p className="text-2xl font-bold tabular-nums">{formatMoney(spendingLimit.budget)}</p>
+              <p className="text-sm text-muted-foreground">/month limit</p>
             </div>
           </div>
 
@@ -343,7 +372,7 @@ function BillingTab() {
               <div>
                 <div className="flex items-center gap-2">
                   <SparklesIcon className="size-4 text-primary" />
-                  <h4 className="font-semibold">Vault Pro</h4>
+                  <h4 className="font-semibold">{nextTier ? nextTier.replace("_", " ") : "Top tier"}</h4>
                 </div>
                 <ul className="mt-3 space-y-1.5">
                   {proFeatures.map((f) => (
@@ -355,12 +384,12 @@ function BillingTab() {
                 </ul>
               </div>
               <div className="text-right">
-                <p className="text-2xl font-bold tabular-nums">$12</p>
-                <p className="text-sm text-muted-foreground">/month</p>
+                <p className="text-2xl font-bold tabular-nums">{next ? formatMoney(next.monthly_usd) : "—"}</p>
+                <p className="text-sm text-muted-foreground">/month limit</p>
               </div>
             </div>
             <div className="mt-4">
-              <Button>Upgrade to Pro</Button>
+              <Button asChild><Link href="/verification">Raise my tier</Link></Button>
             </div>
           </div>
         </CardContent>
@@ -369,8 +398,8 @@ function BillingTab() {
       {/* Payment Method */}
       <Card>
         <CardHeader>
-          <CardTitle>Payment Method</CardTitle>
-          <CardDescription>Manage your payment details</CardDescription>
+          <CardTitle>Funding Source</CardTitle>
+          <CardDescription>Mobile money wallet used for cash-in and payouts</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between rounded-lg border p-3">
@@ -379,8 +408,8 @@ function BillingTab() {
                 <CreditCardIcon className="size-4" />
               </div>
               <div>
-                <p className="text-sm font-medium">Visa ending in 4589</p>
-                <p className="text-xs text-muted-foreground">Expires 09/28</p>
+                <p className="text-sm font-medium">Mobile money · {mode === "trader" ? user.email : "sandbox wallet"}</p>
+                <p className="text-xs text-muted-foreground">Your provider authorizes each collection — VUKA never stores your PIN</p>
               </div>
             </div>
             <Button variant="outline" size="sm">
@@ -393,9 +422,9 @@ function BillingTab() {
       {/* Billing History */}
       <Card>
         <CardHeader>
-          <CardTitle>Billing History</CardTitle>
+          <CardTitle>Invoices</CardTitle>
           <CardDescription>
-            Download past invoices and receipts
+            {mode === "trader" ? "Your latest invoices from the VUKA ledger" : "Invoices appear here for signed-in traders"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -405,7 +434,7 @@ function BillingTab() {
                 <TableHead>Date</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Invoice</TableHead>
+                <TableHead className="text-right">Number</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -416,11 +445,11 @@ function BillingTab() {
                   <TableCell>
                     <Badge variant="secondary">{inv.status}</Badge>
                   </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon-xs">
+                  <TableCell className="text-right font-mono text-xs">
+                    <Link href="/wallets" className="inline-flex items-center gap-1 hover:underline">
+                      {inv.number}
                       <DownloadIcon className="size-3.5" />
-                      <span className="sr-only">Download</span>
-                    </Button>
+                    </Link>
                   </TableCell>
                 </TableRow>
               ))}
@@ -452,7 +481,7 @@ function AppearanceTab() {
       <CardHeader>
         <CardTitle>Appearance</CardTitle>
         <CardDescription>
-          Customize how Vault looks on your device
+          Customize how VUKA looks on your device
         </CardDescription>
       </CardHeader>
       <CardContent>

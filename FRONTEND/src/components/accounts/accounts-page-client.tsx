@@ -1,8 +1,9 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
-import { bankAccounts, type BankAccount } from "@/data/seed"
+import { useDashboardData } from "@/lib/dashboard-data"
+import type { BankAccount } from "@/data/seed"
 import { cn } from "@/lib/utils"
 import { AccountSummary } from "@/components/accounts/account-summary"
 import { AccountCard } from "@/components/accounts/account-grid"
@@ -21,7 +22,10 @@ type AccountType = (typeof filterTabs)[number]["value"]
 
 export function AccountsPageClient() {
   const [selectedType, setSelectedType] = useState<AccountType>("all")
+  const { bankAccounts } = useDashboardData()
   const [accounts, setAccounts] = useState<BankAccount[]>(bankAccounts)
+  // Re-sync when the engine answers (or refreshes) the wallet list.
+  useEffect(() => setAccounts(bankAccounts), [bankAccounts])
 
   const filtered = useMemo(
     () =>

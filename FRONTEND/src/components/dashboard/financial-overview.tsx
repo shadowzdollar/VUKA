@@ -22,7 +22,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis, type DotProps } from "recharts"
-import { financialOverview } from "@/data/seed"
+import { compactUsd, useDashboardData } from "@/lib/dashboard-data"
 import { CalendarIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { DateRange } from "react-day-picker"
@@ -60,6 +60,7 @@ const monthIndex: Record<string, number> = {
 }
 
 export function FinancialOverview() {
+  const { financialOverview } = useDashboardData()
   const [date, setDate] = useState<DateRange | undefined>({
     from: new Date(2026, 0, 1),
     to: new Date(2026, 11, 31),
@@ -78,7 +79,7 @@ export function FinancialOverview() {
       const m = monthIndex[d.month] ?? 0
       return m >= fromMonth && m <= toMonth
     })
-  }, [date])
+  }, [date, financialOverview])
 
   const totals = useMemo(() => {
     const current = filteredData.reduce((s, d) => s + d.currentYear, 0)
@@ -184,7 +185,7 @@ export function FinancialOverview() {
               fontSize={12}
               tickMargin={8}
               stroke="var(--color-muted-foreground)"
-              tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+              tickFormatter={(v) => compactUsd(Number(v))}
             />
             <ChartTooltip
               content={

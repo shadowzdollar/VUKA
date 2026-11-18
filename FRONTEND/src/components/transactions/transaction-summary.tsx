@@ -2,19 +2,16 @@ import { ArrowDownLeftIcon, ArrowUpRightIcon, HashIcon, TrendingUpIcon } from "l
 
 import { cn } from "@/lib/utils"
 import type { FullTransaction } from "@/data/seed"
+import { dominantCurrency, formatMoney } from "@/lib/dashboard-data"
 
 interface TransactionSummaryProps {
   transactions: FullTransaction[]
 }
 
-const fmt = (n: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-  }).format(n)
-
-export function TransactionSummary({ transactions }: TransactionSummaryProps) {
+export function TransactionSummary({ transactions: all }: TransactionSummaryProps) {
+  const currency = dominantCurrency(all)
+  const fmt = (n: number) => formatMoney(n, currency)
+  const transactions = all.filter((t) => (t.currency ?? "USD").trim() === currency)
   const totalIn = transactions
     .filter((t) => t.type === "income")
     .reduce((s, t) => s + t.amount, 0)
@@ -46,7 +43,7 @@ export function TransactionSummary({ transactions }: TransactionSummaryProps) {
     },
     {
       label: "Largest",
-      value: largest ? fmt(Math.abs(largest.amount)) : "$0.00",
+      value: largest ? fmt(Math.abs(largest.amount)) : fmt(0),
       icon: TrendingUpIcon,
       color: "text-primary",
       bg: "bg-primary/10",

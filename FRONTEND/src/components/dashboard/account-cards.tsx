@@ -1,11 +1,13 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { accountCards, walletBalance } from "@/data/seed"
+import { useDashboardData, formatMoney } from "@/lib/dashboard-data"
+import type { AccountCard } from "@/data/seed"
 import {
   CreditCardIcon,
   PlusIcon,
   TrendingUpIcon,
+  TrendingDownIcon,
   EuroIcon,
   BitcoinIcon,
   ChartLineIcon,
@@ -29,39 +31,36 @@ import { cn } from "@/lib/utils"
 
 type AddState = "idle" | "form" | "adding" | "success"
 
-const initialCards = [
-  {
-    ...accountCards[0],
-    style: "bg-muted text-foreground",
-    icon: <EuroIcon className="size-5 opacity-30" />,
-    chipColor: "bg-foreground/10",
-    last4: "4589",
-  },
-  {
-    ...accountCards[1],
-    style: "bg-primary text-primary-foreground",
-    icon: <BitcoinIcon className="size-5 opacity-30" />,
-    chipColor: "bg-primary-foreground/20",
-    last4: "7321",
-  },
-  {
-    ...accountCards[2],
-    style: "bg-card text-card-foreground ring-1 ring-border",
-    icon: <ChartLineIcon className="size-5 opacity-30" />,
-    chipColor: "bg-foreground/10",
-    last4: "9012",
-  },
+// Visual presets for the stacked wallets, applied in order (wallet data comes from the engine).
+const cardPresets = [
+  { style: "bg-muted text-foreground", icon: <EuroIcon className="size-5 opacity-30" />, chipColor: "bg-foreground/10" },
+  { style: "bg-primary text-primary-foreground", icon: <BitcoinIcon className="size-5 opacity-30" />, chipColor: "bg-primary-foreground/20" },
+  { style: "bg-card text-card-foreground ring-1 ring-border", icon: <ChartLineIcon className="size-5 opacity-30" />, chipColor: "bg-foreground/10" },
 ]
 
+function buildCards(source: AccountCard[]) {
+  return source.map((card, i) => ({
+    ...card,
+    ...cardPresets[i % cardPresets.length]!,
+    last4: card.id.replace(/[^0-9a-z]/gi, "").slice(-4).padStart(4, "0"),
+  }))
+}
+
 const newCardOptions = [
-  { value: "savings", label: "Savings Account", currency: "$", style: "bg-emerald-600 text-white", icon: <TrendingUpIcon className="size-5 opacity-30" />, chipColor: "bg-white/20" },
-  { value: "business", label: "Business Account", currency: "$", style: "bg-violet-600 text-white", icon: <CreditCardIcon className="size-5 opacity-30" />, chipColor: "bg-white/20" },
-  { value: "travel", label: "Travel Card", currency: "€", style: "bg-amber-600 text-white", icon: <EuroIcon className="size-5 opacity-30" />, chipColor: "bg-white/20" },
+  { value: "savings", label: "Savings wallet", currency: "RWF ", style: "bg-emerald-600 text-white", icon: <TrendingUpIcon className="size-5 opacity-30" />, chipColor: "bg-white/20" },
+  { value: "business", label: "Business trade wallet", currency: "RWF ", style: "bg-violet-600 text-white", icon: <CreditCardIcon className="size-5 opacity-30" />, chipColor: "bg-white/20" },
+  { value: "travel", label: "Cross-border wallet", currency: "KES ", style: "bg-amber-600 text-white", icon: <EuroIcon className="size-5 opacity-30" />, chipColor: "bg-white/20" },
 ]
 
 export function AccountCards() {
-  const [cards, setCards] = useState(initialCards)
-  const [order, setOrder] = useState(() => initialCards.map((_, i) => i))
+  const { accountCards, walletBalance } = useDashboardData()
+  const [cards, setCards] = useState(() => buildCards(accountCards))
+  const [order, setOrder] = useState(() => accountCards.map((_, i) => i))
+  // Re-sync with the ledger whenever the engine returns fresh wallets.
+  useEffect(() => {
+    setCards(buildCards(accountCards))
+    setOrder(accountCards.map((_, i) => i))
+  }, [accountCards])
   const [addState, setAddState] = useState<AddState>("idle")
   const [newCardType, setNewCardType] = useState("savings")
   const [newCardName, setNewCardName] = useState("")
@@ -154,7 +153,7 @@ export function AccountCards() {
                           **** {c.last4}
                         </span>
                         <p className="text-xl font-bold tabular-nums tracking-tight">
-                          {c.currency === "BTC"
+                          {c.currency === "BTC" || c.currency === "USDC"
                             ? `${c.balance} ${c.currency}`
                             : `${c.currency}${c.balance}`}
                         </p>
@@ -181,7 +180,7 @@ export function AccountCards() {
                   >
                     <CheckCircle2Icon className="size-10 text-emerald-500" />
                   </motion.div>
-                  <p className="text-sm font-semibold">Card added!</p>
+                  <p className="text-sm font-semibold">Wallet added!</p>
                   <p className="text-xs text-muted-foreground">
                     {newCardName || newCardOptions.find((o) => o.value === newCardType)?.label}
                   </p>
@@ -189,12 +188,12 @@ export function AccountCards() {
               ) : addState === "adding" ? (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3">
                   <LoaderCircleIcon className="size-8 animate-spin text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Creating card...</p>
+                  <p className="text-sm text-muted-foreground">Creating wallet...</p>
                 </div>
               ) : (
                 <div className="flex flex-1 flex-col gap-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold">Add New Card</p>
+                    <p className="text-sm font-semibold">Add New Wallet</p>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -217,14 +216,14 @@ export function AccountCards() {
                     </SelectContent>
                   </Select>
                   <Input
-                    placeholder="Card name (optional)"
+                    placeholder="Wallet name (optional)"
                     value={newCardName}
                     onChange={(e) => setNewCardName(e.target.value)}
                     className="h-9 text-xs"
                   />
                   <Button className="h-9 gap-2 text-xs" onClick={handleAdd}>
                     <PlusIcon className="size-3.5" />
-                    Create Card
+                    Create Wallet
                   </Button>
                 </div>
               )}
@@ -236,7 +235,7 @@ export function AccountCards() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <CreditCardIcon className="size-3.5" />
-            <span>{cards.length} cards</span>
+            <span>{cards.length} wallets</span>
           </div>
           <Button
             variant="outline"
@@ -250,13 +249,13 @@ export function AccountCards() {
 
         {/* Wallet balance */}
         <div className="space-y-1.5 border-t pt-5">
-          <p className="text-xs font-medium text-muted-foreground">Wallet Balance</p>
+          <p className="text-xs font-medium text-muted-foreground">Wallet Balance · {walletBalance.currency}</p>
           <p className="text-3xl font-bold tabular-nums tracking-tight">
-            ${walletBalance.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+            {formatMoney(walletBalance.amount, walletBalance.currency)}
           </p>
-          <div className="flex items-center gap-1.5 text-sm font-medium text-emerald-600 dark:text-emerald-400">
-            <TrendingUpIcon className="size-4" />
-            <span>+{walletBalance.changePercent}% this month</span>
+          <div className={cn("flex items-center gap-1.5 text-sm font-medium", walletBalance.changeDirection === "down" ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400")}>
+            {walletBalance.changeDirection === "down" ? <TrendingDownIcon className="size-4" /> : <TrendingUpIcon className="size-4" />}
+            <span>{walletBalance.changeDirection === "down" ? "-" : "+"}{walletBalance.changePercent}% this month</span>
           </div>
         </div>
       </CardContent>

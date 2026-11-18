@@ -31,8 +31,8 @@ interface TradeFormProps {
 
 export function TradeForm({ prices }: TradeFormProps) {
   const [activeTab, setActiveTab] = React.useState<string>("Trade")
-  const [amount, setAmount] = React.useState("0.5")
-  const [fromCoin, setFromCoin] = React.useState("eth")
+  const [amount, setAmount] = React.useState("100")
+  const [fromCoin, setFromCoin] = React.useState("usdc")
   const [toCoin, setToCoin] = React.useState("usd")
   const [loading, setLoading] = React.useState(false)
   const [success, setSuccess] = React.useState(false)

@@ -39,9 +39,9 @@ type Block = {
 const defaultBlocks: Block[] = [
   { id: "financial-overview", label: "Financial Overview", size: "lg", component: <FinancialOverview /> },
   { id: "account-cards", label: "Account Cards", size: "sm", component: <AccountCards /> },
-  { id: "transfer-spending", label: "Transfer & Spending", size: "sm", component: <div className="flex flex-col gap-4 [&>*]:flex-1"><QuickTransfer /><SpendingLimit /></div> },
+  { id: "transfer-spending", label: "Transfer & Limits", size: "sm", component: <div className="flex flex-col gap-4 [&>*]:flex-1"><QuickTransfer /><SpendingLimit /></div> },
   { id: "money-movement", label: "Money Movement", size: "sm", component: <MoneyMovement /> },
-  { id: "health-score", label: "Financial Health", size: "sm", component: <HealthScore /> },
+  { id: "health-score", label: "Trust Score", size: "sm", component: <HealthScore /> },
   { id: "recent-transactions", label: "Recent Transactions", size: "full", component: <RecentTransactions /> },
 ]
 
@@ -51,7 +51,7 @@ const sizeClass: Record<WidgetSize, string> = {
   full: "col-span-12",
 }
 
-const STORAGE_KEY = "vault-dashboard-order"
+const STORAGE_KEY = "vuka-dashboard-order"
 
 // ── Null strategy: let CSS Grid handle layout, not dnd-kit transforms ──
 const nullStrategy = () => null

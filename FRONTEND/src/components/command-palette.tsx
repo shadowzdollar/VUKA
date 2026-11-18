@@ -33,9 +33,11 @@ import {
   MonitorIcon,
 } from "lucide-react"
 import { useTheme } from "next-themes"
-import { contacts, recentTransactions, cryptoCoins } from "@/data/seed"
+import { useDashboardData } from "@/lib/dashboard-data"
+import { cryptoCoins } from "@/data/seed"
 
 export function CommandPalette() {
+  const { contacts, recentTransactions } = useDashboardData()
   const [open, setOpen] = useState(false)
   const router = useRouter()
   const { setTheme } = useTheme()

@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { recentTransactions } from "@/data/seed"
+import { formatMoney, useDashboardData } from "@/lib/dashboard-data"
 import {
   MoreHorizontalIcon,
   ChevronRightIcon,
@@ -14,15 +14,17 @@ import {
 import { cn } from "@/lib/utils"
 
 const categoryColors: Record<string, string> = {
-  Entertainment: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400",
-  Technology: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400",
-  Income: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400",
-  Design: "bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-400",
-  "AI Tools": "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400",
-  Productivity: "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-400",
+  "Cross-border": "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400",
+  "Cash-in": "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400",
+  Invoice: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400",
+  Supplier: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400",
+  Escrow: "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-400",
+  Domestic: "bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-400",
+  Reversal: "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400",
 }
 
 export function RecentTransactions() {
+  const { recentTransactions } = useDashboardData()
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
@@ -38,9 +40,9 @@ export function RecentTransactions() {
         <div className="overflow-x-auto">
           <div className="min-w-[600px] space-y-1">
             {/* Header */}
-            <div className="grid grid-cols-[1fr_140px_100px_120px_32px] gap-4 border-b pb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              <span>Merchant</span>
-              <span className="hidden sm:inline">Transaction ID</span>
+            <div className="grid grid-cols-[1fr_140px_150px_120px_32px] gap-4 border-b pb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <span>Counterparty</span>
+              <span className="hidden sm:inline">Reference</span>
               <span className="text-right">Amount</span>
               <span className="hidden md:inline">Date</span>
               <span />
@@ -50,7 +52,7 @@ export function RecentTransactions() {
             {recentTransactions.map((tx) => (
               <div
                 key={tx.id}
-                className="group grid grid-cols-[1fr_140px_100px_120px_32px] items-center gap-4 rounded-lg py-2.5 transition-colors hover:bg-muted/50"
+                className="group grid grid-cols-[1fr_140px_150px_120px_32px] items-center gap-4 rounded-lg py-2.5 transition-colors hover:bg-muted/50"
               >
                 {/* Merchant */}
                 <div className="flex items-center gap-3">
@@ -89,10 +91,7 @@ export function RecentTransactions() {
                       : "text-foreground"
                   )}
                 >
-                  {tx.amount > 0 ? "+" : ""}$
-                  {Math.abs(tx.amount).toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                  })}
+                  {formatMoney(tx.amount, tx.currency, { signed: tx.amount > 0 })}
                 </span>
 
                 {/* Date */}

@@ -2,13 +2,15 @@
 
 import { useMemo, useState } from "react"
 
-import { fullTransactions, type FullTransaction } from "@/data/seed"
+import { useDashboardData } from "@/lib/dashboard-data"
+import type { FullTransaction } from "@/data/seed"
 import { TransactionSummary } from "@/components/transactions/transaction-summary"
 import { TransactionFilters } from "@/components/transactions/transaction-filters"
 import { TransactionTable } from "@/components/transactions/transaction-table"
 import { TransactionActions } from "@/components/transactions/transaction-actions"
 
 export function TransactionsPageClient() {
+  const { fullTransactions } = useDashboardData()
   const [search, setSearch] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -19,7 +21,7 @@ export function TransactionsPageClient() {
   const categories = useMemo(() => {
     const cats = new Set(fullTransactions.map((t) => t.category))
     return Array.from(cats).sort()
-  }, [])
+  }, [fullTransactions])
 
   const filteredData = useMemo(() => {
     let data: FullTransaction[] = fullTransactions
@@ -47,7 +49,7 @@ export function TransactionsPageClient() {
     }
 
     return data
-  }, [search, categoryFilter, statusFilter, typeFilter])
+  }, [search, categoryFilter, statusFilter, typeFilter, fullTransactions])
 
   function handleExport() {
     const selected = fullTransactions.filter((t) => selectedIds.has(t.id))

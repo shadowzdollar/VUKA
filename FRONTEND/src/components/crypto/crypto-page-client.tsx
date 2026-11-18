@@ -12,7 +12,7 @@ import { cryptoCoins } from "@/data/seed"
 export type CryptoPrices = Record<string, number>
 
 export function CryptoPageClient() {
-  const [selectedCoin, setSelectedCoin] = React.useState("btc")
+  const [selectedCoin, setSelectedCoin] = React.useState("pol")
 
   // Build initial prices from seed data
   const [prices, setPrices] = React.useState<CryptoPrices>(() => {

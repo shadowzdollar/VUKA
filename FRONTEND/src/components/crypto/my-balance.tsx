@@ -20,7 +20,7 @@ import type { CryptoPrices } from "./crypto-page-client"
 type ActionFlow = "idle" | "input" | "loading" | "success"
 
 export function MyBalance({ prices }: { prices: CryptoPrices }) {
-  const [highlightedCoin, setHighlightedCoin] = React.useState("eth")
+  const [highlightedCoin, setHighlightedCoin] = React.useState("usdc")
   const [topUpFlow, setTopUpFlow] = React.useState<ActionFlow>("idle")
   const [withdrawFlow, setWithdrawFlow] = React.useState<ActionFlow>("idle")
   const [topUpAmount, setTopUpAmount] = React.useState("")

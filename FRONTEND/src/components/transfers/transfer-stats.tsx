@@ -2,19 +2,16 @@ import { ArrowUpRightIcon, ArrowDownLeftIcon, ClockIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import type { TransferRecord } from "@/data/seed"
+import { dominantCurrency, formatMoney } from "@/lib/dashboard-data"
 
 interface TransferStatsProps {
   transfers: TransferRecord[]
 }
 
-const fmt = (n: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-  }).format(n)
-
-export function TransferStats({ transfers }: TransferStatsProps) {
+export function TransferStats({ transfers: all }: TransferStatsProps) {
+  const currency = dominantCurrency(all)
+  const fmt = (n: number) => formatMoney(n, currency)
+  const transfers = all.filter((t) => (t.currency ?? "USD").trim() === currency)
   const totalSent = transfers
     .filter((t) => t.type === "sent" && t.status === "completed")
     .reduce((s, t) => s + t.amount, 0)

@@ -5,10 +5,11 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { spendingLimit } from "@/data/seed"
+import { useDashboardData } from "@/lib/dashboard-data"
 import { ShieldCheckIcon } from "lucide-react"
 
 export function SpendingLimit() {
+  const { spendingLimit } = useDashboardData()
   const percentUsed = Math.round(
     (spendingLimit.spent / spendingLimit.budget) * 100
   )
@@ -17,7 +18,7 @@ export function SpendingLimit() {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-base font-semibold">
-          Monthly Spending Limit
+          Monthly KYC Limit
         </CardTitle>
         <div className="flex size-8 items-center justify-center rounded-lg bg-muted">
           <ShieldCheckIcon className="size-4 text-muted-foreground" />
@@ -25,7 +26,7 @@ export function SpendingLimit() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
-          <p className="text-xs text-muted-foreground">Budget</p>
+          <p className="text-xs text-muted-foreground">Limit (USD-equivalent)</p>
           <p className="text-2xl font-bold tabular-nums tracking-tight">
             ${spendingLimit.budget.toLocaleString()}{" "}
             <span className="text-sm font-normal text-muted-foreground">
@@ -38,7 +39,7 @@ export function SpendingLimit() {
 
         <div className="flex items-center justify-between text-sm">
           <div>
-            <p className="text-xs text-muted-foreground">Spend</p>
+            <p className="text-xs text-muted-foreground">Used</p>
             <p className="font-semibold tabular-nums">
               ${spendingLimit.spent.toLocaleString()}
             </p>
@@ -52,7 +53,7 @@ export function SpendingLimit() {
         </div>
 
         <p className="text-xs text-muted-foreground">
-          {spendingLimit.periodStart} - {spendingLimit.periodEnd}
+          {spendingLimit.periodStart} - {spendingLimit.periodEnd} · {spendingLimit.tier} tier
         </p>
       </CardContent>
     </Card>

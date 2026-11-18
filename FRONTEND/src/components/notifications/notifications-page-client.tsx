@@ -6,7 +6,8 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
-import { notifications as seedNotifications, type Notification } from "@/data/seed"
+import { useDashboardData } from "@/lib/dashboard-data"
+import type { Notification } from "@/data/seed"
 import { EmptyState } from "@/components/empty-state"
 import {
   ArrowDownLeftIcon,
@@ -64,7 +65,9 @@ const filters: { label: string; value: FilterType }[] = [
 ]
 
 export function NotificationsPageClient() {
+  const { notifications: seedNotifications, markNotificationRead } = useDashboardData()
   const [items, setItems] = React.useState<Notification[]>(seedNotifications)
+  React.useEffect(() => setItems(seedNotifications), [seedNotifications])
   const [filter, setFilter] = React.useState<FilterType>("all")
 
   const unreadCount = items.filter((n) => !n.read).length
@@ -76,10 +79,12 @@ export function NotificationsPageClient() {
   })
 
   function markAllRead() {
+    items.filter((n) => !n.read).forEach((n) => markNotificationRead(n.id))
     setItems((prev) => prev.map((n) => ({ ...n, read: true })))
   }
 
   function toggleRead(id: string) {
+    markNotificationRead(id)
     setItems((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     )

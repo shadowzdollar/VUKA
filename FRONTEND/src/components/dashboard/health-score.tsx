@@ -11,7 +11,8 @@ import {
   CardAction,
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { financialHealthScore, type HealthFactor } from "@/data/seed"
+import { useDashboardData } from "@/lib/dashboard-data"
+import { type HealthFactor } from "@/data/seed"
 import {
   HeartPulseIcon,
   TrendingUpIcon,
@@ -255,7 +256,10 @@ function FactorDetail({ factor, onClose }: { factor: HealthFactor; onClose: () =
 // ── Main component ───────────────────────────────────────────────────────────
 
 export function HealthScore() {
+  const { financialHealthScore } = useDashboardData()
   const { overall, trend, trendDelta, factors } = financialHealthScore
+  const rawScore = (financialHealthScore as { rawScore?: number }).rawScore
+  const band = (financialHealthScore as { band?: string }).band
   const [selectedFactor, setSelectedFactor] = useState<HealthFactor | null>(null)
 
   return (
@@ -263,7 +267,12 @@ export function HealthScore() {
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base font-semibold">
           <HeartPulseIcon className="size-4 text-primary" />
-          Financial Health
+          Trust Score
+          {rawScore !== undefined && (
+            <span className="font-mono text-xs font-normal text-muted-foreground">
+              {rawScore}{band ? ` · Band ${band}` : ""}
+            </span>
+          )}
         </CardTitle>
         <CardAction>
           <div
@@ -275,7 +284,7 @@ export function HealthScore() {
             )}
           >
             {trend === "up" ? <TrendingUpIcon className="size-3" /> : <TrendingDownIcon className="size-3" />}
-            +{trendDelta} pts
+            {trendDelta > 0 ? `+${trendDelta} pts` : "Live"}
           </div>
         </CardAction>
       </CardHeader>

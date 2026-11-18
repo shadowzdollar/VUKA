@@ -13,6 +13,7 @@ import {
 
 import { cn } from "@/lib/utils"
 import type { FullTransaction } from "@/data/seed"
+import { formatMoney } from "@/lib/dashboard-data"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -32,12 +33,7 @@ interface TransactionTableProps {
   setExpandedId: (id: string | null) => void
 }
 
-const fmt = (n: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-  }).format(Math.abs(n))
+const fmt = (n: number, currency?: string) => formatMoney(Math.abs(n), currency)
 
 function statusBadge(status: FullTransaction["status"]) {
   switch (status) {
@@ -102,8 +98,8 @@ export function TransactionTable({
                 className="size-4 cursor-pointer rounded accent-primary"
               />
             </TableHead>
-            <TableHead>Merchant</TableHead>
-            <TableHead className="hidden sm:table-cell">Transaction ID</TableHead>
+            <TableHead>Counterparty</TableHead>
+            <TableHead className="hidden sm:table-cell">Reference</TableHead>
             <TableHead className="text-right">Amount</TableHead>
             <TableHead className="hidden md:table-cell">Date</TableHead>
             <TableHead className="hidden lg:table-cell">Status</TableHead>
@@ -208,7 +204,7 @@ function TransactionRow({
             )}
           >
             {tx.type === "income" ? "+" : "-"}
-            {fmt(tx.amount)}
+            {fmt(tx.amount, tx.currency)}
           </span>
         </TableCell>
 

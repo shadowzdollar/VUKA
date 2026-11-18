@@ -121,7 +121,7 @@ export function VirtualCardGenerator({
                   Card Name
                 </label>
                 <Input
-                  placeholder="e.g. Netflix Sub"
+                  placeholder="e.g. Supplier payouts"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />

@@ -1,5 +1,7 @@
 "use client"
 
+import { compactUsd } from "@/lib/dashboard-data"
+
 import { useMemo, useState } from "react"
 import { AreaChart, Area, CartesianGrid, XAxis, YAxis } from "recharts"
 import {
@@ -26,7 +28,7 @@ const PERIODS = [
 
 const chartConfig: ChartConfig = {
   portfolio: { label: "My Portfolio", color: "var(--color-chart-1)" },
-  sp500: { label: "S&P 500", color: "var(--color-chart-3)" },
+  sp500: { label: "T-bill benchmark", color: "var(--color-chart-3)" },
 }
 
 export function PerformanceChart() {
@@ -92,7 +94,7 @@ export function PerformanceChart() {
               tickLine={false}
               axisLine={false}
               width={50}
-              tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
+              tickFormatter={(v: number) => compactUsd(v)}
               tick={{ fontSize: 11 }}
             />
             <ChartTooltip
@@ -130,7 +132,7 @@ export function PerformanceChart() {
           </div>
           <div className="flex items-center gap-1.5">
             <span className="inline-block h-0.5 w-4 rounded-full border-t-2 border-dashed border-[var(--color-chart-3)]" />
-            <span className="text-muted-foreground">S&P 500</span>
+            <span className="text-muted-foreground">T-bill benchmark</span>
           </div>
         </div>
       </CardContent>

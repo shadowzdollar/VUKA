@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/empty-state"
 
 import { cn } from "@/lib/utils"
 import type { TransferRecord } from "@/data/seed"
+import { formatMoney } from "@/lib/dashboard-data"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 
@@ -15,12 +16,7 @@ interface TransferListProps {
   onCancel: (id: string) => void
 }
 
-const fmt = (n: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-  }).format(n)
+const fmt = (n: number, currency?: string) => formatMoney(n, currency)
 
 function statusBadge(status: TransferRecord["status"]) {
   switch (status) {
@@ -105,7 +101,7 @@ export function TransferList({ transfers, onCancel }: TransferListProps) {
                 >
                   {transfer.type === "sent" && "-"}
                   {transfer.type === "received" && "+"}
-                  {fmt(transfer.amount)}
+                  {fmt(transfer.amount, transfer.currency)}
                 </p>
                 <p className="text-xs text-muted-foreground">{transfer.date}</p>
               </div>

@@ -29,11 +29,13 @@ import {
 } from "@/components/ui/tooltip"
 import {
   faqItems,
-  supportTickets,
   systemStatus,
   type FaqItem,
   type SupportTicket,
 } from "@/data/seed"
+import { useDashboardData } from "@/lib/dashboard-data"
+import { describeError } from "@/lib/api/client"
+import { toast } from "sonner"
 import {
   SearchIcon,
   ChevronDownIcon,
@@ -229,7 +231,7 @@ const priorityConfig: Record<SupportTicket["priority"], { label: string; dot: st
 }
 
 function TicketsTab() {
-  const [tickets] = React.useState<SupportTicket[]>(supportTickets)
+  const { supportTickets: tickets } = useDashboardData()
 
   return (
     <div className="space-y-4">
@@ -327,7 +329,7 @@ const botResponses = [
 
 function LiveChatSimulator() {
   const [messages, setMessages] = React.useState<ChatMessage[]>([
-    { id: "welcome", sender: "bot", text: "Hi there! I'm Vault Assistant. How can I help you today?" },
+    { id: "welcome", sender: "bot", text: "Hi there! I'm the VUKA assistant. Ask me about payments, escrow, limits or your trust score." },
   ])
   const [input, setInput] = React.useState("")
   const [typing, setTyping] = React.useState(false)
@@ -364,7 +366,7 @@ function LiveChatSimulator() {
           <span className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-background bg-emerald-500" />
         </div>
         <div>
-          <p className="text-sm font-semibold">Vault Assistant</p>
+          <p className="text-sm font-semibold">VUKA Assistant</p>
           <p className="text-[11px] text-muted-foreground">Online &middot; Avg. reply: 30s</p>
         </div>
       </div>
@@ -472,17 +474,31 @@ function ContactChannels() {
 }
 
 function TicketForm() {
+  const { createTicket, user } = useDashboardData()
   const [sending, setSending] = React.useState(false)
   const [sent, setSent] = React.useState(false)
+  const [priority, setPriority] = React.useState("medium")
+  const [category, setCategory] = React.useState("general")
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    const formEl = e.currentTarget
+    const form = new FormData(formEl)
+    const subject = String(form.get("subject") ?? "").trim()
+    const description = String(form.get("description") ?? "").trim()
     setSending(true)
-    setTimeout(() => {
-      setSending(false)
+    try {
+      // Traders open a real ticket on the engine (POST /api/support/tickets); the demo
+      // workspace keeps the original confirmation animation only.
+      await createTicket({ subject, description: `[${category}] ${description}`, priority })
+      formEl.reset()
       setSent(true)
       setTimeout(() => setSent(false), 3000)
-    }, 1500)
+    } catch (err) {
+      toast.error(describeError(err))
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -495,15 +511,15 @@ function TicketForm() {
         <CardDescription>Describe your issue and we&#39;ll get back to you</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="t-subject">Subject</label>
-              <Input id="t-subject" placeholder="Brief description" required />
+              <Input id="t-subject" name="subject" placeholder="Brief description" required />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="t-category">Category</label>
-              <Select defaultValue="general">
+              <Select value={category} onValueChange={(v) => v && setCategory(v)}>
                 <SelectTrigger id="t-category"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="account">Account</SelectItem>
@@ -518,7 +534,7 @@ function TicketForm() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="t-priority">Priority</label>
-              <Select defaultValue="medium">
+              <Select value={priority} onValueChange={(v) => v && setPriority(v)}>
                 <SelectTrigger id="t-priority"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="low">Low</SelectItem>
@@ -528,13 +544,13 @@ function TicketForm() {
               </Select>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="t-email">Email</label>
-              <Input id="t-email" type="email" defaultValue="abderrahim@fintech.com" />
+              <label className="text-sm font-medium" htmlFor="t-email">Contact</label>
+              <Input id="t-email" defaultValue={user.email} readOnly />
             </div>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor="t-desc">Description</label>
-            <Textarea id="t-desc" placeholder="Please provide as much detail as possible..." rows={4} required />
+            <Textarea id="t-desc" name="description" placeholder="Please provide as much detail as possible..." rows={4} required />
           </div>
           <div className="flex items-center justify-end gap-3">
             <AnimatePresence mode="wait">

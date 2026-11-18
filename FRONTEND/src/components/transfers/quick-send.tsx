@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useEffect, useState, useRef } from "react"
+import { useNavigate } from "@tanstack/react-router"
 import {
   Card,
   CardContent,
@@ -10,7 +11,9 @@ import {
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
-import { contacts, type TransferRecord } from "@/data/seed"
+import { formatMoney, useDashboardData } from "@/lib/dashboard-data"
+import { cn } from "@/lib/utils"
+import { type TransferRecord } from "@/data/seed"
 import {
   SendIcon,
   LoaderCircleIcon,
@@ -21,15 +24,29 @@ import { motion, AnimatePresence } from "motion/react"
 type SendState = "idle" | "sending" | "success"
 
 export function QuickSend({ onSend }: { onSend?: (record: TransferRecord) => void }) {
-  const [selectedContact, setSelectedContact] = useState(contacts[0].id)
+  const { contacts, mode, walletBalance } = useDashboardData()
+  const navigate = useNavigate()
+  const currencyPrefix = walletBalance.currency === "USD" ? "$" : walletBalance.currency
+  const [selectedContact, setSelectedContact] = useState(contacts[0]?.id ?? "")
   const [amount, setAmount] = useState("")
   const [note, setNote] = useState("")
   const [sendState, setSendState] = useState<SendState>("idle")
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>(null)
   const selected = contacts.find((c) => c.id === selectedContact)
+  // Keep a valid selection when the engine's counterparty list arrives.
+  useEffect(() => {
+    if (!contacts.some((c) => c.id === selectedContact)) setSelectedContact(contacts[0]?.id ?? "")
+  }, [contacts, selectedContact])
 
   const handleSend = () => {
-    if (sendState !== "idle" || !amount || parseFloat(amount) <= 0) return
+    if (sendState !== "idle") return
+    // Signed-in traders send through the engine's quote-bound /send flow (KYC limits,
+    // sanctions screening, locked FX). The inline animation remains for the demo workspace.
+    if (mode === "trader") {
+      void navigate({ to: "/send" })
+      return
+    }
+    if (!amount || parseFloat(amount) <= 0) return
     setSendState("sending")
 
     timeoutRef.current = setTimeout(() => {
@@ -78,7 +95,7 @@ export function QuickSend({ onSend }: { onSend?: (record: TransferRecord) => voi
                 <CheckCircle2Icon className="size-10 text-emerald-500" />
               </motion.div>
               <p className="text-sm font-semibold">
-                ${parseFloat(amount).toLocaleString("en-US", { minimumFractionDigits: 2 })} sent!
+                {formatMoney(parseFloat(amount), walletBalance.currency)} sent!
               </p>
               <p className="text-xs text-muted-foreground">
                 To {selected?.name}
@@ -150,7 +167,7 @@ export function QuickSend({ onSend }: { onSend?: (record: TransferRecord) => voi
                 <label className="text-xs text-muted-foreground">Amount</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">
-                    $
+                    {currencyPrefix}
                   </span>
                   <Input
                     type="text"
@@ -158,7 +175,7 @@ export function QuickSend({ onSend }: { onSend?: (record: TransferRecord) => voi
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     disabled={sendState === "sending"}
-                    className="h-9 pl-7 tabular-nums"
+                    className={cn("h-9 tabular-nums", currencyPrefix.length > 1 ? "pl-12" : "pl-7")}
                   />
                 </div>
               </div>

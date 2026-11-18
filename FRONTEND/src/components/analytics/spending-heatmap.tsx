@@ -14,7 +14,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { spendingHeatmapData } from "@/data/seed"
+import { useDashboardData } from "@/lib/dashboard-data"
 
 const DAY_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""]
 const CELL_SIZE = 13
@@ -31,6 +31,7 @@ function intensityClass(amount: number, max: number): string {
 }
 
 export function SpendingHeatmap() {
+  const { spendingHeatmapData } = useDashboardData()
   const { grid, monthLabels, yearTotal, max } = useMemo(() => {
     const data = spendingHeatmapData
     const max = Math.max(...data.map((d) => d.amount))
@@ -71,19 +72,19 @@ export function SpendingHeatmap() {
     }
 
     return { grid: weeks, monthLabels: months, yearTotal, max }
-  }, [])
+  }, [spendingHeatmapData])
 
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle>Spending Activity</CardTitle>
+            <CardTitle>Payment Activity</CardTitle>
             <CardDescription>
               <span className="tabular-nums font-medium text-foreground">
                 ${yearTotal.toLocaleString()}
               </span>{" "}
-              total spent this year
+              total sent (USD-equivalent)
             </CardDescription>
           </div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">

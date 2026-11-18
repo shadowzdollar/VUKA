@@ -15,7 +15,8 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
-import { monthComparisons } from "@/data/seed"
+import { useDashboardData } from "@/lib/dashboard-data"
+import type { MonthComparison as MonthComparisonRow } from "@/data/seed"
 
 const chartConfig = {
   thisMonth: {
@@ -28,8 +29,9 @@ const chartConfig = {
   },
 } satisfies ChartConfig
 
-function ChangeLabel(props: Record<string, unknown>) {
-  const { x, y, width, index } = props as {
+function ChangeLabel(props: Record<string, unknown> & { rows: MonthComparisonRow[] }) {
+  const monthComparisons = props.rows
+  const { x, y, width, index } = props as unknown as {
     x: number
     y: number
     width: number
@@ -54,11 +56,12 @@ function ChangeLabel(props: Record<string, unknown>) {
 }
 
 export function MonthComparison() {
+  const { monthComparisons } = useDashboardData()
   const totals = useMemo(() => {
     const thisMonth = monthComparisons.reduce((s, r) => s + r.thisMonth, 0)
     const lastMonth = monthComparisons.reduce((s, r) => s + r.lastMonth, 0)
     return { thisMonth, lastMonth }
-  }, [])
+  }, [monthComparisons])
 
   return (
     <Card>
@@ -143,7 +146,7 @@ export function MonthComparison() {
             >
               <LabelList
                 dataKey="thisMonth"
-                content={<ChangeLabel />}
+                content={<ChangeLabel rows={monthComparisons} />}
               />
             </Bar>
           </BarChart>

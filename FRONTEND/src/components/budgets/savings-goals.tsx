@@ -20,7 +20,7 @@ export function SavingsGoals() {
   return (
     <Card className="col-span-full">
       <CardHeader>
-        <CardTitle className="text-base font-semibold">Savings Goals</CardTitle>
+        <CardTitle className="text-base font-semibold">Trade Goals</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="grid gap-4 sm:grid-cols-2">

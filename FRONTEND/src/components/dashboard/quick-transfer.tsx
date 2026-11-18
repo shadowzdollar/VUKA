@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useEffect, useState, useRef } from "react"
+import { useNavigate } from "@tanstack/react-router"
 import {
   Card,
   CardContent,
@@ -10,7 +11,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
-import { contacts } from "@/data/seed"
+import { formatMoney, useDashboardData } from "@/lib/dashboard-data"
+import { cn } from "@/lib/utils"
 import {
   ChevronRightIcon,
   SendIcon,
@@ -22,14 +24,28 @@ import { motion, AnimatePresence } from "motion/react"
 type SendState = "idle" | "sending" | "success"
 
 export function QuickTransfer() {
-  const [selectedContact, setSelectedContact] = useState(contacts[0]?.id ?? "1")
+  const { contacts, mode, walletBalance } = useDashboardData()
+  const navigate = useNavigate()
+  const currencyPrefix = walletBalance.currency === "USD" ? "$" : walletBalance.currency
+  const [selectedContact, setSelectedContact] = useState(contacts[0]?.id ?? "")
   const [amount, setAmount] = useState("250.00")
   const [sendState, setSendState] = useState<SendState>("idle")
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>(null)
   const selected = contacts.find((c) => c.id === selectedContact)
+  // Keep a valid selection when the engine's counterparty list arrives.
+  useEffect(() => {
+    if (!contacts.some((c) => c.id === selectedContact)) setSelectedContact(contacts[0]?.id ?? "")
+  }, [contacts, selectedContact])
 
   const handleSend = () => {
-    if (sendState !== "idle" || !amount || parseFloat(amount) <= 0) return
+    if (sendState !== "idle") return
+    // Signed-in traders send through the engine's quote-bound /send flow (KYC limits,
+    // sanctions screening, locked FX). The inline animation remains for the demo workspace.
+    if (mode === "trader") {
+      void navigate({ to: "/send" })
+      return
+    }
+    if (!amount || parseFloat(amount) <= 0) return
     setSendState("sending")
 
     // simulate network delay
@@ -135,7 +151,7 @@ export function QuickTransfer() {
                 <CheckCircle2Icon className="size-10 text-emerald-500" />
               </motion.div>
               <p className="text-sm font-semibold">
-                ${parseFloat(amount).toLocaleString("en-US", { minimumFractionDigits: 2 })} sent!
+                {formatMoney(parseFloat(amount), walletBalance.currency)} sent!
               </p>
               <p className="text-xs text-muted-foreground">
                 To {selected?.name}
@@ -153,14 +169,14 @@ export function QuickTransfer() {
                 <label className="text-xs text-muted-foreground">Amount</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">
-                    $
+                    {currencyPrefix}
                   </span>
                   <Input
                     type="text"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     disabled={sendState === "sending"}
-                    className="h-10 pl-7 text-lg font-semibold tabular-nums"
+                    className={cn("h-10 text-lg font-semibold tabular-nums", currencyPrefix.length > 1 ? "pl-12" : "pl-7")}
                   />
                 </div>
               </div>
